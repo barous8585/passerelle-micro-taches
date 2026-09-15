@@ -192,6 +192,9 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             worker.solde_disponible += prix
             db.query(Submission).filter_by(micro_task_id=task_id, worker_id=worker_id).update({"montant": prix})
             task.status = TaskStatus.completed
+            # La réponse de référence du gold standard EST la valeur propre connue
+            # -- on la restitue telle quelle au client, peu importe ce que le worker a tapé.
+            task.resultat_final = task.gold_answer
             db.commit()
             return {"status": "completed", "paye": True}
 
@@ -210,6 +213,7 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         # litige ou non -- seul le trust_score encaisse l'écart au consensus.
         task.eu_litige = consensus["status"] not in ("valide", "auto_valide")
         task.status = TaskStatus.completed
+        task.resultat_final = construire_resultat_final(task.header, submissions[0].reponse, consensus)
 
         prix = db.query(Project).get(task.project_id).prix_par_ligne
         for worker, sub, ecart in zip(workers, submissions, consensus["ecarts_par_worker"]):
@@ -222,6 +226,24 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         return {"status": "completed", "paye": True}
     finally:
         db.close()
+
+
+def construire_resultat_final(header, premiere_reponse, consensus):
+    """
+    Reconstruit la ligne finale à restituer au client : la valeur consensuelle
+    par colonne quand il y en a une, sinon on retombe sur la première
+    soumission reçue (arrive seulement si une colonne du header n'est pas
+    couverte par le schéma du projet -- cas limite).
+    """
+    if consensus["status"] == "auto_valide":
+        return consensus["valeur_retenue"]
+    detail = consensus["detail"]
+    resultat = list(premiere_reponse)
+    for i, nom_colonne in enumerate(header):
+        if nom_colonne in detail:
+            resultat[i] = detail[nom_colonne]["valeur"] if detail[nom_colonne]["status"] == "accord" \
+                else detail[nom_colonne]["candidats"][0]  # litige : on restitue une valeur plausible, à revoir manuellement
+    return resultat
 
 
 SEUIL_DECAISSEMENT = 10.0  # seuil minimum avant qu'un versement groupé ait du sens
@@ -383,6 +405,72 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
             db.add(MicroTask(**t))
         db.commit()
         return {"nb_taches_creees": len(tasks)}
+    finally:
+        db.close()
+
+
+@app.get("/projects/mine")
+def mes_projets(user: User = Depends(require_role("client"))):
+    """Vue d'ensemble pour le client : avancement de chacun de ses projets."""
+    db = SessionLocal()
+    try:
+        projets = db.query(Project).filter_by(client_id=user.id).all()
+        resultat = []
+        for p in projets:
+            taches = db.query(MicroTask).filter_by(project_id=p.id).all()
+            total = len(taches)
+            completees = sum(1 for t in taches if t.status == TaskStatus.completed)
+            litigieuses = sum(1 for t in taches if t.eu_litige)
+            resultat.append({
+                "project_id": p.id,
+                "titre": p.titre,
+                "total_lignes": total,
+                "lignes_completees": completees,
+                "lignes_litigieuses": litigieuses,
+                "pret_pour_export": total > 0 and completees == total,
+            })
+        return {"projets": resultat}
+    finally:
+        db.close()
+
+
+@app.get("/projects/{project_id}/export")
+def exporter_projet(project_id: int, user: User = Depends(require_role("client"))):
+    """Renvoie le CSV nettoyé -- uniquement les lignes déjà complétées.
+    Les lignes encore en cours n'apparaissent pas (mieux vaut un export
+    partiel explicite qu'une ligne vide ou brute qui passerait pour propre)."""
+    import csv
+    import io
+
+    db = SessionLocal()
+    try:
+        projet = db.query(Project).get(project_id)
+        if not projet:
+            raise HTTPException(status_code=404, detail="Projet introuvable")
+        if projet.client_id != user.id:
+            raise HTTPException(status_code=403, detail="Ce projet ne t'appartient pas")
+
+        taches = (
+            db.query(MicroTask)
+            .filter_by(project_id=project_id, status=TaskStatus.completed)
+            .order_by(MicroTask.row_id)
+            .all()
+        )
+        if not taches:
+            raise HTTPException(status_code=404, detail="Aucune ligne complétée pour ce projet pour le moment")
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer, delimiter=";")
+        writer.writerow(taches[0].header)
+        for t in taches:
+            writer.writerow(t.resultat_final or t.raw_data)
+
+        from fastapi.responses import Response
+        return Response(
+            content=buffer.getvalue(),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="projet_{project_id}_nettoye.csv"'},
+        )
     finally:
         db.close()
 

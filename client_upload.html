@@ -2,57 +2,161 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Passerelle de Micro-Tâches Data — Dépôt de fichier</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passerelle — Dépôt entreprise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; color: #222; }
-  h1 { font-size: 20px; }
-  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
-  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
-  th { background: #fafafa; }
-  select, input[type=text], input[type=number] { padding: 4px; }
-  button { padding: 8px 16px; margin-top: 12px; cursor: pointer; }
-  #etape2 { display: none; }
-  .apercu { font-size: 12px; color: #666; }
-  .card { background:#fafafa; border:1px solid #eee; border-radius:8px; padding:16px; margin-bottom:20px; }
-  .msg { font-size: 13px; color: #555; }
+  :root {
+    --papier: #F7F5F0;
+    --papier-carte: #FFFFFF;
+    --ligne: #DEDACD;
+    --encre: #2B3A67;
+    --encre-clair: #5A6A9C;
+    --correction: #C4453D;
+    --correction-fond: #FBEAE8;
+    --alerte: #B8722B;
+    --argent: #2F6B4F;
+    --argent-fond: #E9F3EE;
+    --texte: #232323;
+    --texte-doux: #6B6B63;
+    --rayon: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    background: var(--papier);
+    color: var(--texte);
+  }
+
+  .entete {
+    padding: 24px 20px 16px;
+    border-bottom: 1px solid var(--ligne);
+  }
+
+  .entete h1 { font-size: 16px; font-weight: 600; margin: 0; color: var(--encre); }
+  .entete p { font-size: 13px; color: var(--texte-doux); margin: 4px 0 0; }
+
+  main { max-width: 640px; margin: 0 auto; padding: 20px; }
+
+  .bloc {
+    background: var(--papier-carte);
+    border: 1px solid var(--ligne);
+    border-radius: var(--rayon);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .bloc h2 { font-size: 14px; font-weight: 600; margin: 0 0 14px; color: var(--encre); }
+
+  label { display: block; font-size: 12px; color: var(--texte-doux); margin-bottom: 4px; }
+
+  input[type=email], input[type=password], input[type=text], input[type=number], input[type=file] {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    border: 1px solid var(--ligne);
+    border-radius: 8px;
+    margin-bottom: 14px;
+    background: var(--papier);
+  }
+  input:focus { outline: 2px solid var(--encre-clair); outline-offset: 1px; }
+
+  .rang { display: flex; gap: 8px; }
+
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 10px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--ligne);
+    background: var(--papier-carte);
+    color: var(--texte);
+    cursor: pointer;
+  }
+  button.principal { background: var(--encre); color: #fff; border-color: var(--encre); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+  th, td { border-bottom: 1px solid var(--ligne); padding: 8px 6px; text-align: left; }
+  th { color: var(--texte-doux); font-weight: 500; font-size: 12px; }
+  select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--ligne); font-family: inherit; }
+
+  .apercu { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--texte-doux); background: var(--papier); border: 1px dashed var(--ligne); border-radius: 6px; padding: 8px; margin: 8px 0; overflow-x: auto; }
+
+  .msg { font-size: 13px; color: var(--texte-doux); margin: 8px 0 0; }
+
+  .carte-projet {
+    border: 1px solid var(--ligne);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 10px;
+  }
+  .carte-projet .titre { font-weight: 500; font-size: 14px; margin-bottom: 6px; }
+  .barre-progres { height: 6px; background: var(--papier); border-radius: 3px; overflow: hidden; margin: 8px 0; }
+  .barre-progres .rempli { height: 100%; background: var(--argent); }
+  .ligne-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--texte-doux); }
+  .badge-litige { color: var(--alerte); }
+
+  .vide { text-align: center; padding: 20px; color: var(--texte-doux); font-size: 13px; }
 </style>
 </head>
 <body>
-  <h1>Déposer un fichier à nettoyer</h1>
 
-  <div id="zone_auth" class="card">
-    <p style="margin-top:0; font-weight:600;">Connexion entreprise</p>
-    <label>Email <input type="email" id="auth_email" value="startup@ia.fr"></label><br><br>
-    <label>Mot de passe <input type="password" id="auth_password" value="motdepasse123"></label><br><br>
-    <button onclick="creerCompte()">Créer un compte</button>
-    <button onclick="seConnecter()">Se connecter</button>
-    <p id="auth_msg" class="msg"></p>
+  <div class="entete">
+    <h1>Passerelle de micro-tâches</h1>
+    <p>Dépôt de données à nettoyer</p>
   </div>
 
-  <div id="etape1" style="display:none;">
-    <input type="file" id="fichier_csv" accept=".csv">
-    <button onclick="analyserFichier()">Analyser le fichier</button>
-  </div>
+  <main>
 
-  <div id="etape2">
-    <h2>Schéma détecté — corrigez si besoin</h2>
-    <table id="table_schema"></table>
+    <div class="bloc" id="bloc_auth">
+      <h2>Connexion entreprise</h2>
+      <label>Email</label>
+      <input type="email" id="auth_email" value="startup@ia.fr">
+      <label>Mot de passe</label>
+      <input type="password" id="auth_password" value="motdepasse123">
+      <div class="rang">
+        <button onclick="creerCompte()">Créer un compte</button>
+        <button class="principal" onclick="seConnecter()">Se connecter</button>
+      </div>
+      <p class="msg" id="auth_msg"></p>
+    </div>
 
-    <p class="apercu" id="apercu_texte"></p>
+    <div class="bloc" id="bloc_mes_projets" style="display:none;">
+      <h2>Mes projets</h2>
+      <div id="liste_mes_projets"></div>
+    </div>
 
-    <label>Titre du projet : <input type="text" id="titre_projet" value="Nettoyage de données"></label><br><br>
-    <label>Prix par ligne (€) : <input type="number" id="prix_ligne" value="0.04" step="0.01"></label>
+    <div class="bloc" id="bloc_depot" style="display:none;">
+      <h2>Déposer un nouveau fichier</h2>
+      <input type="file" id="fichier_csv" accept=".csv">
+      <button onclick="analyserFichier()">Analyser le fichier</button>
 
-    <br>
-    <button onclick="validerEtLancer()">Valider et lancer le nettoyage</button>
-    <p id="resultat"></p>
-  </div>
+      <div id="etape2" style="display:none; margin-top:16px;">
+        <table id="table_schema"></table>
+        <p class="apercu" id="apercu_texte"></p>
+        <label>Titre du projet</label>
+        <input type="text" id="titre_projet" value="Nettoyage de données">
+        <label>Prix par ligne (€)</label>
+        <input type="number" id="prix_ligne" value="0.04" step="0.01">
+        <button class="principal" onclick="validerEtLancer()">Lancer le nettoyage</button>
+        <p class="msg" id="resultat"></p>
+      </div>
+    </div>
+
+  </main>
 
 <script>
 let schemaCourant = null;
-let headerCourant = null;
 let fichierSelectionne = null;
-let authHeader = null; // "Basic base64(email:motdepasse)" une fois connecté
+let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
 
 function construireAuthHeader(email, motdepasse) {
   return 'Basic ' + btoa(email + ':' + motdepasse);
@@ -63,37 +167,75 @@ async function creerCompte() {
   const password = document.getElementById('auth_password').value;
   const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, role: 'client' }),
   });
-  if (res.ok) {
-    msg.textContent = 'Compte créé — clique sur "Se connecter".';
-  } else {
-    const err = await res.json();
-    msg.textContent = 'Erreur : ' + err.detail;
-  }
+  if (res.ok) { msg.textContent = 'Compte créé — connecte-toi.'; }
+  else { msg.textContent = (await res.json()).detail; }
 }
 
 async function seConnecter() {
   const email = document.getElementById('auth_email').value;
   const password = document.getElementById('auth_password').value;
-  const msg = document.getElementById('auth_msg');
-  const header = construireAuthHeader(email, password);
+  await tenterConnexion(construireAuthHeader(email, password));
+}
 
+async function tenterConnexion(header) {
+  const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/me', { headers: { Authorization: header } });
-  if (!res.ok) {
-    msg.textContent = 'Email ou mot de passe incorrect.';
-    return;
-  }
+  if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_client'); return; }
   const moi = await res.json();
-  if (moi.role !== 'client') {
-    msg.textContent = 'Ce compte n\'est pas un compte entreprise.';
+  if (moi.role !== 'client') { msg.textContent = "Ce compte n'est pas un compte entreprise."; return; }
+
+  authHeader = header;
+  sessionStorage.setItem('passerelle_auth_client', header);
+  document.getElementById('bloc_auth').style.display = 'none';
+  document.getElementById('bloc_mes_projets').style.display = 'block';
+  document.getElementById('bloc_depot').style.display = 'block';
+  chargerMesProjets();
+}
+
+if (authHeader) tenterConnexion(authHeader);
+
+async function chargerMesProjets() {
+  const res = await fetch('/projects/mine', { headers: { Authorization: authHeader } });
+  if (!res.ok) return;
+  const data = await res.json();
+  const liste = document.getElementById('liste_mes_projets');
+
+  if (!data.projets.length) {
+    liste.innerHTML = '<div class="vide">Aucun projet déposé pour le moment.</div>';
     return;
   }
-  authHeader = header;
-  msg.textContent = 'Connecté en tant que ' + moi.email;
-  document.getElementById('etape1').style.display = 'block';
+
+  liste.innerHTML = data.projets.map(p => {
+    const pct = p.total_lignes ? Math.round(100 * p.lignes_completees / p.total_lignes) : 0;
+    return `
+      <div class="carte-projet">
+        <div class="titre">${p.titre}</div>
+        <div class="barre-progres"><div class="rempli" style="width:${pct}%"></div></div>
+        <div class="ligne-stats">
+          <span>${p.lignes_completees} / ${p.total_lignes} lignes traitées</span>
+          ${p.lignes_litigieuses > 0 ? `<span class="badge-litige">${p.lignes_litigieuses} en désaccord entre étudiants</span>` : ''}
+        </div>
+        <button ${p.pret_pour_export ? '' : 'disabled'} onclick="exporter(${p.project_id})" style="margin-top:10px;">
+          ${p.pret_pour_export ? 'Télécharger le CSV nettoyé' : (p.lignes_completees > 0 ? 'Télécharger le partiel disponible' : 'Pas encore de ligne traitée')}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function exporter(projectId) {
+  const res = await fetch(`/projects/${projectId}/export`, { headers: { Authorization: authHeader } });
+  if (!res.ok) { alert((await res.json()).detail); return; }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `projet_${projectId}_nettoye.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function analyserFichier() {
@@ -103,14 +245,9 @@ async function analyserFichier() {
 
   const formData = new FormData();
   formData.append('fichier', fichierSelectionne);
-
-  const res = await fetch('/projects/infer-schema', {
-    method: 'POST', headers: { Authorization: authHeader }, body: formData,
-  });
+  const res = await fetch('/projects/infer-schema', { method: 'POST', headers: { Authorization: authHeader }, body: formData });
   const data = await res.json();
-
   schemaCourant = data.schema_suggere;
-  headerCourant = data.header;
 
   const table = document.getElementById('table_schema');
   table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th></tr>';
@@ -119,7 +256,7 @@ async function analyserFichier() {
     tr.innerHTML = `
       <td>${col.name}</td>
       <td>
-        <select data-idx="${i}" onchange="modifierType(${i}, this.value)">
+        <select onchange="modifierType(${i}, this.value)">
           <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
           <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
           <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
@@ -131,19 +268,15 @@ async function analyserFichier() {
     table.appendChild(tr);
   });
 
-  document.getElementById('apercu_texte').textContent =
-    'Aperçu : ' + JSON.stringify(data.apercu_lignes.slice(0, 2));
+  document.getElementById('apercu_texte').textContent = JSON.stringify(data.apercu_lignes.slice(0, 2));
   document.getElementById('etape2').style.display = 'block';
 }
 
 function modifierType(idx, valeur) {
   const col = schemaCourant.columns[idx];
   col.type = valeur;
-  if (valeur === 'regex') {
-    col.rule = '^[\\w.-]+@[\\w.-]+\\.\\w+$';
-  } else {
-    delete col.rule;
-  }
+  if (valeur === 'regex') col.rule = '^[\\w.-]+@[\\w.-]+\\.\\w+$';
+  else delete col.rule;
 }
 
 async function validerEtLancer() {
@@ -151,8 +284,7 @@ async function validerEtLancer() {
   resEl.textContent = 'Création du projet...';
 
   const projetRes = await fetch('/projects', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
     body: JSON.stringify({
       titre: document.getElementById('titre_projet').value,
       colonnes_schema: schemaCourant,
@@ -162,15 +294,15 @@ async function validerEtLancer() {
   const projet = await projetRes.json();
 
   resEl.textContent = 'Découpage du fichier en micro-tâches...';
-
   const formData = new FormData();
   formData.append('fichier', fichierSelectionne);
-  const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, {
-    method: 'POST', headers: { Authorization: authHeader }, body: formData,
-  });
+  const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
   const ingest = await ingestRes.json();
 
-  resEl.textContent = `✅ Projet #${projet.project_id} créé — ${ingest.nb_taches_creees} micro-tâches prêtes pour les étudiants.`;
+  resEl.textContent = `Projet créé — ${ingest.nb_taches_creees} micro-tâches prêtes pour les étudiants.`;
+  document.getElementById('etape2').style.display = 'none';
+  document.getElementById('fichier_csv').value = '';
+  chargerMesProjets();
 }
 </script>
 </body>

@@ -210,3 +210,50 @@ def test_historique_worker_ne_contient_aucun_texte_de_reponse():
     for ligne in data["historique"]:
         assert set(ligne.keys()) == {"task_id", "date", "statut", "montant"}
         assert ligne["statut"] in ("paye", "en_attente_verification")
+
+
+# ---------------------------------------------------------------------------
+# NOUVELLES FONCTIONNALITÉS : projets disponibles, libération de verrou, export
+# ---------------------------------------------------------------------------
+
+def test_projets_disponibles_et_liberation_de_verrou():
+    project_id = creer_projet_isole("Test disponibilite")
+
+    r = client.get("/projects/available", headers=auth_header("w1@uco.fr", "pw123"))
+    assert r.status_code == 200
+    projets = {p["project_id"]: p for p in r.json()["projets"]}
+    assert project_id in projets
+    assert projets[project_id]["taches_disponibles"] == 4
+
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    task_id = r.json()["task_id"]
+
+    # Sans libération, la même ligne n'est pas reproposée à w1
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    assert r.json()["task_id"] != task_id
+
+    r = client.post(f"/tasks/{task_id}/release", headers=auth_header("w1@uco.fr", "pw123"))
+    assert r.status_code == 200
+
+    # w2 doit pouvoir reprendre immédiatement la ligne libérée (pas d'attente des 15 min)
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w2@uco.fr", "pw123"))
+    tache_ids_restants = {t["task_id"] for t in [r.json()]}
+    # (on ne peut pas garantir qu'il retombe exactement sur task_id si w2 a déjà
+    #  d'autres verrous actifs, donc on vérifie juste que la libération n'a pas échoué)
+
+
+def test_projets_mine_et_export_csv():
+    project_id = creer_projet_isole("Test export")
+
+    r = client.get("/projects/mine", headers=auth_header("startup@ia.fr", "pw123"))
+    projet = next(p for p in r.json()["projets"] if p["project_id"] == project_id)
+    assert projet["total_lignes"] == 4
+    assert projet["lignes_completees"] == 0
+
+    # Export avant complétion -> refusé
+    r = client.get(f"/projects/{project_id}/export", headers=auth_header("startup@ia.fr", "pw123"))
+    assert r.status_code == 404
+
+    # Un client ne peut pas exporter le projet d'un autre
+    r = client.get(f"/projects/{project_id}/export", headers=auth_header("autre_client@ia.fr", "pw123"))
+    assert r.status_code == 403

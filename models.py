@@ -63,6 +63,7 @@ class MicroTask(Base):
     gold_answer = Column(JSON, nullable=True)
     status = Column(Enum(TaskStatus), default=TaskStatus.available)
     eu_litige = Column(Boolean, default=False)  # pour reporting admin -- n'empêche PAS le paiement
+    resultat_final = Column(JSON, nullable=True)  # valeur consensuelle retenue une fois complétée -- c'est CE que le client récupère à l'export
 
     # Verrouillage anti-doublon : qui a pris la tâche et depuis quand
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
