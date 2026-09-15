@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Espace étudiant — Nettoyage de données</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 32px auto; color: #1a1a1a; background:#f7f7f5; }
+  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+  .stat { font-size:13px; color:#555; }
+  .stat b { color:#111; font-size:15px; }
+  .config { display:flex; gap:8px; margin-bottom:20px; font-size:13px; }
+  .config input { width:70px; padding:4px; }
+  .card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:16px; }
+  .header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .header-row .titre { font-weight:600; font-size:15px; }
+  .header-row .sousinfo { font-size:12px; color:#888; }
+  .champ { margin-bottom:14px; }
+  .champ label { display:block; font-size:12px; color:#888; margin-bottom:4px; }
+  .champ .brut { font-family: monospace; font-size:13px; color:#999; background:#f0f0ee; padding:4px 8px; border-radius:6px; margin-bottom:4px; display:inline-block; }
+  .champ input { width:100%; box-sizing:border-box; padding:8px; font-size:14px; border:1px solid #ddd; border-radius:6px; }
+  .champ input.badge-danger { border-color:#d85a30; background:#fdf2ee; }
+  .champ input.badge-warning { border-color:#ef9f27; background:#fdf7ea; }
+  .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:6px; margin:2px 6px 2px 0; }
+  .badge-danger { background:#fdf2ee; color:#993c1d; }
+  .badge-warning { background:#fdf7ea; color:#854f0b; }
+  .badge-info { background:#eef2fb; color:#185fa5; }
+  .actions { display:flex; justify-content:space-between; align-items:center; margin-top:18px; }
+  button { padding:9px 18px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; font-size:14px; }
+  button.primary { background:#1a1a1a; color:#fff; border:none; }
+  button:disabled { opacity:0.5; cursor:default; }
+  .msg { font-size:13px; color:#666; margin-top:10px; }
+  .vide { text-align:center; padding:40px 0; color:#777; }
+</style>
+</head>
+<body>
+
+  <div class="topbar">
+    <div class="stat">Solde disponible : <b id="stat_solde">0,00 €</b></div>
+    <div class="stat">Lignes payées : <b id="stat_nb">0</b></div>
+    <div class="stat">Indice de confiance : <b id="stat_confiance">—</b></div>
+  </div>
+
+  <div class="card" id="zone_auth">
+    <p style="margin-top:0; font-weight:600;">Connexion étudiant</p>
+    <label>Email <input type="email" id="auth_email" value="etudiant1@uco.fr"></label>
+    <label>Mot de passe <input type="password" id="auth_password" value="motdepasse123"></label><br><br>
+    <button onclick="creerCompte()">Créer un compte</button>
+    <button onclick="seConnecter()">Se connecter</button>
+    <p class="msg" id="auth_msg"></p>
+  </div>
+
+  <div class="config" id="config_projet" style="display:none;">
+    <label>Projet ID <input type="number" id="project_id" value="1"></label>
+    <button onclick="chargerTacheSuivante()">Charger une tâche</button>
+  </div>
+
+  <div class="card" id="zone_tache">
+    <div class="vide">Renseigne ton identifiant et clique sur « Charger une tâche ».</div>
+  </div>
+
+  <p class="msg" id="msg"></p>
+
+  <div class="card" id="zone_historique" style="display:none;">
+    <p style="margin-top:0; font-weight:600; font-size:13px;">Historique récent</p>
+    <div id="liste_historique" style="font-size:13px;"></div>
+    <p id="eligibilite_versement" style="font-size:12px; color:#888; margin-bottom:0;"></p>
+  </div>
+
+<script>
+let tacheCourante = null;
+let authHeader = null;
+
+function projectId() { return parseInt(document.getElementById('project_id').value, 10); }
+
+function construireAuthHeader(email, motdepasse) {
+  return 'Basic ' + btoa(email + ':' + motdepasse);
+}
+
+async function creerCompte() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const msg = document.getElementById('auth_msg');
+  const res = await fetch('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, role: 'worker' }),
+  });
+  if (res.ok) {
+    msg.textContent = 'Compte créé — clique sur "Se connecter".';
+  } else {
+    const err = await res.json();
+    msg.textContent = 'Erreur : ' + err.detail;
+  }
+}
+
+async function seConnecter() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const msg = document.getElementById('auth_msg');
+  const header = construireAuthHeader(email, password);
+
+  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  if (!res.ok) {
+    msg.textContent = 'Email ou mot de passe incorrect.';
+    return;
+  }
+  const moi = await res.json();
+  if (moi.role !== 'worker') {
+    msg.textContent = 'Ce compte n\'est pas un compte étudiant.';
+    return;
+  }
+  authHeader = header;
+  msg.textContent = 'Connecté en tant que ' + moi.email;
+  document.getElementById('stat_confiance').textContent = moi.trust_score + ' / 100';
+  document.getElementById('config_projet').style.display = 'flex';
+  document.getElementById('zone_historique').style.display = 'block';
+  actualiserHistorique();
+}
+
+async function actualiserHistorique() {
+  const res = await fetch('/tasks/mine', { headers: { Authorization: authHeader } });
+  if (!res.ok) return;
+  const data = await res.json();
+
+  document.getElementById('stat_solde').textContent = data.solde_disponible.toFixed(2).replace('.', ',') + ' €';
+  document.getElementById('stat_nb').textContent = data.nb_taches_payees;
+
+  const liste = document.getElementById('liste_historique');
+  liste.innerHTML = data.historique.slice(0, 8).map(h => {
+    const label = h.statut === 'paye' ? `✓ payée (+${h.montant.toFixed(2)} €)` : '… en attente de vérification';
+    return `<div style="padding:3px 0; color:${h.statut==='paye' ? '#0f6e56' : '#888'};">${label}</div>`;
+  }).join('') || '<em>Aucune tâche traitée pour le moment.</em>';
+
+  document.getElementById('eligibilite_versement').textContent = data.eligible_versement
+    ? `Seuil de ${data.seuil_decaissement.toFixed(2)} € atteint — versement à programmer.`
+    : `Versement groupé à partir de ${data.seuil_decaissement.toFixed(2)} € cumulés.`;
+}
+
+async function chargerTacheSuivante() {
+  const msg = document.getElementById('msg');
+  const zone = document.getElementById('zone_tache');
+  msg.textContent = '';
+
+  const params = new URLSearchParams({ project_id: projectId() });
+  const res = await fetch(`/tasks/next?${params}`, { headers: { Authorization: authHeader } });
+
+  if (res.status === 404) {
+    zone.innerHTML = '<div class="vide">Aucune tâche disponible pour le moment — reviens plus tard.</div>';
+    tacheCourante = null;
+    return;
+  }
+  if (!res.ok) {
+    msg.textContent = "Erreur lors du chargement de la tâche.";
+    return;
+  }
+
+  tacheCourante = await res.json();
+  afficherTache(tacheCourante);
+}
+
+function badgesParColonne(badges) {
+  const parColonne = {};
+  for (const b of badges) {
+    if (!parColonne[b.col_index]) parColonne[b.col_index] = [];
+    parColonne[b.col_index].push(b);
+  }
+  return parColonne;
+}
+
+function afficherTache(tache) {
+  const zone = document.getElementById('zone_tache');
+  const badgesCol = badgesParColonne(tache.badges || []);
+
+  let html = `
+    <div class="header-row">
+      <span class="titre">Ligne #${tache.row_id}</span>
+      <span class="sousinfo">+${tache.prix.toFixed(2)} € si validée</span>
+    </div>
+  `;
+
+  tache.header.forEach((nomColonne, i) => {
+    const valeurBrute = tache.raw_data[i] ?? '';
+    const badgesIci = badgesCol[i] || [];
+    const classeAlerte = badgesIci.some(b => b.type === 'danger') ? 'badge-danger'
+                        : badgesIci.some(b => b.type === 'warning') ? 'badge-warning' : '';
+
+    html += `
+      <div class="champ">
+        <label>${nomColonne}</label>
+        <div class="brut">${escapeHtml(valeurBrute)}</div><br>
+        ${badgesIci.map(b => `<span class="badge badge-${b.type}">${b.msg}</span>`).join('')}
+        <input type="text" class="${classeAlerte}" data-col="${i}" value="${escapeHtml(valeurBrute).trim()}">
+      </div>
+    `;
+  });
+
+  html += `
+    <div class="actions">
+      <button onclick="chargerTacheSuivante()">Passer</button>
+      <button class="primary" onclick="validerTache()">Valider ✓</button>
+    </div>
+  `;
+
+  zone.innerHTML = html;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function validerTache() {
+  if (!tacheCourante) return;
+  const msg = document.getElementById('msg');
+
+  const inputs = document.querySelectorAll('#zone_tache input[data-col]');
+  const reponse = new Array(inputs.length);
+  inputs.forEach(inp => { reponse[parseInt(inp.dataset.col, 10)] = inp.value; });
+
+  const res = await fetch(`/tasks/${tacheCourante.task_id}/submit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    body: JSON.stringify({ reponse }),
+  });
+
+  if (!res.ok) {
+    msg.textContent = "Erreur lors de l'envoi.";
+    return;
+  }
+
+  const data = await res.json();
+  msg.textContent = data.status === 'en_attente_autres_workers'
+    ? 'Envoyé — en attente de vérification par d\'autres étudiants.'
+    : 'Ligne validée, tu es payé pour cette ligne.';
+
+  // Source de vérité unique côté serveur : on ne calcule plus les gains
+  // côté client, on relit systématiquement /tasks/mine et /auth/me.
+  actualiserHistorique();
+  const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
+  if (moiRes.ok) {
+    const moi = await moiRes.json();
+    document.getElementById('stat_confiance').textContent = moi.trust_score + ' / 100';
+  }
+
+  chargerTacheSuivante();
+}
+</script>
+</body>
+</html>

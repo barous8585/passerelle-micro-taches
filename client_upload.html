@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Passerelle de Micro-Tâches Data — Dépôt de fichier</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 720px; margin: 40px auto; color: #222; }
+  h1 { font-size: 20px; }
+  table { border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; }
+  th { background: #fafafa; }
+  select, input[type=text], input[type=number] { padding: 4px; }
+  button { padding: 8px 16px; margin-top: 12px; cursor: pointer; }
+  #etape2 { display: none; }
+  .apercu { font-size: 12px; color: #666; }
+  .card { background:#fafafa; border:1px solid #eee; border-radius:8px; padding:16px; margin-bottom:20px; }
+  .msg { font-size: 13px; color: #555; }
+</style>
+</head>
+<body>
+  <h1>Déposer un fichier à nettoyer</h1>
+
+  <div id="zone_auth" class="card">
+    <p style="margin-top:0; font-weight:600;">Connexion entreprise</p>
+    <label>Email <input type="email" id="auth_email" value="startup@ia.fr"></label><br><br>
+    <label>Mot de passe <input type="password" id="auth_password" value="motdepasse123"></label><br><br>
+    <button onclick="creerCompte()">Créer un compte</button>
+    <button onclick="seConnecter()">Se connecter</button>
+    <p id="auth_msg" class="msg"></p>
+  </div>
+
+  <div id="etape1" style="display:none;">
+    <input type="file" id="fichier_csv" accept=".csv">
+    <button onclick="analyserFichier()">Analyser le fichier</button>
+  </div>
+
+  <div id="etape2">
+    <h2>Schéma détecté — corrigez si besoin</h2>
+    <table id="table_schema"></table>
+
+    <p class="apercu" id="apercu_texte"></p>
+
+    <label>Titre du projet : <input type="text" id="titre_projet" value="Nettoyage de données"></label><br><br>
+    <label>Prix par ligne (€) : <input type="number" id="prix_ligne" value="0.04" step="0.01"></label>
+
+    <br>
+    <button onclick="validerEtLancer()">Valider et lancer le nettoyage</button>
+    <p id="resultat"></p>
+  </div>
+
+<script>
+let schemaCourant = null;
+let headerCourant = null;
+let fichierSelectionne = null;
+let authHeader = null; // "Basic base64(email:motdepasse)" une fois connecté
+
+function construireAuthHeader(email, motdepasse) {
+  return 'Basic ' + btoa(email + ':' + motdepasse);
+}
+
+async function creerCompte() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const msg = document.getElementById('auth_msg');
+  const res = await fetch('/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password, role: 'client' }),
+  });
+  if (res.ok) {
+    msg.textContent = 'Compte créé — clique sur "Se connecter".';
+  } else {
+    const err = await res.json();
+    msg.textContent = 'Erreur : ' + err.detail;
+  }
+}
+
+async function seConnecter() {
+  const email = document.getElementById('auth_email').value;
+  const password = document.getElementById('auth_password').value;
+  const msg = document.getElementById('auth_msg');
+  const header = construireAuthHeader(email, password);
+
+  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  if (!res.ok) {
+    msg.textContent = 'Email ou mot de passe incorrect.';
+    return;
+  }
+  const moi = await res.json();
+  if (moi.role !== 'client') {
+    msg.textContent = 'Ce compte n\'est pas un compte entreprise.';
+    return;
+  }
+  authHeader = header;
+  msg.textContent = 'Connecté en tant que ' + moi.email;
+  document.getElementById('etape1').style.display = 'block';
+}
+
+async function analyserFichier() {
+  const input = document.getElementById('fichier_csv');
+  if (!input.files.length) { alert('Choisis un fichier CSV.'); return; }
+  fichierSelectionne = input.files[0];
+
+  const formData = new FormData();
+  formData.append('fichier', fichierSelectionne);
+
+  const res = await fetch('/projects/infer-schema', {
+    method: 'POST', headers: { Authorization: authHeader }, body: formData,
+  });
+  const data = await res.json();
+
+  schemaCourant = data.schema_suggere;
+  headerCourant = data.header;
+
+  const table = document.getElementById('table_schema');
+  table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th></tr>';
+  schemaCourant.columns.forEach((col, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${col.name}</td>
+      <td>
+        <select data-idx="${i}" onchange="modifierType(${i}, this.value)">
+          <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
+          <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
+          <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
+          <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
+        </select>
+      </td>
+      <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
+    `;
+    table.appendChild(tr);
+  });
+
+  document.getElementById('apercu_texte').textContent =
+    'Aperçu : ' + JSON.stringify(data.apercu_lignes.slice(0, 2));
+  document.getElementById('etape2').style.display = 'block';
+}
+
+function modifierType(idx, valeur) {
+  const col = schemaCourant.columns[idx];
+  col.type = valeur;
+  if (valeur === 'regex') {
+    col.rule = '^[\\w.-]+@[\\w.-]+\\.\\w+$';
+  } else {
+    delete col.rule;
+  }
+}
+
+async function validerEtLancer() {
+  const resEl = document.getElementById('resultat');
+  resEl.textContent = 'Création du projet...';
+
+  const projetRes = await fetch('/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    body: JSON.stringify({
+      titre: document.getElementById('titre_projet').value,
+      colonnes_schema: schemaCourant,
+      prix_par_ligne: parseFloat(document.getElementById('prix_ligne').value),
+    }),
+  });
+  const projet = await projetRes.json();
+
+  resEl.textContent = 'Découpage du fichier en micro-tâches...';
+
+  const formData = new FormData();
+  formData.append('fichier', fichierSelectionne);
+  const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, {
+    method: 'POST', headers: { Authorization: authHeader }, body: formData,
+  });
+  const ingest = await ingestRes.json();
+
+  resEl.textContent = `✅ Projet #${projet.project_id} créé — ${ingest.nb_taches_creees} micro-tâches prêtes pour les étudiants.`;
+}
+</script>
+</body>
+</html>
