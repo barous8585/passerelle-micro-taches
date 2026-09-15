@@ -2,307 +2,199 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Passerelle — Espace étudiant</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --papier: #F7F5F0;
-    --papier-carte: #FFFFFF;
-    --ligne: #DEDACD;
-    --encre: #2B3A67;
-    --encre-clair: #5A6A9C;
-    --correction: #C4453D;
-    --correction-fond: #FBEAE8;
-    --alerte: #B8722B;
-    --alerte-fond: #FBF1E2;
-    --argent: #2F6B4F;
-    --argent-fond: #E9F3EE;
-    --texte: #232323;
-    --texte-doux: #6B6B63;
-    --rayon: 10px;
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --border: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text: #0F172A;
+    --text-secondary: #64748B;
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --success: #16A34A;
+    --success-bg: #F0FDF4;
+    --danger: #DC2626;
+    --danger-bg: #FEF2F2;
+    --warning: #D97706;
+    --warning-bg: #FFFBEB;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
 
   body {
     margin: 0;
-    font-family: 'Space Grotesk', -apple-system, sans-serif;
-    background: var(--papier);
-    color: var(--texte);
-    padding-bottom: 84px; /* place pour la barre d'action collée en bas */
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
   }
 
-  .entete {
-    padding: 20px 16px 12px;
-    border-bottom: 1px solid var(--ligne);
-    background: var(--papier);
+  .topbar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
     position: sticky;
     top: 0;
     z-index: 5;
   }
 
-  .entete h1 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 10px;
-    color: var(--encre);
+  .topbar .logo { font-weight: 600; font-size: 15px; }
+
+  .stats { display: flex; gap: 20px; }
+  .stat { text-align: right; }
+  .stat .valeur { font-weight: 600; font-size: 15px; }
+  .stat.argent .valeur { color: var(--success); }
+  .stat .label { font-size: 11px; color: var(--text-secondary); }
+
+  .conteneur { max-width: 1100px; margin: 0 auto; padding: 24px; }
+
+  .grille {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-areas: "projets tache" "historique tache";
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .grille { grid-template-columns: 1fr; grid-template-areas: "tache" "projets" "historique"; }
   }
 
-  .stats {
-    display: flex;
-    gap: 10px;
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; text-transform: none; }
+  .panel-projets { grid-area: projets; }
+  .panel-tache { grid-area: tache; }
+  .panel-historique { grid-area: historique; }
+
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  input[type=email], input[type=password], input[type=text] {
+    width: 100%; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    border: 1px solid var(--border-strong); border-radius: 6px; margin-bottom: 12px; background: #fff;
   }
+  input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 
-  .stat {
-    flex: 1;
-    background: var(--papier-carte);
-    border: 1px solid var(--ligne);
-    border-radius: var(--rayon);
-    padding: 8px 10px;
-  }
-
-  .stat .valeur {
-    font-size: 17px;
-    font-weight: 600;
-    line-height: 1.2;
-  }
-
-  .stat .label {
-    font-size: 11px;
-    color: var(--texte-doux);
-    margin-top: 2px;
-  }
-
-  .stat.argent .valeur { color: var(--argent); }
-
-  main {
-    padding: 16px;
-    max-width: 480px;
-    margin: 0 auto;
-  }
-
-  .bloc {
-    background: var(--papier-carte);
-    border: 1px solid var(--ligne);
-    border-radius: var(--rayon);
-    padding: 16px;
-    margin-bottom: 14px;
-  }
-
-  .bloc h2 {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0 0 12px;
-    color: var(--encre);
-  }
-
-  label {
-    display: block;
-    font-size: 12px;
-    color: var(--texte-doux);
-    margin-bottom: 4px;
-  }
-
-  input[type=email], input[type=password] {
-    width: 100%;
-    padding: 11px 12px;
-    font-size: 15px;
-    font-family: inherit;
-    border: 1px solid var(--ligne);
-    border-radius: 8px;
-    margin-bottom: 12px;
-    background: var(--papier);
-  }
-
-  input:focus { outline: 2px solid var(--encre-clair); outline-offset: 1px; }
-
-  .rang-boutons { display: flex; gap: 8px; }
-
+  .rang { display: flex; gap: 8px; }
   button {
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 11px 16px;
-    border-radius: 8px;
-    border: 1px solid var(--ligne);
-    background: var(--papier-carte);
-    color: var(--texte);
-    cursor: pointer;
-    min-height: 44px; /* cible tactile confortable */
+    font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px;
+    border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface);
+    color: var(--text); cursor: pointer;
   }
-
-  button.principal { background: var(--encre); color: #fff; border-color: var(--encre); flex: 1; }
-  button.discret { background: transparent; border-color: transparent; color: var(--texte-doux); }
+  button:hover { background: var(--bg); }
+  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); }
+  button.principal:hover { background: var(--primary-hover); }
   button:disabled { opacity: 0.5; cursor: default; }
 
-  .liste-projets { display: flex; flex-direction: column; gap: 8px; }
-
   .item-projet {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 14px;
-    border: 1px solid var(--ligne);
-    border-radius: 8px;
-    background: var(--papier);
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
   }
+  .item-projet.actif { border-color: var(--primary); background: #EFF6FF; }
+  .item-projet .titre { font-weight: 500; font-size: 13px; }
+  .item-projet .sousinfo { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .item-projet .prix { font-family: var(--mono); font-size: 12px; color: var(--success); }
 
-  .item-projet .titre { font-weight: 500; font-size: 14px; }
-  .item-projet .sousinfo { font-size: 12px; color: var(--texte-doux); margin-top: 2px; }
-  .item-projet .prix { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--argent); }
+  .vide { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
 
-  .vide { text-align: center; padding: 30px 10px; color: var(--texte-doux); font-size: 13px; }
-
-  .ligne-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    margin-bottom: 14px;
-  }
-
-  .ligne-info .pos { font-size: 12px; color: var(--texte-doux); }
-  .ligne-info .prix-ligne { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--argent); }
+  .ligne-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .ligne-info .pos { font-size: 12px; color: var(--text-secondary); }
+  .ligne-info .prix-ligne { font-family: var(--mono); font-size: 13px; color: var(--success); font-weight: 600; }
 
   .champ { margin-bottom: 16px; }
-
-  .champ .nom-colonne {
-    font-size: 11px;
-    color: var(--texte-doux);
-    margin-bottom: 5px;
-  }
-
+  .champ .nom-colonne { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
   .champ .brut {
-    font-family: 'Space Mono', monospace;
-    font-size: 13px;
-    color: var(--texte-doux);
-    background: var(--papier);
-    border: 1px dashed var(--ligne);
-    border-radius: 6px;
-    padding: 6px 9px;
-    margin-bottom: 6px;
-    word-break: break-word;
+    font-family: var(--mono); font-size: 12px; color: var(--text-secondary);
+    background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 5px;
+    padding: 5px 8px; margin-bottom: 6px; word-break: break-word;
   }
-
   .badges { margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
-
-  .badge {
-    font-size: 11px;
-    padding: 3px 8px;
-    border-radius: 5px;
-    font-weight: 500;
-  }
-  .badge.danger { background: var(--correction-fond); color: var(--correction); }
-  .badge.warning { background: var(--alerte-fond); color: var(--alerte); }
-  .badge.info { background: #EEF0F7; color: var(--encre-clair); }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .badge.danger { background: var(--danger-bg); color: var(--danger); }
+  .badge.warning { background: var(--warning-bg); color: var(--warning); }
+  .badge.info { background: #EFF6FF; color: var(--primary); }
 
   .champ input[type=text] {
-    width: 100%;
-    padding: 11px 12px;
-    font-family: 'Space Mono', monospace;
-    font-size: 14px;
-    border: 1.5px solid var(--ligne);
-    border-radius: 8px;
-    background: #fff;
+    width: 100%; padding: 9px 10px; font-family: var(--mono); font-size: 13px;
+    border: 1.5px solid var(--border-strong); border-radius: 6px; background: #fff; margin-bottom: 0;
   }
-  .champ input.a-corriger { border-color: var(--correction); }
-  .champ input.a-verifier { border-color: var(--alerte); }
+  .champ input.a-corriger { border-color: var(--danger); }
+  .champ input.a-verifier { border-color: var(--warning); }
 
-  .barre-action {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    background: var(--papier-carte);
-    border-top: 1px solid var(--ligne);
-    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
-    display: flex;
-    gap: 10px;
-    max-width: 480px;
-    margin: 0 auto;
-  }
+  .actions-tache { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 
-  .msg { font-size: 13px; color: var(--texte-doux); text-align: center; margin: 10px 0; min-height: 18px; }
+  .msg { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
 
   .registre { display: flex; flex-direction: column; }
-  .ligne-registre {
-    display: flex;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--ligne);
-    font-size: 13px;
-  }
+  .ligne-registre { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .ligne-registre:last-child { border-bottom: none; }
-  .ligne-registre .montant { font-family: 'Space Mono', monospace; }
-  .ligne-registre.paye .montant { color: var(--argent); }
-  .ligne-registre.attente .montant { color: var(--texte-doux); }
+  .ligne-registre .montant { font-family: var(--mono); }
+  .ligne-registre.paye .montant { color: var(--success); }
+  .ligne-registre.attente .montant { color: var(--text-secondary); }
 
-  .filtres-historique { display: flex; gap: 6px; margin-bottom: 10px; }
-  .filtres-historique button {
-    padding: 6px 12px; font-size: 12px; min-height: unset;
-  }
-  .filtres-historique button.actif { background: var(--encre); color: #fff; border-color: var(--encre); }
+  .filtres { display: flex; gap: 6px; margin-bottom: 10px; }
+  .filtres button { padding: 5px 10px; font-size: 12px; }
+  .filtres button.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
 </style>
 </head>
 <body>
 
-  <div class="entete">
-    <h1>Passerelle — nettoyage de données</h1>
+  <div class="topbar">
+    <div class="logo">Passerelle — espace étudiant</div>
     <div class="stats">
-      <div class="stat argent">
-        <div class="valeur" id="stat_solde">— €</div>
-        <div class="label">solde disponible</div>
-      </div>
-      <div class="stat">
-        <div class="valeur" id="stat_confiance">—</div>
-        <div class="label">indice de confiance</div>
-      </div>
+      <div class="stat argent"><div class="valeur" id="stat_solde">— €</div><div class="label">solde disponible</div></div>
+      <div class="stat"><div class="valeur" id="stat_confiance">—</div><div class="label">indice de confiance</div></div>
     </div>
   </div>
 
-  <main>
+  <div class="conteneur">
 
-    <div class="bloc" id="bloc_auth">
+    <div class="panel" id="bloc_auth" style="max-width:400px; margin-bottom:20px;">
       <h2>Connexion étudiant</h2>
       <label>Email</label>
       <input type="email" id="auth_email" value="etudiant1@uco.fr">
       <label>Mot de passe</label>
       <input type="password" id="auth_password" value="motdepasse123">
-      <div class="rang-boutons">
+      <div class="rang">
         <button onclick="creerCompte()">Créer un compte</button>
         <button class="principal" onclick="seConnecter()">Se connecter</button>
       </div>
       <p class="msg" id="auth_msg"></p>
     </div>
 
-    <div class="bloc" id="bloc_projets" style="display:none;">
-      <h2>Projets disponibles</h2>
-      <div class="liste-projets" id="liste_projets"></div>
-    </div>
+    <div class="grille" id="grille_principale" style="display:none;">
 
-    <div class="bloc" id="zone_tache" style="display:none;"></div>
-
-    <p class="msg" id="msg"></p>
-
-    <div class="bloc" id="zone_historique" style="display:none;">
-      <h2>Historique</h2>
-      <div class="filtres-historique">
-        <button class="actif" data-filtre="tous" onclick="filtrerHistorique('tous')">Tout</button>
-        <button data-filtre="paye" onclick="filtrerHistorique('paye')">Payées</button>
-        <button data-filtre="attente" onclick="filtrerHistorique('attente')">En attente</button>
+      <div class="panel panel-projets">
+        <h2>Projets disponibles</h2>
+        <div id="liste_projets"></div>
       </div>
-      <div class="registre" id="liste_historique"></div>
-      <p class="msg" id="eligibilite_versement" style="margin-top:10px;"></p>
+
+      <div class="panel panel-tache" id="zone_tache">
+        <div class="vide">Choisis un projet pour commencer.</div>
+      </div>
+
+      <div class="panel panel-historique">
+        <h2>Historique</h2>
+        <div class="filtres">
+          <button class="actif" data-filtre="tous" onclick="filtrerHistorique('tous')">Tout</button>
+          <button data-filtre="paye" onclick="filtrerHistorique('paye')">Payées</button>
+          <button data-filtre="attente" onclick="filtrerHistorique('attente')">En attente</button>
+        </div>
+        <div class="registre" id="liste_historique"></div>
+        <p class="msg" id="eligibilite_versement"></p>
+      </div>
+
     </div>
 
-  </main>
-
-  <div class="barre-action" id="barre_action" style="display:none;">
-    <button onclick="libererEtPasser()">Passer</button>
-    <button class="principal" onclick="validerTache()">Valider ✓</button>
   </div>
 
 <script>
@@ -311,58 +203,39 @@ let tacheCourante = null;
 let projetCourant = null;
 let historiqueComplet = [];
 
-function construireAuthHeader(email, motdepasse) {
-  return 'Basic ' + btoa(email + ':' + motdepasse);
-}
+function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
 async function creerCompte() {
   const email = document.getElementById('auth_email').value;
   const password = document.getElementById('auth_password').value;
   const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, role: 'worker' }),
   });
-  if (res.ok) {
-    msg.textContent = 'Compte créé — connecte-toi.';
-  } else {
-    const err = await res.json();
-    msg.textContent = err.detail;
-  }
+  msg.textContent = res.ok ? 'Compte créé — connecte-toi.' : (await res.json()).detail;
 }
 
 async function seConnecter() {
-  const email = document.getElementById('auth_email').value;
-  const password = document.getElementById('auth_password').value;
-  const header = construireAuthHeader(email, password);
-  await tenterConnexion(header);
+  await tenterConnexion(construireAuthHeader(document.getElementById('auth_email').value, document.getElementById('auth_password').value));
 }
 
 async function tenterConnexion(header) {
   const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/me', { headers: { Authorization: header } });
-  if (!res.ok) {
-    msg.textContent = 'Email ou mot de passe incorrect.';
-    sessionStorage.removeItem('passerelle_auth');
-    return;
-  }
+  if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth'); return; }
   const moi = await res.json();
-  if (moi.role !== 'worker') {
-    msg.textContent = "Ce compte n'est pas un compte étudiant.";
-    return;
-  }
+  if (moi.role !== 'worker') { msg.textContent = "Ce compte n'est pas un compte étudiant."; return; }
+
   authHeader = header;
   sessionStorage.setItem('passerelle_auth', header);
   document.getElementById('bloc_auth').style.display = 'none';
-  document.getElementById('bloc_projets').style.display = 'block';
-  document.getElementById('zone_historique').style.display = 'block';
+  document.getElementById('grille_principale').style.display = 'grid';
   document.getElementById('stat_confiance').textContent = moi.trust_score + '/100';
   chargerProjetsDisponibles();
   actualiserHistorique();
 }
 
-// Reconnexion silencieuse si une session est déjà en mémoire (recharge de page)
 if (authHeader) tenterConnexion(authHeader);
 
 async function chargerProjetsDisponibles() {
@@ -371,128 +244,87 @@ async function chargerProjetsDisponibles() {
   const data = await res.json();
   const liste = document.getElementById('liste_projets');
 
-  if (!data.projets.length) {
-    liste.innerHTML = '<div class="vide">Aucun projet avec des tâches disponibles pour le moment.</div>';
-    return;
-  }
+  if (!data.projets.length) { liste.innerHTML = '<div class="vide">Aucun projet disponible.</div>'; return; }
 
   liste.innerHTML = data.projets.map(p => `
-    <button class="item-projet" onclick="choisirProjet(${p.project_id}, '${p.titre.replace(/'/g, "\\'")}')">
-      <div>
-        <div class="titre">${p.titre}</div>
-        <div class="sousinfo">${p.taches_disponibles} ligne(s) disponible(s)</div>
-      </div>
+    <button class="item-projet ${p.project_id === projetCourant ? 'actif' : ''}" onclick="choisirProjet(${p.project_id})">
+      <div><div class="titre">${p.titre}</div><div class="sousinfo">${p.taches_disponibles} ligne(s) disponible(s)</div></div>
       <div class="prix">${p.prix_par_ligne.toFixed(2)} €</div>
     </button>
   `).join('');
 }
 
-function choisirProjet(id, titre) {
-  projetCourant = id;
-  document.getElementById('bloc_projets').style.display = 'none';
-  chargerTacheSuivante();
-}
+function choisirProjet(id) { projetCourant = id; chargerProjetsDisponibles(); chargerTacheSuivante(); }
 
 function badgesParColonne(badges) {
   const parColonne = {};
-  for (const b of badges) {
-    if (!parColonne[b.col_index]) parColonne[b.col_index] = [];
-    parColonne[b.col_index].push(b);
-  }
+  for (const b of badges) { (parColonne[b.col_index] ??= []).push(b); }
   return parColonne;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 async function chargerTacheSuivante() {
-  const msg = document.getElementById('msg');
   const zone = document.getElementById('zone_tache');
-  const barre = document.getElementById('barre_action');
-  msg.textContent = '';
-
   const res = await fetch(`/tasks/next?project_id=${projetCourant}`, { headers: { Authorization: authHeader } });
 
   if (res.status === 404) {
-    zone.style.display = 'block';
     zone.innerHTML = '<div class="vide">Plus de tâche disponible sur ce projet pour le moment.</div>';
-    barre.style.display = 'none';
-    setTimeout(() => { zone.style.display = 'none'; document.getElementById('bloc_projets').style.display = 'block'; chargerProjetsDisponibles(); }, 2500);
+    tacheCourante = null;
     return;
   }
-  if (!res.ok) { msg.textContent = 'Erreur lors du chargement.'; return; }
+  if (!res.ok) { zone.innerHTML = '<div class="vide">Erreur de chargement.</div>'; return; }
 
   tacheCourante = await res.json();
   afficherTache(tacheCourante);
-  zone.style.display = 'block';
-  barre.style.display = 'flex';
 }
 
 function afficherTache(tache) {
   const zone = document.getElementById('zone_tache');
   const badgesCol = badgesParColonne(tache.badges || []);
 
-  let html = `
-    <div class="ligne-info">
-      <span class="pos">ligne #${tache.row_id}</span>
-      <span class="prix-ligne">+${tache.prix.toFixed(2)} €</span>
-    </div>
-  `;
+  let html = `<div class="ligne-info"><span class="pos">Ligne #${tache.row_id}</span><span class="prix-ligne">+${tache.prix.toFixed(2)} €</span></div>`;
 
   tache.header.forEach((nomColonne, i) => {
     const valeurBrute = tache.raw_data[i] ?? '';
     const badgesIci = badgesCol[i] || [];
-    const classeInput = badgesIci.some(b => b.type === 'danger') ? 'a-corriger'
-                       : badgesIci.some(b => b.type === 'warning') ? 'a-verifier' : '';
-
+    const classeInput = badgesIci.some(b => b.type === 'danger') ? 'a-corriger' : badgesIci.some(b => b.type === 'warning') ? 'a-verifier' : '';
     html += `
       <div class="champ">
         <div class="nom-colonne">${nomColonne}</div>
         <div class="brut">${escapeHtml(valeurBrute)}</div>
         ${badgesIci.length ? `<div class="badges">${badgesIci.map(b => `<span class="badge ${b.type}">${b.msg}</span>`).join('')}</div>` : ''}
         <input type="text" class="${classeInput}" data-col="${i}" value="${escapeHtml(valeurBrute).trim()}">
-      </div>
-    `;
+      </div>`;
   });
 
+  html += `<div class="actions-tache"><button onclick="libererEtPasser()">Passer</button><button class="principal" onclick="validerTache()">Valider</button></div>
+           <p class="msg" id="msg"></p>`;
   zone.innerHTML = html;
 }
 
 async function libererEtPasser() {
-  if (tacheCourante) {
-    await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
-  }
+  if (tacheCourante) await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
   chargerTacheSuivante();
 }
 
 async function validerTache() {
   if (!tacheCourante) return;
-  const msg = document.getElementById('msg');
-
   const inputs = document.querySelectorAll('#zone_tache input[data-col]');
   const reponse = new Array(inputs.length);
   inputs.forEach(inp => { reponse[parseInt(inp.dataset.col, 10)] = inp.value; });
 
   const res = await fetch(`/tasks/${tacheCourante.task_id}/submit`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
     body: JSON.stringify({ reponse }),
   });
 
-  if (!res.ok) { msg.textContent = "Erreur lors de l'envoi."; return; }
-
+  if (!res.ok) { document.getElementById('msg').textContent = "Erreur lors de l'envoi."; return; }
   const data = await res.json();
-  msg.textContent = data.status === 'en_attente_autres_workers'
-    ? 'Envoyé — en attente de vérification par d\'autres étudiants.'
-    : 'Ligne validée, tu es payé pour cette ligne.';
 
   actualiserHistorique();
   const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
-  if (moiRes.ok) {
-    const moi = await moiRes.json();
-    document.getElementById('stat_confiance').textContent = moi.trust_score + '/100';
-  }
+  if (moiRes.ok) document.getElementById('stat_confiance').textContent = (await moiRes.json()).trust_score + '/100';
 
   chargerTacheSuivante();
 }
@@ -501,31 +333,27 @@ async function actualiserHistorique() {
   const res = await fetch('/tasks/mine', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   const data = await res.json();
-
   document.getElementById('stat_solde').textContent = data.solde_disponible.toFixed(2).replace('.', ',') + ' €';
   historiqueComplet = data.historique;
   rendreHistorique('tous');
-
   document.getElementById('eligibilite_versement').textContent = data.eligible_versement
     ? `Seuil de ${data.seuil_decaissement.toFixed(2)} € atteint — versement à venir.`
     : `Versement groupé à partir de ${data.seuil_decaissement.toFixed(2)} € cumulés.`;
 }
 
 function filtrerHistorique(filtre) {
-  document.querySelectorAll('.filtres-historique button').forEach(b => b.classList.toggle('actif', b.dataset.filtre === filtre));
+  document.querySelectorAll('.filtres button').forEach(b => b.classList.toggle('actif', b.dataset.filtre === filtre));
   rendreHistorique(filtre);
 }
 
 function rendreHistorique(filtre) {
   const liste = document.getElementById('liste_historique');
   const lignes = historiqueComplet.filter(h => filtre === 'tous' || h.statut.startsWith(filtre === 'paye' ? 'paye' : 'en_attente'));
-
   liste.innerHTML = lignes.length ? lignes.map(h => `
     <div class="ligne-registre ${h.statut === 'paye' ? 'paye' : 'attente'}">
       <span>${h.statut === 'paye' ? 'Ligne validée' : 'En vérification'}</span>
       <span class="montant">${h.montant !== null ? '+' + h.montant.toFixed(2) + ' €' : '…'}</span>
-    </div>
-  `).join('') : '<div class="vide">Rien à afficher.</div>';
+    </div>`).join('') : '<div class="vide">Rien à afficher.</div>';
 }
 </script>
 </body>

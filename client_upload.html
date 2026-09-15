@@ -4,119 +4,92 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Passerelle — Dépôt entreprise</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --papier: #F7F5F0;
-    --papier-carte: #FFFFFF;
-    --ligne: #DEDACD;
-    --encre: #2B3A67;
-    --encre-clair: #5A6A9C;
-    --correction: #C4453D;
-    --correction-fond: #FBEAE8;
-    --alerte: #B8722B;
-    --argent: #2F6B4F;
-    --argent-fond: #E9F3EE;
-    --texte: #232323;
-    --texte-doux: #6B6B63;
-    --rayon: 10px;
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --border: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text: #0F172A;
+    --text-secondary: #64748B;
+    --primary: #2563EB;
+    --primary-hover: #1D4ED8;
+    --success: #16A34A;
+    --success-bg: #F0FDF4;
+    --warning: #D97706;
+    --radius: 8px;
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
 
-  body {
-    margin: 0;
-    font-family: 'Space Grotesk', -apple-system, sans-serif;
-    background: var(--papier);
-    color: var(--texte);
+  .topbar {
+    background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px;
+    font-weight: 600; font-size: 15px; position: sticky; top: 0; z-index: 5;
   }
 
-  .entete {
-    padding: 24px 20px 16px;
-    border-bottom: 1px solid var(--ligne);
-  }
+  .conteneur { max-width: 1100px; margin: 0 auto; padding: 24px; }
 
-  .entete h1 { font-size: 16px; font-weight: 600; margin: 0; color: var(--encre); }
-  .entete p { font-size: 13px; color: var(--texte-doux); margin: 4px 0 0; }
+  .grille { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .grille { grid-template-columns: 1fr; } }
 
-  main { max-width: 640px; margin: 0 auto; padding: 20px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
+  .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; }
 
-  .bloc {
-    background: var(--papier-carte);
-    border: 1px solid var(--ligne);
-    border-radius: var(--rayon);
-    padding: 20px;
-    margin-bottom: 16px;
-  }
-
-  .bloc h2 { font-size: 14px; font-weight: 600; margin: 0 0 14px; color: var(--encre); }
-
-  label { display: block; font-size: 12px; color: var(--texte-doux); margin-bottom: 4px; }
-
+  label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
   input[type=email], input[type=password], input[type=text], input[type=number], input[type=file] {
-    width: 100%;
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    border: 1px solid var(--ligne);
-    border-radius: 8px;
-    margin-bottom: 14px;
-    background: var(--papier);
+    width: 100%; padding: 8px 10px; font-size: 14px; font-family: inherit;
+    border: 1px solid var(--border-strong); border-radius: 6px; margin-bottom: 12px; background: #fff;
   }
-  input:focus { outline: 2px solid var(--encre-clair); outline-offset: 1px; }
+  input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
 
   .rang { display: flex; gap: 8px; }
-
   button {
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 10px 16px;
-    border-radius: 8px;
-    border: 1px solid var(--ligne);
-    background: var(--papier-carte);
-    color: var(--texte);
-    cursor: pointer;
+    font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px;
+    border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface);
+    color: var(--text); cursor: pointer;
   }
-  button.principal { background: var(--encre); color: #fff; border-color: var(--encre); }
+  button:hover { background: var(--bg); }
+  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); }
+  button.principal:hover { background: var(--primary-hover); }
   button:disabled { opacity: 0.5; cursor: default; }
+  button.pleine-largeur { width: 100%; margin-bottom: 14px; }
 
   table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
-  th, td { border-bottom: 1px solid var(--ligne); padding: 8px 6px; text-align: left; }
-  th { color: var(--texte-doux); font-weight: 500; font-size: 12px; }
-  select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--ligne); font-family: inherit; }
+  th, td { border-bottom: 1px solid var(--border); padding: 7px 6px; text-align: left; }
+  th { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+  select { padding: 5px 8px; border-radius: 5px; border: 1px solid var(--border-strong); font-family: inherit; }
 
-  .apercu { font-family: 'Space Mono', monospace; font-size: 12px; color: var(--texte-doux); background: var(--papier); border: 1px dashed var(--ligne); border-radius: 6px; padding: 8px; margin: 8px 0; overflow-x: auto; }
+  .apercu { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 5px; padding: 8px; margin: 8px 0; overflow-x: auto; }
 
-  .msg { font-size: 13px; color: var(--texte-doux); margin: 8px 0 0; }
+  .msg { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
 
-  .carte-projet {
-    border: 1px solid var(--ligne);
-    border-radius: 8px;
-    padding: 14px;
-    margin-bottom: 10px;
+  .item-projet {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
   }
-  .carte-projet .titre { font-weight: 500; font-size: 14px; margin-bottom: 6px; }
-  .barre-progres { height: 6px; background: var(--papier); border-radius: 3px; overflow: hidden; margin: 8px 0; }
-  .barre-progres .rempli { height: 100%; background: var(--argent); }
-  .ligne-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--texte-doux); }
-  .badge-litige { color: var(--alerte); }
+  .item-projet.actif { border-color: var(--primary); background: #EFF6FF; }
+  .item-projet .titre { font-weight: 500; font-size: 13px; }
+  .item-projet .sousinfo { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
 
-  .vide { text-align: center; padding: 20px; color: var(--texte-doux); font-size: 13px; }
+  .barre-progres { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 10px 0; }
+  .barre-progres .rempli { height: 100%; background: var(--success); }
+  .ligne-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
+  .badge-litige { color: var(--warning); }
+
+  .vide { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-size: 13px; }
 </style>
 </head>
 <body>
 
-  <div class="entete">
-    <h1>Passerelle de micro-tâches</h1>
-    <p>Dépôt de données à nettoyer</p>
-  </div>
+  <div class="topbar">Passerelle — dépôt entreprise</div>
 
-  <main>
+  <div class="conteneur">
 
-    <div class="bloc" id="bloc_auth">
+    <div class="panel" id="bloc_auth" style="max-width:400px; margin-bottom:20px;">
       <h2>Connexion entreprise</h2>
       <label>Email</label>
       <input type="email" id="auth_email" value="startup@ia.fr">
@@ -129,38 +102,30 @@
       <p class="msg" id="auth_msg"></p>
     </div>
 
-    <div class="bloc" id="bloc_mes_projets" style="display:none;">
-      <h2>Mes projets</h2>
-      <div id="liste_mes_projets"></div>
-    </div>
+    <div class="grille" id="grille_principale" style="display:none;">
 
-    <div class="bloc" id="bloc_depot" style="display:none;">
-      <h2>Déposer un nouveau fichier</h2>
-      <input type="file" id="fichier_csv" accept=".csv">
-      <button onclick="analyserFichier()">Analyser le fichier</button>
-
-      <div id="etape2" style="display:none; margin-top:16px;">
-        <table id="table_schema"></table>
-        <p class="apercu" id="apercu_texte"></p>
-        <label>Titre du projet</label>
-        <input type="text" id="titre_projet" value="Nettoyage de données">
-        <label>Prix par ligne (€)</label>
-        <input type="number" id="prix_ligne" value="0.04" step="0.01">
-        <button class="principal" onclick="validerEtLancer()">Lancer le nettoyage</button>
-        <p class="msg" id="resultat"></p>
+      <div class="panel">
+        <button class="principal pleine-largeur" onclick="afficherDepot()">+ Nouveau projet</button>
+        <h2>Mes projets</h2>
+        <div id="liste_mes_projets"></div>
       </div>
+
+      <div class="panel" id="panel_droit">
+        <div class="vide">Sélectionne un projet ou dépose-en un nouveau.</div>
+      </div>
+
     </div>
 
-  </main>
+  </div>
 
 <script>
+let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
 let schemaCourant = null;
 let fichierSelectionne = null;
-let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
+let projetsCache = [];
+let projetSelectionne = null;
 
-function construireAuthHeader(email, motdepasse) {
-  return 'Basic ' + btoa(email + ':' + motdepasse);
-}
+function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
 async function creerCompte() {
   const email = document.getElementById('auth_email').value;
@@ -170,14 +135,11 @@ async function creerCompte() {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password, role: 'client' }),
   });
-  if (res.ok) { msg.textContent = 'Compte créé — connecte-toi.'; }
-  else { msg.textContent = (await res.json()).detail; }
+  msg.textContent = res.ok ? 'Compte créé — connecte-toi.' : (await res.json()).detail;
 }
 
 async function seConnecter() {
-  const email = document.getElementById('auth_email').value;
-  const password = document.getElementById('auth_password').value;
-  await tenterConnexion(construireAuthHeader(email, password));
+  await tenterConnexion(construireAuthHeader(document.getElementById('auth_email').value, document.getElementById('auth_password').value));
 }
 
 async function tenterConnexion(header) {
@@ -190,8 +152,7 @@ async function tenterConnexion(header) {
   authHeader = header;
   sessionStorage.setItem('passerelle_auth_client', header);
   document.getElementById('bloc_auth').style.display = 'none';
-  document.getElementById('bloc_mes_projets').style.display = 'block';
-  document.getElementById('bloc_depot').style.display = 'block';
+  document.getElementById('grille_principale').style.display = 'grid';
   chargerMesProjets();
 }
 
@@ -200,30 +161,35 @@ if (authHeader) tenterConnexion(authHeader);
 async function chargerMesProjets() {
   const res = await fetch('/projects/mine', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
-  const data = await res.json();
+  projetsCache = (await res.json()).projets;
   const liste = document.getElementById('liste_mes_projets');
 
-  if (!data.projets.length) {
-    liste.innerHTML = '<div class="vide">Aucun projet déposé pour le moment.</div>';
-    return;
-  }
+  if (!projetsCache.length) { liste.innerHTML = '<div class="vide">Aucun projet déposé.</div>'; return; }
 
-  liste.innerHTML = data.projets.map(p => {
-    const pct = p.total_lignes ? Math.round(100 * p.lignes_completees / p.total_lignes) : 0;
-    return `
-      <div class="carte-projet">
-        <div class="titre">${p.titre}</div>
-        <div class="barre-progres"><div class="rempli" style="width:${pct}%"></div></div>
-        <div class="ligne-stats">
-          <span>${p.lignes_completees} / ${p.total_lignes} lignes traitées</span>
-          ${p.lignes_litigieuses > 0 ? `<span class="badge-litige">${p.lignes_litigieuses} en désaccord entre étudiants</span>` : ''}
-        </div>
-        <button ${p.pret_pour_export ? '' : 'disabled'} onclick="exporter(${p.project_id})" style="margin-top:10px;">
-          ${p.pret_pour_export ? 'Télécharger le CSV nettoyé' : (p.lignes_completees > 0 ? 'Télécharger le partiel disponible' : 'Pas encore de ligne traitée')}
-        </button>
-      </div>
-    `;
-  }).join('');
+  liste.innerHTML = projetsCache.map(p => `
+    <button class="item-projet ${p.project_id === projetSelectionne ? 'actif' : ''}" onclick="afficherProjet(${p.project_id})">
+      <div><div class="titre">${p.titre}</div><div class="sousinfo">${p.lignes_completees}/${p.total_lignes} lignes</div></div>
+    </button>
+  `).join('');
+}
+
+function afficherProjet(id) {
+  projetSelectionne = id;
+  chargerMesProjets();
+  const p = projetsCache.find(x => x.project_id === id);
+  const pct = p.total_lignes ? Math.round(100 * p.lignes_completees / p.total_lignes) : 0;
+
+  document.getElementById('panel_droit').innerHTML = `
+    <h2>${p.titre}</h2>
+    <div class="barre-progres"><div class="rempli" style="width:${pct}%"></div></div>
+    <div class="ligne-stats">
+      <span>${p.lignes_completees} / ${p.total_lignes} lignes traitées</span>
+      ${p.lignes_litigieuses > 0 ? `<span class="badge-litige">${p.lignes_litigieuses} en désaccord entre étudiants</span>` : ''}
+    </div>
+    <button class="principal" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id})">
+      ${p.pret_pour_export ? 'Télécharger le CSV nettoyé' : (p.lignes_completees > 0 ? 'Télécharger le partiel disponible' : 'Pas encore de ligne traitée')}
+    </button>
+  `;
 }
 
 async function exporter(projectId) {
@@ -232,10 +198,28 @@ async function exporter(projectId) {
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `projet_${projectId}_nettoye.csv`;
-  a.click();
+  a.href = url; a.download = `projet_${projectId}_nettoye.csv`; a.click();
   URL.revokeObjectURL(url);
+}
+
+function afficherDepot() {
+  projetSelectionne = null;
+  chargerMesProjets();
+  document.getElementById('panel_droit').innerHTML = `
+    <h2>Déposer un nouveau fichier</h2>
+    <input type="file" id="fichier_csv" accept=".csv">
+    <button onclick="analyserFichier()">Analyser le fichier</button>
+    <div id="etape2" style="display:none; margin-top:16px;">
+      <table id="table_schema"></table>
+      <p class="apercu" id="apercu_texte"></p>
+      <label>Titre du projet</label>
+      <input type="text" id="titre_projet" value="Nettoyage de données">
+      <label>Prix par ligne (€)</label>
+      <input type="number" id="prix_ligne" value="0.04" step="0.01">
+      <button class="principal" onclick="validerEtLancer()">Lancer le nettoyage</button>
+      <p class="msg" id="resultat"></p>
+    </div>
+  `;
 }
 
 async function analyserFichier() {
@@ -255,14 +239,12 @@ async function analyserFichier() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${col.name}</td>
-      <td>
-        <select onchange="modifierType(${i}, this.value)">
-          <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
-          <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
-          <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
-          <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
-        </select>
-      </td>
+      <td><select onchange="modifierType(${i}, this.value)">
+        <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
+        <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
+        <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
+        <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
+      </select></td>
       <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
     `;
     table.appendChild(tr);
@@ -299,10 +281,9 @@ async function validerEtLancer() {
   const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
   const ingest = await ingestRes.json();
 
-  resEl.textContent = `Projet créé — ${ingest.nb_taches_creees} micro-tâches prêtes pour les étudiants.`;
-  document.getElementById('etape2').style.display = 'none';
-  document.getElementById('fichier_csv').value = '';
-  chargerMesProjets();
+  resEl.textContent = `Projet créé — ${ingest.nb_taches_creees} micro-tâches prêtes.`;
+  await chargerMesProjets();
+  setTimeout(() => afficherProjet(projet.project_id), 600);
 }
 </script>
 </body>
