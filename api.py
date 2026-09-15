@@ -227,6 +227,57 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
 SEUIL_DECAISSEMENT = 10.0  # seuil minimum avant qu'un versement groupé ait du sens
 
 
+@app.get("/projects/available")
+def projets_disponibles(user: User = Depends(require_role("worker"))):
+    """
+    Remplace la saisie manuelle d'un project_id : liste les projets ayant
+    encore au moins une tâche que CE worker peut prendre (ni déjà traitée,
+    ni déjà verrouillée par lui, ni au quota de redondance atteint).
+    """
+    db = SessionLocal()
+    try:
+        nettoyer_verrous_expires(db)
+        deja_traitees = {s.micro_task_id for s in db.query(Submission).filter_by(worker_id=user.id)}
+        deja_verrouillees = {l.micro_task_id for l in db.query(TaskLock).filter_by(worker_id=user.id)}
+
+        resultat = []
+        for projet in db.query(Project).all():
+            nb_dispo = 0
+            for tache in db.query(MicroTask).filter_by(project_id=projet.id, status=TaskStatus.available):
+                if tache.id in deja_traitees or tache.id in deja_verrouillees:
+                    continue
+                nb_sub = db.query(Submission).filter_by(micro_task_id=tache.id).count()
+                nb_lock = db.query(TaskLock).filter_by(micro_task_id=tache.id).count()
+                if nb_sub + nb_lock < tache.redundancy_level:
+                    nb_dispo += 1
+            if nb_dispo > 0:
+                resultat.append({
+                    "project_id": projet.id,
+                    "titre": projet.titre,
+                    "prix_par_ligne": projet.prix_par_ligne,
+                    "taches_disponibles": nb_dispo,
+                })
+        return {"projets": resultat}
+    finally:
+        db.close()
+
+
+@app.post("/tasks/{task_id}/release")
+def liberer_tache(task_id: int, user: User = Depends(require_role("worker"))):
+    """Relâche volontairement le verrou avant les 15 minutes d'expiration --
+    utile quand un worker ouvre une ligne puis décide de ne pas la traiter,
+    pour ne pas geler inutilement un créneau de redondance."""
+    db = SessionLocal()
+    try:
+        supprime = db.query(TaskLock).filter_by(micro_task_id=task_id, worker_id=user.id).delete()
+        db.commit()
+        if not supprime:
+            raise HTTPException(status_code=404, detail="Aucun verrou actif sur cette tâche pour ce compte")
+        return {"status": "liberee"}
+    finally:
+        db.close()
+
+
 @app.get("/tasks/mine")
 def mes_taches(user: User = Depends(require_role("worker"))):
     """

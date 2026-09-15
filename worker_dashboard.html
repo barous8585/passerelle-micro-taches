@@ -2,75 +2,314 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>Espace étudiant — Nettoyage de données</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Passerelle — Espace étudiant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 640px; margin: 32px auto; color: #1a1a1a; background:#f7f7f5; }
-  .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
-  .stat { font-size:13px; color:#555; }
-  .stat b { color:#111; font-size:15px; }
-  .config { display:flex; gap:8px; margin-bottom:20px; font-size:13px; }
-  .config input { width:70px; padding:4px; }
-  .card { background:#fff; border-radius:12px; padding:20px; box-shadow:0 1px 2px rgba(0,0,0,0.06); margin-bottom:16px; }
-  .header-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
-  .header-row .titre { font-weight:600; font-size:15px; }
-  .header-row .sousinfo { font-size:12px; color:#888; }
-  .champ { margin-bottom:14px; }
-  .champ label { display:block; font-size:12px; color:#888; margin-bottom:4px; }
-  .champ .brut { font-family: monospace; font-size:13px; color:#999; background:#f0f0ee; padding:4px 8px; border-radius:6px; margin-bottom:4px; display:inline-block; }
-  .champ input { width:100%; box-sizing:border-box; padding:8px; font-size:14px; border:1px solid #ddd; border-radius:6px; }
-  .champ input.badge-danger { border-color:#d85a30; background:#fdf2ee; }
-  .champ input.badge-warning { border-color:#ef9f27; background:#fdf7ea; }
-  .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:6px; margin:2px 6px 2px 0; }
-  .badge-danger { background:#fdf2ee; color:#993c1d; }
-  .badge-warning { background:#fdf7ea; color:#854f0b; }
-  .badge-info { background:#eef2fb; color:#185fa5; }
-  .actions { display:flex; justify-content:space-between; align-items:center; margin-top:18px; }
-  button { padding:9px 18px; border-radius:8px; border:1px solid #ccc; background:#fff; cursor:pointer; font-size:14px; }
-  button.primary { background:#1a1a1a; color:#fff; border:none; }
-  button:disabled { opacity:0.5; cursor:default; }
-  .msg { font-size:13px; color:#666; margin-top:10px; }
-  .vide { text-align:center; padding:40px 0; color:#777; }
+  :root {
+    --papier: #F7F5F0;
+    --papier-carte: #FFFFFF;
+    --ligne: #DEDACD;
+    --encre: #2B3A67;
+    --encre-clair: #5A6A9C;
+    --correction: #C4453D;
+    --correction-fond: #FBEAE8;
+    --alerte: #B8722B;
+    --alerte-fond: #FBF1E2;
+    --argent: #2F6B4F;
+    --argent-fond: #E9F3EE;
+    --texte: #232323;
+    --texte-doux: #6B6B63;
+    --rayon: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Space Grotesk', -apple-system, sans-serif;
+    background: var(--papier);
+    color: var(--texte);
+    padding-bottom: 84px; /* place pour la barre d'action collée en bas */
+  }
+
+  .entete {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid var(--ligne);
+    background: var(--papier);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+
+  .entete h1 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    color: var(--encre);
+  }
+
+  .stats {
+    display: flex;
+    gap: 10px;
+  }
+
+  .stat {
+    flex: 1;
+    background: var(--papier-carte);
+    border: 1px solid var(--ligne);
+    border-radius: var(--rayon);
+    padding: 8px 10px;
+  }
+
+  .stat .valeur {
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.2;
+  }
+
+  .stat .label {
+    font-size: 11px;
+    color: var(--texte-doux);
+    margin-top: 2px;
+  }
+
+  .stat.argent .valeur { color: var(--argent); }
+
+  main {
+    padding: 16px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .bloc {
+    background: var(--papier-carte);
+    border: 1px solid var(--ligne);
+    border-radius: var(--rayon);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .bloc h2 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 12px;
+    color: var(--encre);
+  }
+
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--texte-doux);
+    margin-bottom: 4px;
+  }
+
+  input[type=email], input[type=password] {
+    width: 100%;
+    padding: 11px 12px;
+    font-size: 15px;
+    font-family: inherit;
+    border: 1px solid var(--ligne);
+    border-radius: 8px;
+    margin-bottom: 12px;
+    background: var(--papier);
+  }
+
+  input:focus { outline: 2px solid var(--encre-clair); outline-offset: 1px; }
+
+  .rang-boutons { display: flex; gap: 8px; }
+
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 11px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--ligne);
+    background: var(--papier-carte);
+    color: var(--texte);
+    cursor: pointer;
+    min-height: 44px; /* cible tactile confortable */
+  }
+
+  button.principal { background: var(--encre); color: #fff; border-color: var(--encre); flex: 1; }
+  button.discret { background: transparent; border-color: transparent; color: var(--texte-doux); }
+  button:disabled { opacity: 0.5; cursor: default; }
+
+  .liste-projets { display: flex; flex-direction: column; gap: 8px; }
+
+  .item-projet {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 14px;
+    border: 1px solid var(--ligne);
+    border-radius: 8px;
+    background: var(--papier);
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+  }
+
+  .item-projet .titre { font-weight: 500; font-size: 14px; }
+  .item-projet .sousinfo { font-size: 12px; color: var(--texte-doux); margin-top: 2px; }
+  .item-projet .prix { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--argent); }
+
+  .vide { text-align: center; padding: 30px 10px; color: var(--texte-doux); font-size: 13px; }
+
+  .ligne-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 14px;
+  }
+
+  .ligne-info .pos { font-size: 12px; color: var(--texte-doux); }
+  .ligne-info .prix-ligne { font-family: 'Space Mono', monospace; font-size: 13px; color: var(--argent); }
+
+  .champ { margin-bottom: 16px; }
+
+  .champ .nom-colonne {
+    font-size: 11px;
+    color: var(--texte-doux);
+    margin-bottom: 5px;
+  }
+
+  .champ .brut {
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    color: var(--texte-doux);
+    background: var(--papier);
+    border: 1px dashed var(--ligne);
+    border-radius: 6px;
+    padding: 6px 9px;
+    margin-bottom: 6px;
+    word-break: break-word;
+  }
+
+  .badges { margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
+
+  .badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-weight: 500;
+  }
+  .badge.danger { background: var(--correction-fond); color: var(--correction); }
+  .badge.warning { background: var(--alerte-fond); color: var(--alerte); }
+  .badge.info { background: #EEF0F7; color: var(--encre-clair); }
+
+  .champ input[type=text] {
+    width: 100%;
+    padding: 11px 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 14px;
+    border: 1.5px solid var(--ligne);
+    border-radius: 8px;
+    background: #fff;
+  }
+  .champ input.a-corriger { border-color: var(--correction); }
+  .champ input.a-verifier { border-color: var(--alerte); }
+
+  .barre-action {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: var(--papier-carte);
+    border-top: 1px solid var(--ligne);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    display: flex;
+    gap: 10px;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .msg { font-size: 13px; color: var(--texte-doux); text-align: center; margin: 10px 0; min-height: 18px; }
+
+  .registre { display: flex; flex-direction: column; }
+  .ligne-registre {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--ligne);
+    font-size: 13px;
+  }
+  .ligne-registre:last-child { border-bottom: none; }
+  .ligne-registre .montant { font-family: 'Space Mono', monospace; }
+  .ligne-registre.paye .montant { color: var(--argent); }
+  .ligne-registre.attente .montant { color: var(--texte-doux); }
+
+  .filtres-historique { display: flex; gap: 6px; margin-bottom: 10px; }
+  .filtres-historique button {
+    padding: 6px 12px; font-size: 12px; min-height: unset;
+  }
+  .filtres-historique button.actif { background: var(--encre); color: #fff; border-color: var(--encre); }
 </style>
 </head>
 <body>
 
-  <div class="topbar">
-    <div class="stat">Solde disponible : <b id="stat_solde">0,00 €</b></div>
-    <div class="stat">Lignes payées : <b id="stat_nb">0</b></div>
-    <div class="stat">Indice de confiance : <b id="stat_confiance">—</b></div>
+  <div class="entete">
+    <h1>Passerelle — nettoyage de données</h1>
+    <div class="stats">
+      <div class="stat argent">
+        <div class="valeur" id="stat_solde">— €</div>
+        <div class="label">solde disponible</div>
+      </div>
+      <div class="stat">
+        <div class="valeur" id="stat_confiance">—</div>
+        <div class="label">indice de confiance</div>
+      </div>
+    </div>
   </div>
 
-  <div class="card" id="zone_auth">
-    <p style="margin-top:0; font-weight:600;">Connexion étudiant</p>
-    <label>Email <input type="email" id="auth_email" value="etudiant1@uco.fr"></label>
-    <label>Mot de passe <input type="password" id="auth_password" value="motdepasse123"></label><br><br>
-    <button onclick="creerCompte()">Créer un compte</button>
-    <button onclick="seConnecter()">Se connecter</button>
-    <p class="msg" id="auth_msg"></p>
-  </div>
+  <main>
 
-  <div class="config" id="config_projet" style="display:none;">
-    <label>Projet ID <input type="number" id="project_id" value="1"></label>
-    <button onclick="chargerTacheSuivante()">Charger une tâche</button>
-  </div>
+    <div class="bloc" id="bloc_auth">
+      <h2>Connexion étudiant</h2>
+      <label>Email</label>
+      <input type="email" id="auth_email" value="etudiant1@uco.fr">
+      <label>Mot de passe</label>
+      <input type="password" id="auth_password" value="motdepasse123">
+      <div class="rang-boutons">
+        <button onclick="creerCompte()">Créer un compte</button>
+        <button class="principal" onclick="seConnecter()">Se connecter</button>
+      </div>
+      <p class="msg" id="auth_msg"></p>
+    </div>
 
-  <div class="card" id="zone_tache">
-    <div class="vide">Renseigne ton identifiant et clique sur « Charger une tâche ».</div>
-  </div>
+    <div class="bloc" id="bloc_projets" style="display:none;">
+      <h2>Projets disponibles</h2>
+      <div class="liste-projets" id="liste_projets"></div>
+    </div>
 
-  <p class="msg" id="msg"></p>
+    <div class="bloc" id="zone_tache" style="display:none;"></div>
 
-  <div class="card" id="zone_historique" style="display:none;">
-    <p style="margin-top:0; font-weight:600; font-size:13px;">Historique récent</p>
-    <div id="liste_historique" style="font-size:13px;"></div>
-    <p id="eligibilite_versement" style="font-size:12px; color:#888; margin-bottom:0;"></p>
+    <p class="msg" id="msg"></p>
+
+    <div class="bloc" id="zone_historique" style="display:none;">
+      <h2>Historique</h2>
+      <div class="filtres-historique">
+        <button class="actif" data-filtre="tous" onclick="filtrerHistorique('tous')">Tout</button>
+        <button data-filtre="paye" onclick="filtrerHistorique('paye')">Payées</button>
+        <button data-filtre="attente" onclick="filtrerHistorique('attente')">En attente</button>
+      </div>
+      <div class="registre" id="liste_historique"></div>
+      <p class="msg" id="eligibilite_versement" style="margin-top:10px;"></p>
+    </div>
+
+  </main>
+
+  <div class="barre-action" id="barre_action" style="display:none;">
+    <button onclick="libererEtPasser()">Passer</button>
+    <button class="principal" onclick="validerTache()">Valider ✓</button>
   </div>
 
 <script>
+let authHeader = sessionStorage.getItem('passerelle_auth') || null;
 let tacheCourante = null;
-let authHeader = null;
-
-function projectId() { return parseInt(document.getElementById('project_id').value, 10); }
+let projetCourant = null;
+let historiqueComplet = [];
 
 function construireAuthHeader(email, motdepasse) {
   return 'Basic ' + btoa(email + ':' + motdepasse);
@@ -86,76 +325,72 @@ async function creerCompte() {
     body: JSON.stringify({ email, password, role: 'worker' }),
   });
   if (res.ok) {
-    msg.textContent = 'Compte créé — clique sur "Se connecter".';
+    msg.textContent = 'Compte créé — connecte-toi.';
   } else {
     const err = await res.json();
-    msg.textContent = 'Erreur : ' + err.detail;
+    msg.textContent = err.detail;
   }
 }
 
 async function seConnecter() {
   const email = document.getElementById('auth_email').value;
   const password = document.getElementById('auth_password').value;
-  const msg = document.getElementById('auth_msg');
   const header = construireAuthHeader(email, password);
+  await tenterConnexion(header);
+}
 
+async function tenterConnexion(header) {
+  const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/me', { headers: { Authorization: header } });
   if (!res.ok) {
     msg.textContent = 'Email ou mot de passe incorrect.';
+    sessionStorage.removeItem('passerelle_auth');
     return;
   }
   const moi = await res.json();
   if (moi.role !== 'worker') {
-    msg.textContent = 'Ce compte n\'est pas un compte étudiant.';
+    msg.textContent = "Ce compte n'est pas un compte étudiant.";
     return;
   }
   authHeader = header;
-  msg.textContent = 'Connecté en tant que ' + moi.email;
-  document.getElementById('stat_confiance').textContent = moi.trust_score + ' / 100';
-  document.getElementById('config_projet').style.display = 'flex';
+  sessionStorage.setItem('passerelle_auth', header);
+  document.getElementById('bloc_auth').style.display = 'none';
+  document.getElementById('bloc_projets').style.display = 'block';
   document.getElementById('zone_historique').style.display = 'block';
+  document.getElementById('stat_confiance').textContent = moi.trust_score + '/100';
+  chargerProjetsDisponibles();
   actualiserHistorique();
 }
 
-async function actualiserHistorique() {
-  const res = await fetch('/tasks/mine', { headers: { Authorization: authHeader } });
+// Reconnexion silencieuse si une session est déjà en mémoire (recharge de page)
+if (authHeader) tenterConnexion(authHeader);
+
+async function chargerProjetsDisponibles() {
+  const res = await fetch('/projects/available', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   const data = await res.json();
+  const liste = document.getElementById('liste_projets');
 
-  document.getElementById('stat_solde').textContent = data.solde_disponible.toFixed(2).replace('.', ',') + ' €';
-  document.getElementById('stat_nb').textContent = data.nb_taches_payees;
+  if (!data.projets.length) {
+    liste.innerHTML = '<div class="vide">Aucun projet avec des tâches disponibles pour le moment.</div>';
+    return;
+  }
 
-  const liste = document.getElementById('liste_historique');
-  liste.innerHTML = data.historique.slice(0, 8).map(h => {
-    const label = h.statut === 'paye' ? `✓ payée (+${h.montant.toFixed(2)} €)` : '… en attente de vérification';
-    return `<div style="padding:3px 0; color:${h.statut==='paye' ? '#0f6e56' : '#888'};">${label}</div>`;
-  }).join('') || '<em>Aucune tâche traitée pour le moment.</em>';
-
-  document.getElementById('eligibilite_versement').textContent = data.eligible_versement
-    ? `Seuil de ${data.seuil_decaissement.toFixed(2)} € atteint — versement à programmer.`
-    : `Versement groupé à partir de ${data.seuil_decaissement.toFixed(2)} € cumulés.`;
+  liste.innerHTML = data.projets.map(p => `
+    <button class="item-projet" onclick="choisirProjet(${p.project_id}, '${p.titre.replace(/'/g, "\\'")}')">
+      <div>
+        <div class="titre">${p.titre}</div>
+        <div class="sousinfo">${p.taches_disponibles} ligne(s) disponible(s)</div>
+      </div>
+      <div class="prix">${p.prix_par_ligne.toFixed(2)} €</div>
+    </button>
+  `).join('');
 }
 
-async function chargerTacheSuivante() {
-  const msg = document.getElementById('msg');
-  const zone = document.getElementById('zone_tache');
-  msg.textContent = '';
-
-  const params = new URLSearchParams({ project_id: projectId() });
-  const res = await fetch(`/tasks/next?${params}`, { headers: { Authorization: authHeader } });
-
-  if (res.status === 404) {
-    zone.innerHTML = '<div class="vide">Aucune tâche disponible pour le moment — reviens plus tard.</div>';
-    tacheCourante = null;
-    return;
-  }
-  if (!res.ok) {
-    msg.textContent = "Erreur lors du chargement de la tâche.";
-    return;
-  }
-
-  tacheCourante = await res.json();
-  afficherTache(tacheCourante);
+function choisirProjet(id, titre) {
+  projetCourant = id;
+  document.getElementById('bloc_projets').style.display = 'none';
+  chargerTacheSuivante();
 }
 
 function badgesParColonne(badges) {
@@ -167,45 +402,68 @@ function badgesParColonne(badges) {
   return parColonne;
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+}
+
+async function chargerTacheSuivante() {
+  const msg = document.getElementById('msg');
+  const zone = document.getElementById('zone_tache');
+  const barre = document.getElementById('barre_action');
+  msg.textContent = '';
+
+  const res = await fetch(`/tasks/next?project_id=${projetCourant}`, { headers: { Authorization: authHeader } });
+
+  if (res.status === 404) {
+    zone.style.display = 'block';
+    zone.innerHTML = '<div class="vide">Plus de tâche disponible sur ce projet pour le moment.</div>';
+    barre.style.display = 'none';
+    setTimeout(() => { zone.style.display = 'none'; document.getElementById('bloc_projets').style.display = 'block'; chargerProjetsDisponibles(); }, 2500);
+    return;
+  }
+  if (!res.ok) { msg.textContent = 'Erreur lors du chargement.'; return; }
+
+  tacheCourante = await res.json();
+  afficherTache(tacheCourante);
+  zone.style.display = 'block';
+  barre.style.display = 'flex';
+}
+
 function afficherTache(tache) {
   const zone = document.getElementById('zone_tache');
   const badgesCol = badgesParColonne(tache.badges || []);
 
   let html = `
-    <div class="header-row">
-      <span class="titre">Ligne #${tache.row_id}</span>
-      <span class="sousinfo">+${tache.prix.toFixed(2)} € si validée</span>
+    <div class="ligne-info">
+      <span class="pos">ligne #${tache.row_id}</span>
+      <span class="prix-ligne">+${tache.prix.toFixed(2)} €</span>
     </div>
   `;
 
   tache.header.forEach((nomColonne, i) => {
     const valeurBrute = tache.raw_data[i] ?? '';
     const badgesIci = badgesCol[i] || [];
-    const classeAlerte = badgesIci.some(b => b.type === 'danger') ? 'badge-danger'
-                        : badgesIci.some(b => b.type === 'warning') ? 'badge-warning' : '';
+    const classeInput = badgesIci.some(b => b.type === 'danger') ? 'a-corriger'
+                       : badgesIci.some(b => b.type === 'warning') ? 'a-verifier' : '';
 
     html += `
       <div class="champ">
-        <label>${nomColonne}</label>
-        <div class="brut">${escapeHtml(valeurBrute)}</div><br>
-        ${badgesIci.map(b => `<span class="badge badge-${b.type}">${b.msg}</span>`).join('')}
-        <input type="text" class="${classeAlerte}" data-col="${i}" value="${escapeHtml(valeurBrute).trim()}">
+        <div class="nom-colonne">${nomColonne}</div>
+        <div class="brut">${escapeHtml(valeurBrute)}</div>
+        ${badgesIci.length ? `<div class="badges">${badgesIci.map(b => `<span class="badge ${b.type}">${b.msg}</span>`).join('')}</div>` : ''}
+        <input type="text" class="${classeInput}" data-col="${i}" value="${escapeHtml(valeurBrute).trim()}">
       </div>
     `;
   });
 
-  html += `
-    <div class="actions">
-      <button onclick="chargerTacheSuivante()">Passer</button>
-      <button class="primary" onclick="validerTache()">Valider ✓</button>
-    </div>
-  `;
-
   zone.innerHTML = html;
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function libererEtPasser() {
+  if (tacheCourante) {
+    await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
+  }
+  chargerTacheSuivante();
 }
 
 async function validerTache() {
@@ -222,26 +480,52 @@ async function validerTache() {
     body: JSON.stringify({ reponse }),
   });
 
-  if (!res.ok) {
-    msg.textContent = "Erreur lors de l'envoi.";
-    return;
-  }
+  if (!res.ok) { msg.textContent = "Erreur lors de l'envoi."; return; }
 
   const data = await res.json();
   msg.textContent = data.status === 'en_attente_autres_workers'
     ? 'Envoyé — en attente de vérification par d\'autres étudiants.'
     : 'Ligne validée, tu es payé pour cette ligne.';
 
-  // Source de vérité unique côté serveur : on ne calcule plus les gains
-  // côté client, on relit systématiquement /tasks/mine et /auth/me.
   actualiserHistorique();
   const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
   if (moiRes.ok) {
     const moi = await moiRes.json();
-    document.getElementById('stat_confiance').textContent = moi.trust_score + ' / 100';
+    document.getElementById('stat_confiance').textContent = moi.trust_score + '/100';
   }
 
   chargerTacheSuivante();
+}
+
+async function actualiserHistorique() {
+  const res = await fetch('/tasks/mine', { headers: { Authorization: authHeader } });
+  if (!res.ok) return;
+  const data = await res.json();
+
+  document.getElementById('stat_solde').textContent = data.solde_disponible.toFixed(2).replace('.', ',') + ' €';
+  historiqueComplet = data.historique;
+  rendreHistorique('tous');
+
+  document.getElementById('eligibilite_versement').textContent = data.eligible_versement
+    ? `Seuil de ${data.seuil_decaissement.toFixed(2)} € atteint — versement à venir.`
+    : `Versement groupé à partir de ${data.seuil_decaissement.toFixed(2)} € cumulés.`;
+}
+
+function filtrerHistorique(filtre) {
+  document.querySelectorAll('.filtres-historique button').forEach(b => b.classList.toggle('actif', b.dataset.filtre === filtre));
+  rendreHistorique(filtre);
+}
+
+function rendreHistorique(filtre) {
+  const liste = document.getElementById('liste_historique');
+  const lignes = historiqueComplet.filter(h => filtre === 'tous' || h.statut.startsWith(filtre === 'paye' ? 'paye' : 'en_attente'));
+
+  liste.innerHTML = lignes.length ? lignes.map(h => `
+    <div class="ligne-registre ${h.statut === 'paye' ? 'paye' : 'attente'}">
+      <span>${h.statut === 'paye' ? 'Ligne validée' : 'En vérification'}</span>
+      <span class="montant">${h.montant !== null ? '+' + h.montant.toFixed(2) + ' €' : '…'}</span>
+    </div>
+  `).join('') : '<div class="vide">Rien à afficher.</div>';
 }
 </script>
 </body>
