@@ -15,11 +15,21 @@ import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
-from models import User, get_engine, get_session_factory
+from models import User
+
+# Le moteur/session ne sont PAS créés ici -- api.py les crée une seule fois et
+# les injecte via init_auth_db(). Avoir deux moteurs séparés (un par module)
+# pointant sur le même fichier SQLite doublait inutilement les connexions
+# concurrentes et aggravait les erreurs "database is locked".
+_SessionLocal = None
+
+
+def init_auth_db(session_factory):
+    global _SessionLocal
+    _SessionLocal = session_factory
+
 
 security = HTTPBasic()
-_engine = get_engine()
-_SessionLocal = get_session_factory(_engine)
 
 PBKDF2_ITERATIONS = 100_000
 

@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, ForeignKey, Integer
 
 from analyzer import infer_schema, process_csv_to_microtasks, valider_consensus
-from auth import get_current_user, hash_password, require_role
+from auth import get_current_user, hash_password, init_auth_db, require_role
 from models import (Base, MicroTask, Project, RoleEnum, Submission,
                      TaskStatus, User, get_engine, get_session_factory)
 
@@ -53,6 +53,7 @@ LOCK_TIMEOUT_MINUTES = 15
 app = FastAPI(title="Passerelle de Micro-Tâches Data")
 engine = get_engine()
 SessionLocal = get_session_factory(engine)  # crée toutes les tables, y compris task_locks
+init_auth_db(SessionLocal)  # partage le même moteur/session avec auth.py -- voir auth.py
 
 
 def nettoyer_verrous_expires(db):

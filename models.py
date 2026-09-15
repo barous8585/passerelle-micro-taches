@@ -10,7 +10,7 @@ import datetime
 import enum
 
 from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
-                         ForeignKey, Integer, String, create_engine)
+                         ForeignKey, Integer, String, create_engine, event)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 Base = declarative_base()
@@ -85,7 +85,24 @@ class Submission(Base):
 
 
 def get_engine(db_url="sqlite:///./passerelle.db"):
-    return create_engine(db_url, connect_args={"check_same_thread": False} if "sqlite" in db_url else {})
+    if "sqlite" not in db_url:
+        return create_engine(db_url)
+
+    # timeout=30 : une connexion qui trouve la base verrouillée RÉESSAIE pendant
+    # 30s au lieu d'échouer immédiatement avec "database is locked".
+    engine = create_engine(db_url, connect_args={"check_same_thread": False, "timeout": 30})
+
+    # Mode WAL : permet à des lectures et une écriture de se dérouler en même
+    # temps sans se bloquer mutuellement -- le vrai correctif pour un usage
+    # concurrent (plusieurs onglets/utilisateurs) avec SQLite.
+    @event.listens_for(engine, "connect")
+    def _activer_wal(connexion_dbapi, _):
+        curseur = connexion_dbapi.cursor()
+        curseur.execute("PRAGMA journal_mode=WAL")
+        curseur.execute("PRAGMA busy_timeout=30000")
+        curseur.close()
+
+    return engine
 
 
 def get_session_factory(engine):
