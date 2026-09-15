@@ -342,10 +342,38 @@ def mes_taches(user: User = Depends(require_role("worker"))):
 # ---------------------------------------------------------------------------
 
 def _sauver_upload_temporaire(fichier: UploadFile) -> str:
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv")
+    """Sauvegarde le fichier uploadé, et le convertit en CSV s'il s'agit d'un
+    Excel -- tout le reste du pipeline (inférence de schéma, découpage) ne
+    connaît que le CSV, pas la peine de le dupliquer pour du xlsx."""
+    suffixe = os.path.splitext(fichier.filename or "")[1].lower()
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffixe or ".csv")
     with tmp as out:
         shutil.copyfileobj(fichier.file, out)
-    return tmp.name
+    chemin = tmp.name
+
+    if suffixe in (".xlsx", ".xlsm"):
+        chemin_csv = _convertir_excel_vers_csv(chemin)
+        os.remove(chemin)
+        return chemin_csv
+    return chemin
+
+
+def _convertir_excel_vers_csv(chemin_xlsx: str) -> str:
+    """Lit la première feuille d'un classeur Excel et la réécrit en CSV.
+    Le format .xls (ancien, pré-2007) n'est volontairement pas supporté --
+    openpyxl ne le lit pas, et c'est un format en voie de disparition."""
+    import csv as csv_module
+    import openpyxl
+
+    classeur = openpyxl.load_workbook(chemin_xlsx, data_only=True, read_only=True)
+    feuille = classeur.active
+
+    chemin_csv = tempfile.NamedTemporaryFile(delete=False, suffix=".csv").name
+    with open(chemin_csv, "w", encoding="utf-8", newline="") as f:
+        writer = csv_module.writer(f, delimiter=";")
+        for ligne in feuille.iter_rows(values_only=True):
+            writer.writerow(["" if v is None else v for v in ligne])
+    return chemin_csv
 
 
 @app.post("/projects/infer-schema")
@@ -435,12 +463,13 @@ def mes_projets(user: User = Depends(require_role("client"))):
 
 
 @app.get("/projects/{project_id}/export")
-def exporter_projet(project_id: int, user: User = Depends(require_role("client"))):
-    """Renvoie le CSV nettoyé -- uniquement les lignes déjà complétées.
-    Les lignes encore en cours n'apparaissent pas (mieux vaut un export
-    partiel explicite qu'une ligne vide ou brute qui passerait pour propre)."""
-    import csv
-    import io
+def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(require_role("client"))):
+    """Renvoie les données nettoyées -- uniquement les lignes déjà complétées.
+    format=csv (défaut) ou format=xlsx. Les lignes encore en cours n'apparaissent
+    pas (mieux vaut un export partiel explicite qu'une ligne vide ou brute qui
+    passerait pour propre)."""
+    if format not in ("csv", "xlsx"):
+        raise HTTPException(status_code=400, detail="format doit être 'csv' ou 'xlsx'")
 
     db = SessionLocal()
     try:
@@ -459,13 +488,34 @@ def exporter_projet(project_id: int, user: User = Depends(require_role("client")
         if not taches:
             raise HTTPException(status_code=404, detail="Aucune ligne complétée pour ce projet pour le moment")
 
+        from fastapi.responses import Response
+
+        if format == "xlsx":
+            import io as io_module
+
+            import openpyxl
+
+            classeur = openpyxl.Workbook()
+            feuille = classeur.active
+            feuille.append(taches[0].header)
+            for t in taches:
+                feuille.append(t.resultat_final or t.raw_data)
+            buffer = io_module.BytesIO()
+            classeur.save(buffer)
+            return Response(
+                content=buffer.getvalue(),
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f'attachment; filename="projet_{project_id}_nettoye.xlsx"'},
+            )
+
+        import csv
+        import io
+
         buffer = io.StringIO()
         writer = csv.writer(buffer, delimiter=";")
         writer.writerow(taches[0].header)
         for t in taches:
             writer.writerow(t.resultat_final or t.raw_data)
-
-        from fastapi.responses import Response
         return Response(
             content=buffer.getvalue(),
             media_type="text/csv",

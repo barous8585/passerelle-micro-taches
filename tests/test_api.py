@@ -257,3 +257,69 @@ def test_projets_mine_et_export_csv():
     # Un client ne peut pas exporter le projet d'un autre
     r = client.get(f"/projects/{project_id}/export", headers=auth_header("autre_client@ia.fr", "pw123"))
     assert r.status_code == 403
+
+
+def test_depot_excel_xlsx_fonctionne_comme_le_csv():
+    import openpyxl
+
+    chemin_xlsx = os.path.join(RACINE, "tests", "_temp_test.xlsx")
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["nom", "email", "date_naiss"])
+    ws.append(["Jean Dupont", "jdupont@gmail.com", "1998-04-03"])
+    ws.append(["Paul Martin", "paul.martin", "2000-01-01"])
+    wb.save(chemin_xlsx)
+
+    try:
+        with open(chemin_xlsx, "rb") as f:
+            r = client.post(
+                "/projects/infer-schema",
+                files={"fichier": ("d.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                headers=auth_header("startup@ia.fr", "pw123"),
+            )
+        assert r.status_code == 200
+        schema = r.json()["schema_suggere"]
+
+        r = client.post(
+            "/projects", json={"titre": "Test Excel", "colonnes_schema": schema, "prix_par_ligne": 0.05},
+            headers=auth_header("startup@ia.fr", "pw123"),
+        )
+        project_id = r.json()["project_id"]
+
+        with open(chemin_xlsx, "rb") as f:
+            r = client.post(
+                f"/projects/{project_id}/ingest",
+                files={"fichier": ("d.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                headers=auth_header("startup@ia.fr", "pw123"),
+            )
+        assert r.status_code == 200
+        assert r.json()["nb_taches_creees"] == 2
+    finally:
+        os.remove(chemin_xlsx)
+
+
+def test_export_xlsx_produit_un_classeur_valide():
+    import openpyxl
+
+    project_id = creer_projet_isole("Test export xlsx")
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+    client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+
+    r = client.get(f"/projects/{project_id}/export?format=xlsx", headers=auth_header("startup@ia.fr", "pw123"))
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+    chemin_temp = os.path.join(RACINE, "tests", "_temp_export.xlsx")
+    with open(chemin_temp, "wb") as f:
+        f.write(r.content)
+    try:
+        wb = openpyxl.load_workbook(chemin_temp)
+        lignes = list(wb.active.iter_rows(values_only=True))
+        assert lignes[0] == ("nom", "email", "date_naiss")
+        assert len(lignes) == 2  # en-tête + 1 ligne complétée
+    finally:
+        os.remove(chemin_temp)

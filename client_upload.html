@@ -186,19 +186,22 @@ function afficherProjet(id) {
       <span>${p.lignes_completees} / ${p.total_lignes} lignes traitées</span>
       ${p.lignes_litigieuses > 0 ? `<span class="badge-litige">${p.lignes_litigieuses} en désaccord entre étudiants</span>` : ''}
     </div>
-    <button class="principal" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id})">
-      ${p.pret_pour_export ? 'Télécharger le CSV nettoyé' : (p.lignes_completees > 0 ? 'Télécharger le partiel disponible' : 'Pas encore de ligne traitée')}
+    <button class="principal" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'csv')">
+      ${p.pret_pour_export ? 'Télécharger en CSV' : (p.lignes_completees > 0 ? 'Télécharger le partiel (CSV)' : 'Pas encore de ligne traitée')}
+    </button>
+    <button ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'xlsx')" style="margin-left:8px;">
+      Télécharger en Excel
     </button>
   `;
 }
 
-async function exporter(projectId) {
-  const res = await fetch(`/projects/${projectId}/export`, { headers: { Authorization: authHeader } });
+async function exporter(projectId, format) {
+  const res = await fetch(`/projects/${projectId}/export?format=${format}`, { headers: { Authorization: authHeader } });
   if (!res.ok) { alert((await res.json()).detail); return; }
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = `projet_${projectId}_nettoye.csv`; a.click();
+  a.href = url; a.download = `projet_${projectId}_nettoye.${format}`; a.click();
   URL.revokeObjectURL(url);
 }
 
@@ -207,8 +210,9 @@ function afficherDepot() {
   chargerMesProjets();
   document.getElementById('panel_droit').innerHTML = `
     <h2>Déposer un nouveau fichier</h2>
-    <input type="file" id="fichier_csv" accept=".csv">
+    <input type="file" id="fichier_csv" accept=".csv,.xlsx">
     <button onclick="analyserFichier()">Analyser le fichier</button>
+    <p class="msg" style="margin-top:6px;">Formats acceptés : CSV, Excel (.xlsx)</p>
     <div id="etape2" style="display:none; margin-top:16px;">
       <table id="table_schema"></table>
       <p class="apercu" id="apercu_texte"></p>
