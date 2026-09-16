@@ -56,7 +56,22 @@ Compromis assumé : une faute fine dans une colonne sensible (ex: une lettre
 inversée dans un nom) ne sera jamais corrigée, faute d'y avoir accès --
 c'est le prix de la confidentialité sur ces colonnes.
 
+## Sécurité opérationnelle
+
+- **Taille des fichiers déposés** : plafonnée à 10 Mo (`TAILLE_MAX_FICHIER_OCTETS` dans `api.py`), refusée en flux avant d'être écrite entièrement sur disque.
+- **Protection brute-force** : un compte se verrouille 15 minutes après 5 tentatives de connexion échouées, même avec le bon mot de passe ensuite tant que le délai n'est pas écoulé.
+
 ## Validation manuelle des comptes
+
+Un compte (client ou worker) fraîchement créé ne peut rien faire d'autre que
+se connecter -- toute action fonctionnelle (déposer un fichier, prendre une
+tâche...) est bloquée tant qu'il n'a pas été approuvé manuellement. Pas
+d'interface web pour ça pour l'instant, un script suffit :
+
+```bash
+python3 admin_tools.py --lister              # comptes en attente
+python3 admin_tools.py --approuver email@x.fr
+```
 
 Un compte (client ou worker) fraîchement créé ne peut rien faire d'autre que
 se connecter -- toute action fonctionnelle (déposer un fichier, prendre une

@@ -43,6 +43,8 @@ class User(Base):
     date_acceptation_confidentialite = Column(DateTime, nullable=True)
     approuve = Column(Boolean, default=False)  # validation manuelle par l'équipe -- aucun accès fonctionnel avant
     secteur_activite = Column(String, nullable=True)  # renseigné par les clients à l'inscription
+    tentatives_echouees = Column(Integer, default=0)  # protection brute-force -- voir auth.py
+    verrouille_jusqua = Column(DateTime, nullable=True)
 
 
 class Project(Base):

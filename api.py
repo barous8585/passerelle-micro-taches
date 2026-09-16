@@ -20,7 +20,6 @@ Deux endpoints critiques restent au cœur du système :
 
 import datetime
 import os
-import shutil
 import tempfile
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
@@ -465,14 +464,34 @@ def mes_taches(user: User = Depends(require_role("worker"))):
 # ENDPOINTS CÔTÉ CLIENT : dépôt de CSV + inférence de schéma
 # ---------------------------------------------------------------------------
 
+TAILLE_MAX_FICHIER_OCTETS = 10 * 1024 * 1024  # 10 Mo -- large pour un CSV/Excel de nettoyage de données
+
+
 def _sauver_upload_temporaire(fichier: UploadFile) -> str:
-    """Sauvegarde le fichier uploadé, et le convertit en CSV s'il s'agit d'un
-    Excel -- tout le reste du pipeline (inférence de schéma, découpage) ne
-    connaît que le CSV, pas la peine de le dupliquer pour du xlsx."""
+    """Sauvegarde le fichier uploadé (en flux, sans jamais le charger entier
+    en mémoire), et le convertit en CSV s'il s'agit d'un Excel -- tout le
+    reste du pipeline ne connaît que le CSV. Coupe court dès que la taille
+    dépasse la limite, plutôt que de laisser un fichier énorme saturer le
+    serveur ou le disque."""
     suffixe = os.path.splitext(fichier.filename or "")[1].lower()
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffixe or ".csv")
-    with tmp as out:
-        shutil.copyfileobj(fichier.file, out)
+    taille = 0
+    try:
+        with tmp as out:
+            while True:
+                morceau = fichier.file.read(1024 * 1024)  # 1 Mo par 1 Mo
+                if not morceau:
+                    break
+                taille += len(morceau)
+                if taille > TAILLE_MAX_FICHIER_OCTETS:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Fichier trop volumineux (max {TAILLE_MAX_FICHIER_OCTETS // (1024 * 1024)} Mo).",
+                    )
+                out.write(morceau)
+    except HTTPException:
+        os.remove(tmp.name)
+        raise
     chemin = tmp.name
 
     if suffixe in (".xlsx", ".xlsm"):

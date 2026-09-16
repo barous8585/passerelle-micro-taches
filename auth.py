@@ -9,6 +9,7 @@ Choix volontairement simple pour un prototype :
     requête. À remplacer par des tokens de session si le prototype grandit.
 """
 
+import datetime
 import hashlib
 import os
 
@@ -33,6 +34,9 @@ security = HTTPBasic()
 
 PBKDF2_ITERATIONS = 100_000
 
+SEUIL_TENTATIVES_ECHOUEES = 5   # au-delà, le compte est verrouillé temporairement
+DUREE_VERROUILLAGE_MINUTES = 15
+
 
 def hash_password(password: str) -> str:
     sel = os.urandom(16)
@@ -54,12 +58,35 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)) -> U
     db = _SessionLocal()
     try:
         user = db.query(User).filter_by(email=credentials.username).first()
+
+        # Compte temporairement verrouillé -- refusé même si le bon mot de
+        # passe est fourni, tant que le délai n'est pas écoulé. Empêche un
+        # script de tester des milliers de mots de passe sur un même compte.
+        if user and user.verrouille_jusqua and user.verrouille_jusqua > datetime.datetime.utcnow():
+            minutes_restantes = int((user.verrouille_jusqua - datetime.datetime.utcnow()).total_seconds() / 60) + 1
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Trop de tentatives échouées. Réessaie dans {minutes_restantes} min.",
+            )
+
         if not user or not verify_password(credentials.password, user.password_hash or ""):
+            if user:
+                user.tentatives_echouees = (user.tentatives_echouees or 0) + 1
+                if user.tentatives_echouees >= SEUIL_TENTATIVES_ECHOUEES:
+                    user.verrouille_jusqua = datetime.datetime.utcnow() + datetime.timedelta(minutes=DUREE_VERROUILLAGE_MINUTES)
+                db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Email ou mot de passe incorrect",
                 headers={"WWW-Authenticate": "Basic"},
             )
+
+        # Connexion réussie -- on réinitialise le compteur
+        if user.tentatives_echouees:
+            user.tentatives_echouees = 0
+            user.verrouille_jusqua = None
+            db.commit()
+
         return user
     finally:
         db.close()

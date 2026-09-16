@@ -86,6 +86,29 @@ def test_connexion_mauvais_mot_de_passe_refusee():
     assert r.status_code == 401
 
 
+def test_compte_verrouille_temporairement_apres_echecs_repetes():
+    client.post("/auth/register", json={"email": "bruteforce@uco.fr", "password": "bonmdp123", "role": "worker", "accepte_confidentialite": True})
+
+    for _ in range(5):
+        r = client.get("/auth/me", headers=auth_header("bruteforce@uco.fr", "mauvais"))
+        assert r.status_code == 401
+
+    # Même avec le BON mot de passe, le compte reste verrouillé
+    r = client.get("/auth/me", headers=auth_header("bruteforce@uco.fr", "bonmdp123"))
+    assert r.status_code == 429
+
+
+def test_fichier_trop_volumineux_refuse():
+    import io
+
+    gros_fichier = io.BytesIO(b"nom;email\n" + (b"a" * 1000 + b";x@x.fr\n") * 20000)  # > 10 Mo
+    r = client.post(
+        "/projects/infer-schema", files={"fichier": ("gros.csv", gros_fichier, "text/csv")},
+        headers=auth_header("startup@ia.fr", "pw123"),
+    )
+    assert r.status_code == 413
+
+
 def test_compte_non_approuve_bloque_sur_les_endpoints_fonctionnels():
     r = client.post("/auth/register", json={"email": "en_attente@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 200
