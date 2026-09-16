@@ -25,7 +25,9 @@ import tempfile
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from typing import Annotated
+
+from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import Column, DateTime, ForeignKey, Integer
 from sqlalchemy.exc import IntegrityError
 
@@ -140,7 +142,11 @@ def me(user: User = Depends(get_current_user)):
 
 
 class SubmissionIn(BaseModel):
-    reponse: list[str]  # la ligne corrigée, colonne par colonne (worker_id vient de l'auth, plus du payload)
+    # Borné pour éviter qu'un worker (malveillant ou par erreur de copier-coller)
+    # ne soumette une chaîne de plusieurs Mo comme "correction" d'une seule
+    # cellule, ou une liste de colonnes disproportionnée -- worker_id vient
+    # de l'auth, jamais du payload.
+    reponse: list[Annotated[str, StringConstraints(max_length=500)]] = Field(..., max_length=50)
 
 
 @app.get("/tasks/next")
@@ -205,6 +211,12 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         if not task:
             raise HTTPException(status_code=404, detail="Tâche introuvable")
         worker_id = user.id
+
+        if len(payload.reponse) != len(task.header):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{len(task.header)} valeur(s) attendue(s) (une par colonne), {len(payload.reponse)} reçue(s).",
+            )
 
         # Empêche un worker de soumettre plusieurs fois sur la même tâche
         # (auparavant : chaque re-soumission retraitait ET repayait toutes

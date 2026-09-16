@@ -253,6 +253,29 @@ def test_historique_worker_ne_contient_aucun_texte_de_reponse():
         assert ligne["statut"] in ("paye", "en_attente_verification")
 
 
+def test_soumission_avec_chaine_trop_longue_refusee():
+    project_id = creer_projet_isole("Test taille champ")
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+    reponse_trop_longue = ["x" * 10_000] * len(tache["header"])
+    r = client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": reponse_trop_longue},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+    assert r.status_code == 422
+
+
+def test_soumission_avec_mauvais_nombre_de_colonnes_refusee():
+    project_id = creer_projet_isole("Test nb colonnes")
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+    r = client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": ["une seule valeur"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+    assert r.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # NOUVELLES FONCTIONNALITÉS : projets disponibles, libération de verrou, export
 # ---------------------------------------------------------------------------
