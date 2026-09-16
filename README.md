@@ -27,6 +27,18 @@ ce n'est pas optionnel). Ne la perds jamais et ne la commite jamais : sans
 elle, les données déjà chiffrées deviennent illisibles pour de bon, y
 compris pour toi.
 
+## Masquage des colonnes sensibles
+
+À la définition du schéma, le client peut marquer une colonne comme
+"sensible" (email, nom, téléphone...). Cette colonne n'apparaît alors JAMAIS
+côté worker (ni brute, ni via un badge d'anomalie) -- seule une normalisation
+automatique légère (espaces) lui est appliquée, sans relecture humaine. Les
+colonnes non marquées restent corrigées normalement par les workers.
+
+Compromis assumé : une faute fine dans une colonne sensible (ex: une lettre
+inversée dans un nom) ne sera jamais corrigée, faute d'y avoir accès --
+c'est le prix de la confidentialité sur ces colonnes.
+
 ## Notifications Telegram (optionnel)
 
 Quand un client dépose un nouveau fichier, un message peut être envoyé

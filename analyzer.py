@@ -92,6 +92,20 @@ def detect_anomalies(row, header, schema):
 # 2. DÉCOUPAGE EN MICRO-TÂCHES + GOLD STANDARD + REDONDANCE
 # ---------------------------------------------------------------------------
 
+def normaliser_automatiquement(valeur):
+    """
+    Seule correction appliquée aux colonnes SENSIBLES, jamais montrées à un
+    worker -- volontairement minimale (juste les espaces) car aucune
+    intelligence sémantique par type n'est assez sûre pour corriger une
+    donnée que personne ne relit humainement. Une vraie faute de frappe
+    dans le nom ou l'email restera non corrigée : c'est le prix du choix
+    de confidentialité, assumé plutôt que masqué.
+    """
+    if not isinstance(valeur, str):
+        return valeur
+    return re.sub(r"\s+", " ", valeur).strip()
+
+
 def choisir_redondance(nb_badges, seuil_critique=2):
     """Plus une ligne a d'anomalies détectées, plus elle est jugée risquée
     -> on lui assigne plus de workers pour croiser les réponses."""

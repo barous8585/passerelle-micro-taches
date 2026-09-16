@@ -407,3 +407,50 @@ def test_donnees_client_illisibles_sur_le_disque():
 
     assert valeur_sensible.encode() not in contenu_brut
     assert b"Jean Dupont" not in contenu_brut
+
+
+def test_colonne_sensible_jamais_montree_au_worker_mais_preservee_a_export():
+    """Une colonne marquée 'sensible' dans le schéma ne doit JAMAIS apparaître
+    dans ce que /tasks/next sert au worker (ni header, ni raw_data, ni badges),
+    mais la vraie valeur doit tout de même ressortir intacte à l'export."""
+    schema = {
+        "columns": [
+            {"name": "nom", "type": "string", "required": True, "sensible": False},
+            {"name": "email", "type": "regex", "rule": r"^[\w.-]+@[\w.-]+\.\w+$", "required": True, "sensible": True},
+            {"name": "date_naiss", "type": "date", "required": True, "sensible": False},
+        ]
+    }
+    r = client.post(
+        "/projects", json={"titre": "Test masquage", "colonnes_schema": schema, "prix_par_ligne": 0.05},
+        headers=auth_header("startup@ia.fr", "pw123"),
+    )
+    project_id = r.json()["project_id"]
+    with open(CSV_TEST, "rb") as f:
+        client.post(
+            f"/projects/{project_id}/ingest", files={"fichier": ("d.csv", f, "text/csv")},
+            headers=auth_header("startup@ia.fr", "pw123"),
+        )
+
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+    assert "email" not in tache["header"]
+    assert len(tache["header"]) == 2
+
+    # Le worker ne soumet que les 2 colonnes visibles
+    r = client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+    assert r.status_code == 200
+
+    # Soumettre le mauvais nombre de valeurs (3 au lieu de 2) doit échouer
+    r2 = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w2@uco.fr", "pw123"))
+    r2_submit = client.post(
+        f"/tasks/{r2.json()['task_id']}/submit", json={"reponse": ["a", "b", "c"]},
+        headers=auth_header("w2@uco.fr", "pw123"),
+    )
+    assert r2_submit.status_code == 400
+
+    # Mais l'export final récupère bien le VRAI email, jamais vu par le worker
+    r = client.get(f"/projects/{project_id}/export", headers=auth_header("startup@ia.fr", "pw123"))
+    assert "jdupont@gmail.com" in r.text

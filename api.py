@@ -31,7 +31,8 @@ from pydantic import BaseModel, Field, StringConstraints
 from sqlalchemy import Column, DateTime, ForeignKey, Integer
 from sqlalchemy.exc import IntegrityError
 
-from analyzer import infer_schema, process_csv_to_microtasks, valider_consensus
+from analyzer import (infer_schema, normaliser_automatiquement,
+                       process_csv_to_microtasks, valider_consensus)
 from auth import get_current_user, hash_password, init_auth_db, require_role
 from crypto import chiffrer_json, dechiffrer_json
 from notifications import notifier_nouveau_projet
@@ -151,6 +152,46 @@ class SubmissionIn(BaseModel):
     reponse: list[Annotated[str, StringConstraints(max_length=500)]] = Field(..., max_length=50)
 
 
+def _noms_colonnes_sensibles(schema_json):
+    return {col["name"] for col in schema_json.get("columns", []) if col.get("sensible")}
+
+
+def _filtrer_pour_worker(header, raw_data, badges, schema_json):
+    """Retire les colonnes marquées 'sensible' de ce qui est montré au worker
+    -- il ne doit jamais voir la ligne complète et nominative du client sur
+    ces colonnes-là. Les badges des colonnes retirées sont supprimés, les
+    autres réindexés sur les positions filtrées."""
+    sensibles = _noms_colonnes_sensibles(schema_json)
+    indices_visibles = [i for i, nom in enumerate(header) if nom not in sensibles]
+
+    header_visible = [header[i] for i in indices_visibles]
+    raw_data_visible = [raw_data[i] for i in indices_visibles]
+
+    ancien_vers_nouveau = {ancien: nouveau for nouveau, ancien in enumerate(indices_visibles)}
+    badges_visibles = [
+        {**b, "col_index": ancien_vers_nouveau[b["col_index"]]}
+        for b in badges
+        if b["col_index"] in ancien_vers_nouveau
+    ]
+    return header_visible, raw_data_visible, badges_visibles
+
+
+def _reconstituer_reponse_complete(header, raw_data, reponse_visible, schema_json):
+    """Inverse de _filtrer_pour_worker : recombine les corrections du worker
+    (colonnes non sensibles) avec les valeurs brutes normalisées automatiquement
+    (colonnes sensibles, jamais montrées ni éditées par le worker)."""
+    sensibles = _noms_colonnes_sensibles(schema_json)
+    reponse_complete = []
+    index_visible = 0
+    for i, nom in enumerate(header):
+        if nom in sensibles:
+            reponse_complete.append(normaliser_automatiquement(raw_data[i]))
+        else:
+            reponse_complete.append(reponse_visible[index_visible])
+            index_visible += 1
+    return reponse_complete
+
+
 @app.get("/tasks/next")
 def get_next_task(project_id: int, user: User = Depends(require_role("worker"))):
     db = SessionLocal()
@@ -181,12 +222,15 @@ def get_next_task(project_id: int, user: User = Depends(require_role("worker")))
             if nb_soumissions + nb_verrous_actifs < task.redundancy_level:
                 db.add(TaskLock(micro_task_id=task.id, worker_id=worker_id))
                 db.commit()
+                header_visible, raw_data_visible, badges_visibles = _filtrer_pour_worker(
+                    task.header, dechiffrer_json(task.raw_data), task.badges, task.schema_json
+                )
                 return {
                     "task_id": task.id,
                     "row_id": task.row_id,
-                    "raw_data": dechiffrer_json(task.raw_data),
-                    "header": task.header,
-                    "badges": task.badges,
+                    "raw_data": raw_data_visible,
+                    "header": header_visible,
+                    "badges": badges_visibles,
                     "prix": db.query(Project).get(project_id).prix_par_ligne,
                 }
 
@@ -214,11 +258,21 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             raise HTTPException(status_code=404, detail="Tâche introuvable")
         worker_id = user.id
 
-        if len(payload.reponse) != len(task.header):
+        nb_colonnes_visibles = len(task.header) - len(
+            _noms_colonnes_sensibles(task.schema_json) & set(task.header)
+        )
+        if len(payload.reponse) != nb_colonnes_visibles:
             raise HTTPException(
                 status_code=400,
-                detail=f"{len(task.header)} valeur(s) attendue(s) (une par colonne), {len(payload.reponse)} reçue(s).",
+                detail=f"{nb_colonnes_visibles} valeur(s) attendue(s) (colonnes visibles uniquement), {len(payload.reponse)} reçue(s).",
             )
+
+        # Recombine les corrections du worker (colonnes visibles) avec les
+        # valeurs des colonnes sensibles -- jamais montrées ni éditées par
+        # lui, juste normalisées automatiquement (espaces).
+        reponse_complete = _reconstituer_reponse_complete(
+            task.header, dechiffrer_json(task.raw_data), payload.reponse, task.schema_json
+        )
 
         # Empêche un worker de soumettre plusieurs fois sur la même tâche
         # (auparavant : chaque re-soumission retraitait ET repayait toutes
@@ -227,7 +281,7 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             raise HTTPException(status_code=409, detail="Tu as déjà soumis une réponse pour cette tâche.")
 
         db.query(TaskLock).filter_by(micro_task_id=task_id, worker_id=worker_id).delete()
-        db.add(Submission(micro_task_id=task_id, worker_id=worker_id, reponse=chiffrer_json(payload.reponse)))
+        db.add(Submission(micro_task_id=task_id, worker_id=worker_id, reponse=chiffrer_json(reponse_complete)))
         try:
             db.commit()
         except IntegrityError:
@@ -243,7 +297,7 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         # Le worker est payé dans tous les cas -- gold standard = contrôle
         # qualité invisible, pas une pénalité de rémunération. ---
         if task.is_gold_standard:
-            correct = payload.reponse == dechiffrer_json(task.gold_answer)
+            correct = reponse_complete == dechiffrer_json(task.gold_answer)
             worker = db.query(User).get(worker_id)
             worker.trust_score = min(100.0, worker.trust_score + 1) if correct \
                 else max(0.0, worker.trust_score - 5)

@@ -238,7 +238,7 @@ async function analyserFichier() {
   schemaCourant = data.schema_suggere;
 
   const table = document.getElementById('table_schema');
-  table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th></tr>';
+  table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th><th>Sensible</th></tr>';
   schemaCourant.columns.forEach((col, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -250,6 +250,7 @@ async function analyserFichier() {
         <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
       </select></td>
       <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
+      <td><input type="checkbox" ${col.sensible?'checked':''} onchange="schemaCourant.columns[${i}].sensible = this.checked" title="Jamais montrée au worker, corrigée automatiquement seulement (espaces)"></td>
     `;
     table.appendChild(tr);
   });
