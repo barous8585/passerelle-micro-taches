@@ -600,7 +600,7 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
         db.close()
 
 
-DELAI_PURGE_JOURS = 30  # rétention des données brutes après le dernier export du client
+DELAI_PURGE_JOURS = 7  # rétention des données brutes après le dernier export du client
 
 
 def purger_donnees_expirees(db):
