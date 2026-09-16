@@ -33,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 
 from analyzer import infer_schema, process_csv_to_microtasks, valider_consensus
 from auth import get_current_user, hash_password, init_auth_db, require_role
+from notifications import notifier_nouveau_projet
 from models import (Base, MicroTask, Project, RoleEnum, Submission,
                      TaskStatus, User, get_engine, get_session_factory)
 
@@ -490,6 +491,9 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
         for t in tasks:
             db.add(MicroTask(**t))
         db.commit()
+
+        notifier_nouveau_projet(projet.titre, len(tasks), projet.prix_par_ligne)
+
         return {"nb_taches_creees": len(tasks)}
     finally:
         db.close()

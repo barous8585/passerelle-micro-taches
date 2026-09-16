@@ -12,6 +12,20 @@ source venv/bin/activate        # sous Windows : venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Notifications Telegram (optionnel)
+
+Quand un client dépose un nouveau fichier, un message peut être envoyé
+automatiquement dans un groupe Telegram pour prévenir les étudiants qu'il y a
+du travail disponible.
+
+1. Crée un bot via [@BotFather](https://t.me/BotFather) sur Telegram (`/newbot`) -- il te donne un token
+2. Crée un groupe Telegram, ajoute le bot dedans
+3. Envoie un message dans le groupe, puis va sur `https://api.telegram.org/bot<TON_TOKEN>/getUpdates` dans ton navigateur pour trouver le `chat_id` (champ `"chat":{"id": ...}`)
+4. Copie `.env.example` en `.env` et renseigne `TELEGRAM_BOT_TOKEN` et `TELEGRAM_CHAT_ID`
+
+Sans configuration, les notifications sont simplement désactivées -- le
+reste de la plateforme fonctionne normalement.
+
 ## Lancer le serveur
 
 ```bash
