@@ -231,6 +231,14 @@
       </form>
     </div>
 
+    <div class="panel" id="bloc_en_attente" style="display:none; max-width:500px;">
+      <h2>Compte en attente de validation</h2>
+      <p style="color:var(--text-secondary); font-size:13px; line-height:1.6;">
+        Ton compte a bien été créé, mais doit être validé manuellement par l'équipe Passerelle
+        avant que tu puisses accéder aux tâches. Tu seras prévenu une fois activé.
+      </p>
+    </div>
+
     <div class="grille" id="grille_principale" style="display:none;">
 
       <div class="panel panel-projets">
@@ -312,6 +320,11 @@ async function tenterConnexion(header) {
   authHeader = header;
   sessionStorage.setItem('passerelle_auth', header);
   document.getElementById('bloc_auth').style.display = 'none';
+
+  if (!moi.approuve) {
+    document.getElementById('bloc_en_attente').style.display = 'block';
+    return;
+  }
   document.getElementById('grille_principale').style.display = 'grid';
   document.getElementById('stat_confiance').textContent = moi.trust_score + '/100';
   chargerProjetsDisponibles();

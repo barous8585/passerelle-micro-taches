@@ -39,6 +39,18 @@ Compromis assumé : une faute fine dans une colonne sensible (ex: une lettre
 inversée dans un nom) ne sera jamais corrigée, faute d'y avoir accès --
 c'est le prix de la confidentialité sur ces colonnes.
 
+## Validation manuelle des comptes
+
+Un compte (client ou worker) fraîchement créé ne peut rien faire d'autre que
+se connecter -- toute action fonctionnelle (déposer un fichier, prendre une
+tâche...) est bloquée tant qu'il n'a pas été approuvé manuellement. Pas
+d'interface web pour ça pour l'instant, un script suffit :
+
+```bash
+python3 admin_tools.py --lister              # comptes en attente
+python3 admin_tools.py --approuver email@x.fr
+```
+
 ## Notifications Telegram (optionnel)
 
 Quand un client dépose un nouveau fichier, un message peut être envoyé

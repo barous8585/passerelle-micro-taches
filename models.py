@@ -41,6 +41,8 @@ class User(Base):
     solde_disponible = Column(Float, default=0.0)  # wallet interne -- pas de virement direct par ligne
     accepte_confidentialite = Column(Boolean, default=False)  # engagement à ne pas copier/exporter les données traitées
     date_acceptation_confidentialite = Column(DateTime, nullable=True)
+    approuve = Column(Boolean, default=False)  # validation manuelle par l'équipe -- aucun accès fonctionnel avant
+    secteur_activite = Column(String, nullable=True)  # renseigné par les clients à l'inscription
 
 
 class Project(Base):

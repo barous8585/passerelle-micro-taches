@@ -144,9 +144,20 @@
         <label>Confirmer le mot de passe</label>
         <input type="password" id="cr_password2" placeholder="Retape ton mot de passe" autocomplete="new-password">
         <div class="erreur-champ" id="cr_password2_erreur"></div>
+        <label>Secteur d'activité</label>
+        <input type="text" id="cr_secteur" placeholder="Ex: e-commerce, conseil, santé...">
+        <div class="erreur-champ" id="cr_secteur_erreur"></div>
         <button type="submit" class="principal pleine-largeur" id="btn_creation">Créer mon compte</button>
         <p class="msg" id="msg_creation"></p>
       </form>
+    </div>
+
+    <div class="panel" id="bloc_en_attente" style="display:none; max-width:500px;">
+      <h2>Compte en attente de validation</h2>
+      <p style="color:var(--text-secondary); font-size:13px; line-height:1.6;">
+        Ton compte a bien été créé, mais doit être validé manuellement par l'équipe Passerelle
+        avant que tu puisses déposer un fichier. Tu seras prévenu par email une fois activé.
+      </p>
     </div>
 
     <div class="grille" id="grille_principale" style="display:none;">
@@ -221,6 +232,11 @@ async function tenterConnexion(header) {
   authHeader = header;
   sessionStorage.setItem('passerelle_auth_client', header);
   document.getElementById('bloc_auth').style.display = 'none';
+
+  if (!moi.approuve) {
+    document.getElementById('bloc_en_attente').style.display = 'block';
+    return;
+  }
   document.getElementById('grille_principale').style.display = 'grid';
   chargerMesProjets();
 }
@@ -231,17 +247,20 @@ async function creerCompte() {
   const email = document.getElementById('cr_email').value.trim();
   const password = document.getElementById('cr_password').value;
   const password2 = document.getElementById('cr_password2').value;
+  const secteur_activite = document.getElementById('cr_secteur').value.trim();
 
   const erreurEmail = document.getElementById('cr_email_erreur');
   const erreurPassword = document.getElementById('cr_password_erreur');
   const erreurPassword2 = document.getElementById('cr_password2_erreur');
+  const erreurSecteur = document.getElementById('cr_secteur_erreur');
   const msg = document.getElementById('msg_creation');
-  [erreurEmail, erreurPassword, erreurPassword2, msg].forEach(e => e.textContent = '');
+  [erreurEmail, erreurPassword, erreurPassword2, erreurSecteur, msg].forEach(e => e.textContent = '');
 
   let valide = true;
   if (!emailValide(email)) { erreurEmail.textContent = 'Adresse email invalide.'; valide = false; }
   if (password.length < 8) { erreurPassword.textContent = 'Au moins 8 caractères.'; valide = false; }
   if (password2 !== password) { erreurPassword2.textContent = 'Les mots de passe ne correspondent pas.'; valide = false; }
+  if (!secteur_activite) { erreurSecteur.textContent = 'Ce champ est obligatoire.'; valide = false; }
   if (!valide) return;
 
   const bouton = document.getElementById('btn_creation');
@@ -250,7 +269,7 @@ async function creerCompte() {
   try {
     const res = await fetch('/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, role: 'client' }),
+      body: JSON.stringify({ email, password, role: 'client', secteur_activite }),
     });
     if (res.ok) {
       msg.style.color = 'var(--success)';

@@ -77,6 +77,7 @@ class RegisterIn(BaseModel):
     password: str
     role: str  # "client" ou "worker" -- le rôle "admin" ne se crée pas via l'API
     accepte_confidentialite: bool = False
+    secteur_activite: str | None = None  # obligatoire pour les clients, ignoré pour les workers
 
 
 # Restreint l'inscription worker à des domaines email universitaires connus.
@@ -112,6 +113,9 @@ def register(payload: RegisterIn):
                 detail=f"Inscription étudiante réservée aux emails universitaires ({', '.join(DOMAINES_WORKER_AUTORISES)}).",
             )
 
+    if payload.role == "client" and not (payload.secteur_activite or "").strip():
+        raise HTTPException(status_code=400, detail="Le secteur d'activité est obligatoire pour un compte entreprise.")
+
     db = SessionLocal()
     try:
         if db.query(User).filter_by(email=payload.email).first():
@@ -122,10 +126,12 @@ def register(payload: RegisterIn):
             password_hash=hash_password(payload.password),
             accepte_confidentialite=payload.accepte_confidentialite,
             date_acceptation_confidentialite=datetime.datetime.utcnow() if payload.accepte_confidentialite else None,
+            approuve=False,  # validation manuelle requise avant tout accès fonctionnel -- voir admin_tools.py
+            secteur_activite=payload.secteur_activite.strip() if payload.role == "client" else None,
         )
         db.add(user)
         db.commit()
-        return {"user_id": user.id, "role": user.role.value}
+        return {"user_id": user.id, "role": user.role.value, "approuve": user.approuve}
     finally:
         db.close()
 
@@ -139,6 +145,7 @@ def me(user: User = Depends(get_current_user)):
         "id": user.id,
         "email": user.email,
         "role": user.role.value,
+        "approuve": user.approuve,
         "trust_score": round(user.trust_score, 1),
         "tasks_completed": user.tasks_completed,
     }

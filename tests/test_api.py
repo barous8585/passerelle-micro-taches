@@ -31,21 +31,43 @@ def auth_header(email, password):
     return {"Authorization": f"Basic {jeton}"}
 
 
+def approuver(email):
+    """Simule la validation manuelle d'un compte (voir admin_tools.py) --
+    nécessaire depuis l'ajout du contrôle d'approbation, sans quoi tout
+    endpoint fonctionnel renvoie 403 même avec des identifiants valides."""
+    from models import User, get_engine, get_session_factory
+
+    db = get_session_factory(get_engine())()
+    try:
+        db.query(User).filter_by(email=email).update({"approuve": True})
+        db.commit()
+    finally:
+        db.close()
+
+
 # ---------------------------------------------------------------------------
 # AUTHENTIFICATION
 # ---------------------------------------------------------------------------
 
 def test_inscription_client_et_worker():
-    r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "pw123", "role": "client"})
+    r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "pw123", "role": "client", "secteur_activite": "E-commerce"})
     assert r.status_code == 200
     r = client.post("/auth/register", json={"email": "w1@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 200
     r = client.post("/auth/register", json={"email": "w2@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 200
+    approuver("startup@ia.fr")
+    approuver("w1@uco.fr")
+    approuver("w2@uco.fr")
+
+
+def test_inscription_client_sans_secteur_activite_refusee():
+    r = client.post("/auth/register", json={"email": "sans_secteur@ia.fr", "password": "pw123", "role": "client"})
+    assert r.status_code == 400
 
 
 def test_inscription_email_deja_utilise_refusee():
-    r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "autre", "role": "client"})
+    r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "autre", "role": "client", "secteur_activite": "E-commerce"})
     assert r.status_code == 400
 
 
@@ -55,7 +77,7 @@ def test_inscription_worker_sans_case_confidentialite_refusee():
     r = client.post("/auth/register", json={"email": "sans_case@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": False})
     assert r.status_code == 400
     # Un client n'est lui pas concerné par cette exigence
-    r = client.post("/auth/register", json={"email": "client_sans_case@ia.fr", "password": "pw123", "role": "client"})
+    r = client.post("/auth/register", json={"email": "client_sans_case@ia.fr", "password": "pw123", "role": "client", "secteur_activite": "Conseil"})
     assert r.status_code == 200
 
 
@@ -64,11 +86,23 @@ def test_connexion_mauvais_mot_de_passe_refusee():
     assert r.status_code == 401
 
 
+def test_compte_non_approuve_bloque_sur_les_endpoints_fonctionnels():
+    r = client.post("/auth/register", json={"email": "en_attente@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
+    assert r.status_code == 200
+    # Connexion possible (identifiants valides)...
+    r = client.get("/auth/me", headers=auth_header("en_attente@uco.fr", "pw123"))
+    assert r.status_code == 200
+    assert r.json()["approuve"] is False
+    # ...mais aucun accès fonctionnel tant que non approuvé
+    r = client.get("/projects/available", headers=auth_header("en_attente@uco.fr", "pw123"))
+    assert r.status_code == 403
+
+
 def test_inscription_worker_domaine_email_non_universitaire_refusee():
     r = client.post("/auth/register", json={"email": "faux@gmail.com", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 400
     # Un client n'est pas concerné par cette restriction de domaine
-    r = client.post("/auth/register", json={"email": "entreprise_gmail@gmail.com", "password": "pw123", "role": "client"})
+    r = client.post("/auth/register", json={"email": "entreprise_gmail@gmail.com", "password": "pw123", "role": "client", "secteur_activite": "Tech"})
     assert r.status_code == 200
 
 
@@ -114,7 +148,8 @@ def test_creation_projet_et_ingestion_csv():
     assert r.json()["nb_taches_creees"] == 4
 
     # Un client ne peut pas ingérer sur le projet d'un autre
-    r2 = client.post("/auth/register", json={"email": "autre_client@ia.fr", "password": "pw123", "role": "client"})
+    r2 = client.post("/auth/register", json={"email": "autre_client@ia.fr", "password": "pw123", "role": "client", "secteur_activite": "Finance"})
+    approuver("autre_client@ia.fr")  # sinon le test vérifierait le blocage d'approbation, pas d'appartenance
     with open(CSV_TEST, "rb") as f:
         r = client.post(
             f"/projects/{project_id}/ingest", files={"fichier": ("d.csv", f, "text/csv")},

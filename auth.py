@@ -67,12 +67,18 @@ def get_current_user(credentials: HTTPBasicCredentials = Depends(security)) -> U
 
 def require_role(role_attendu: str):
     """Dépendance FastAPI : n'autorise que les comptes du rôle donné
-    ('client' ou 'worker'). Usage : Depends(require_role('client'))."""
+    ('client' ou 'worker'), ET déjà validés manuellement par l'équipe.
+    Usage : Depends(require_role('client'))."""
     def _dependency(user: User = Depends(get_current_user)) -> User:
         if user.role.value != role_attendu:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Cette action est réservée aux comptes '{role_attendu}'",
+            )
+        if not user.approuve:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Ton compte est en attente de validation par l'équipe Passerelle. Tu seras prévenu une fois activé.",
             )
         return user
     return _dependency
