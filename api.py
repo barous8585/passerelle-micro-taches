@@ -27,6 +27,7 @@ from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import Column, DateTime, ForeignKey, Integer
+from sqlalchemy.exc import IntegrityError
 
 from analyzer import infer_schema, process_csv_to_microtasks, valider_consensus
 from auth import get_current_user, hash_password, init_auth_db, require_role
@@ -186,9 +187,21 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             raise HTTPException(status_code=404, detail="Tâche introuvable")
         worker_id = user.id
 
+        # Empêche un worker de soumettre plusieurs fois sur la même tâche
+        # (auparavant : chaque re-soumission retraitait ET repayait toutes
+        # les soumissions précédentes -- faille exploitable, corrigée ici).
+        if db.query(Submission).filter_by(micro_task_id=task_id, worker_id=worker_id).first():
+            raise HTTPException(status_code=409, detail="Tu as déjà soumis une réponse pour cette tâche.")
+
         db.query(TaskLock).filter_by(micro_task_id=task_id, worker_id=worker_id).delete()
         db.add(Submission(micro_task_id=task_id, worker_id=worker_id, reponse=payload.reponse))
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            # Deux requêtes quasi simultanées ont toutes deux passé le
+            # contrôle ci-dessus -- la contrainte unique en base tranche.
+            db.rollback()
+            raise HTTPException(status_code=409, detail="Tu as déjà soumis une réponse pour cette tâche.")
 
         submissions = db.query(Submission).filter_by(micro_task_id=task_id).all()
 

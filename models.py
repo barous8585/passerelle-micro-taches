@@ -10,7 +10,8 @@ import datetime
 import enum
 
 from sqlalchemy import (JSON, Boolean, Column, DateTime, Enum, Float,
-                         ForeignKey, Integer, String, create_engine, event)
+                         ForeignKey, Integer, String, UniqueConstraint,
+                         create_engine, event)
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 Base = declarative_base()
@@ -77,6 +78,12 @@ class MicroTask(Base):
 
 class Submission(Base):
     __tablename__ = "submissions"
+    __table_args__ = (
+        # Un worker ne peut soumettre qu'UNE SEULE fois par tâche -- contrainte
+        # au niveau base de données (pas juste une vérification applicative)
+        # pour fermer aussi la fenêtre de course entre deux requêtes simultanées.
+        UniqueConstraint("micro_task_id", "worker_id", name="uq_une_soumission_par_worker_et_tache"),
+    )
     id = Column(Integer, primary_key=True)
     micro_task_id = Column(Integer, ForeignKey("micro_tasks.id"))
     worker_id = Column(Integer, ForeignKey("users.id"))

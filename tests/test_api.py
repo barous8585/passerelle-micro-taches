@@ -149,6 +149,29 @@ def test_deux_workers_ne_recoivent_jamais_la_meme_ligne_propre():
     assert r1.json()["task_id"] != r2.json()["task_id"]
 
 
+def test_worker_ne_peut_pas_soumettre_deux_fois_sur_la_meme_tache():
+    project_id = creer_projet_isole("Test anti double-soumission")
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+
+    r1 = client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+    assert r1.status_code == 200
+
+    # Une deuxième soumission sur la MÊME tâche par le MÊME worker doit être
+    # refusée -- sans quoi elle repaie et retraite indéfiniment (faille corrigée).
+    r2 = client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+    assert r2.status_code == 409
+
+    solde = client.get("/tasks/mine", headers=auth_header("w1@uco.fr", "pw123")).json()["solde_disponible"]
+    assert solde == 0.05  # une seule fois, pas deux
+
+
 def test_worker_ne_peut_pas_soumettre_sans_authentification():
     r = client.post("/tasks/1/submit", json={"reponse": ["a", "b", "c"]})
     assert r.status_code == 401
