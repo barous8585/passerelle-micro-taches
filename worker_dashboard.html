@@ -164,6 +164,10 @@
       <input type="email" id="auth_email" value="etudiant1@uco.fr">
       <label>Mot de passe</label>
       <input type="password" id="auth_password" value="motdepasse123">
+      <label style="display:flex; align-items:flex-start; gap:6px; font-size:12px; color:var(--text-secondary); margin-bottom:12px; cursor:pointer;">
+        <input type="checkbox" id="auth_confidentialite" style="margin-top:2px; width:auto;">
+        <span>Je m'engage à ne pas copier, exporter, capturer ou partager les données que je traite sur cette plateforme, en dehors de l'usage prévu (correction en ligne).</span>
+      </label>
       <div class="rang">
         <button onclick="creerCompte()">Créer un compte</button>
         <button class="principal" onclick="seConnecter()">Se connecter</button>
@@ -208,10 +212,11 @@ function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email 
 async function creerCompte() {
   const email = document.getElementById('auth_email').value;
   const password = document.getElementById('auth_password').value;
+  const accepte_confidentialite = document.getElementById('auth_confidentialite').checked;
   const msg = document.getElementById('auth_msg');
   const res = await fetch('/auth/register', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, role: 'worker' }),
+    body: JSON.stringify({ email, password, role: 'worker', accepte_confidentialite }),
   });
   msg.textContent = res.ok ? 'Compte créé — connecte-toi.' : (await res.json()).detail;
 }

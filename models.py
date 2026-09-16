@@ -38,6 +38,8 @@ class User(Base):
     trust_score = Column(Float, default=80.0)  # démarre à 80/100, évolue avec l'historique
     tasks_completed = Column(Integer, default=0)
     solde_disponible = Column(Float, default=0.0)  # wallet interne -- pas de virement direct par ligne
+    accepte_confidentialite = Column(Boolean, default=False)  # engagement à ne pas copier/exporter les données traitées
+    date_acceptation_confidentialite = Column(DateTime, nullable=True)
 
 
 class Project(Base):
@@ -47,6 +49,7 @@ class Project(Base):
     titre = Column(String, nullable=False)
     schema_json = Column(JSON, nullable=False)
     prix_par_ligne = Column(Float, default=0.04)
+    date_dernier_export = Column(DateTime, nullable=True)  # sert de point de départ au délai de purge des données brutes
 
 
 class MicroTask(Base):

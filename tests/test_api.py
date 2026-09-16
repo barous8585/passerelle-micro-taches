@@ -38,15 +38,25 @@ def auth_header(email, password):
 def test_inscription_client_et_worker():
     r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "pw123", "role": "client"})
     assert r.status_code == 200
-    r = client.post("/auth/register", json={"email": "w1@uco.fr", "password": "pw123", "role": "worker"})
+    r = client.post("/auth/register", json={"email": "w1@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 200
-    r = client.post("/auth/register", json={"email": "w2@uco.fr", "password": "pw123", "role": "worker"})
+    r = client.post("/auth/register", json={"email": "w2@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
     assert r.status_code == 200
 
 
 def test_inscription_email_deja_utilise_refusee():
     r = client.post("/auth/register", json={"email": "startup@ia.fr", "password": "autre", "role": "client"})
     assert r.status_code == 400
+
+
+def test_inscription_worker_sans_case_confidentialite_refusee():
+    r = client.post("/auth/register", json={"email": "sans_case@uco.fr", "password": "pw123", "role": "worker"})
+    assert r.status_code == 400
+    r = client.post("/auth/register", json={"email": "sans_case@uco.fr", "password": "pw123", "role": "worker", "accepte_confidentialite": False})
+    assert r.status_code == 400
+    # Un client n'est lui pas concerné par cette exigence
+    r = client.post("/auth/register", json={"email": "client_sans_case@ia.fr", "password": "pw123", "role": "client"})
+    assert r.status_code == 200
 
 
 def test_connexion_mauvais_mot_de_passe_refusee():

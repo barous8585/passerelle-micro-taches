@@ -70,12 +70,23 @@ class RegisterIn(BaseModel):
     email: str
     password: str
     role: str  # "client" ou "worker" -- le rôle "admin" ne se crée pas via l'API
+    accepte_confidentialite: bool = False
 
 
 @app.post("/auth/register")
 def register(payload: RegisterIn):
     if payload.role not in ("client", "worker"):
         raise HTTPException(status_code=400, detail="Rôle invalide (client ou worker)")
+
+    # Un worker manipule des données appartenant à des tiers (clients de nos
+    # clients) -- l'engagement de confidentialité est une condition d'inscription,
+    # pas une case facultative.
+    if payload.role == "worker" and not payload.accepte_confidentialite:
+        raise HTTPException(
+            status_code=400,
+            detail="Tu dois accepter l'engagement de confidentialité pour créer un compte étudiant.",
+        )
+
     db = SessionLocal()
     try:
         if db.query(User).filter_by(email=payload.email).first():
@@ -84,6 +95,8 @@ def register(payload: RegisterIn):
             email=payload.email,
             role=RoleEnum(payload.role),
             password_hash=hash_password(payload.password),
+            accepte_confidentialite=payload.accepte_confidentialite,
+            date_acceptation_confidentialite=datetime.datetime.utcnow() if payload.accepte_confidentialite else None,
         )
         db.add(user)
         db.commit()
@@ -438,11 +451,32 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
         db.close()
 
 
+DELAI_PURGE_JOURS = 30  # rétention des données brutes après le dernier export du client
+
+
+def purger_donnees_expirees(db):
+    """Vide raw_data et resultat_final des tâches complétées dont le projet
+    a été exporté il y a plus de DELAI_PURGE_JOURS -- on garde le statut et
+    les métadonnées (utiles au trust_score et aux stats), mais plus le
+    contenu métier une fois que le client a récupéré son résultat et que la
+    fenêtre de rétention est dépassée. Appelée à la volée (même logique que
+    nettoyer_verrous_expires), pas de tâche planifiée séparée pour ce MVP."""
+    seuil = datetime.datetime.utcnow() - datetime.timedelta(days=DELAI_PURGE_JOURS)
+    projets_a_purger = db.query(Project).filter(Project.date_dernier_export < seuil).all()
+    for projet in projets_a_purger:
+        db.query(MicroTask).filter_by(project_id=projet.id, status=TaskStatus.completed).update(
+            {"raw_data": None, "resultat_final": None}
+        )
+    if projets_a_purger:
+        db.commit()
+
+
 @app.get("/projects/mine")
 def mes_projets(user: User = Depends(require_role("client"))):
     """Vue d'ensemble pour le client : avancement de chacun de ses projets."""
     db = SessionLocal()
     try:
+        purger_donnees_expirees(db)
         projets = db.query(Project).filter_by(client_id=user.id).all()
         resultat = []
         for p in projets:
@@ -474,6 +508,7 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
 
     db = SessionLocal()
     try:
+        purger_donnees_expirees(db)
         projet = db.query(Project).get(project_id)
         if not projet:
             raise HTTPException(status_code=404, detail="Projet introuvable")
@@ -486,8 +521,17 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
             .order_by(MicroTask.row_id)
             .all()
         )
+        # Les tâches dont les données ont été purgées (rétention dépassée)
+        # n'ont plus rien à exporter -- on les exclut plutôt que de planter.
+        taches = [t for t in taches if t.resultat_final is not None or t.raw_data is not None]
         if not taches:
-            raise HTTPException(status_code=404, detail="Aucune ligne complétée pour ce projet pour le moment")
+            raise HTTPException(
+                status_code=404,
+                detail="Aucune ligne exportable (rien de complété, ou données purgées après le délai de rétention)",
+            )
+
+        projet.date_dernier_export = datetime.datetime.utcnow()
+        db.commit()
 
         from fastapi.responses import Response
 
