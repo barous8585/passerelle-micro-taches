@@ -64,6 +64,14 @@ def test_connexion_mauvais_mot_de_passe_refusee():
     assert r.status_code == 401
 
 
+def test_inscription_worker_domaine_email_non_universitaire_refusee():
+    r = client.post("/auth/register", json={"email": "faux@gmail.com", "password": "pw123", "role": "worker", "accepte_confidentialite": True})
+    assert r.status_code == 400
+    # Un client n'est pas concerné par cette restriction de domaine
+    r = client.post("/auth/register", json={"email": "entreprise_gmail@gmail.com", "password": "pw123", "role": "client"})
+    assert r.status_code == 200
+
+
 def test_worker_ne_peut_pas_creer_de_projet():
     r = client.post(
         "/projects", json={"titre": "x", "colonnes_schema": {"columns": []}},

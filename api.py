@@ -74,19 +74,38 @@ class RegisterIn(BaseModel):
     accepte_confidentialite: bool = False
 
 
+# Restreint l'inscription worker à des domaines email universitaires connus.
+# Ne garantit pas qu'une personne ne crée pas plusieurs comptes (elle peut
+# avoir plusieurs adresses @uco.fr), mais ferme la faille la plus grossière :
+# n'importe qui créant 50 comptes gratuits en 5 minutes avec des emails
+# jetables pour fausser le consensus. À étendre au fil des partenariats avec
+# d'autres établissements (ex: "univ-angers.fr").
+DOMAINES_WORKER_AUTORISES = ["uco.fr"]
+
+
+def _domaine_email(email: str) -> str:
+    return email.rsplit("@", 1)[-1].lower() if "@" in email else ""
+
+
 @app.post("/auth/register")
 def register(payload: RegisterIn):
     if payload.role not in ("client", "worker"):
         raise HTTPException(status_code=400, detail="Rôle invalide (client ou worker)")
 
-    # Un worker manipule des données appartenant à des tiers (clients de nos
-    # clients) -- l'engagement de confidentialité est une condition d'inscription,
-    # pas une case facultative.
-    if payload.role == "worker" and not payload.accepte_confidentialite:
-        raise HTTPException(
-            status_code=400,
-            detail="Tu dois accepter l'engagement de confidentialité pour créer un compte étudiant.",
-        )
+    if payload.role == "worker":
+        # Un worker manipule des données appartenant à des tiers (clients de nos
+        # clients) -- l'engagement de confidentialité est une condition d'inscription,
+        # pas une case facultative.
+        if not payload.accepte_confidentialite:
+            raise HTTPException(
+                status_code=400,
+                detail="Tu dois accepter l'engagement de confidentialité pour créer un compte étudiant.",
+            )
+        if _domaine_email(payload.email) not in DOMAINES_WORKER_AUTORISES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Inscription étudiante réservée aux emails universitaires ({', '.join(DOMAINES_WORKER_AUTORISES)}).",
+            )
 
     db = SessionLocal()
     try:
