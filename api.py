@@ -33,6 +33,7 @@ from sqlalchemy.exc import IntegrityError
 
 from analyzer import infer_schema, process_csv_to_microtasks, valider_consensus
 from auth import get_current_user, hash_password, init_auth_db, require_role
+from crypto import chiffrer_json, dechiffrer_json
 from notifications import notifier_nouveau_projet
 from models import (Base, MicroTask, Project, RoleEnum, Submission,
                      TaskStatus, User, get_engine, get_session_factory)
@@ -183,7 +184,7 @@ def get_next_task(project_id: int, user: User = Depends(require_role("worker")))
                 return {
                     "task_id": task.id,
                     "row_id": task.row_id,
-                    "raw_data": task.raw_data,
+                    "raw_data": dechiffrer_json(task.raw_data),
                     "header": task.header,
                     "badges": task.badges,
                     "prix": db.query(Project).get(project_id).prix_par_ligne,
@@ -226,7 +227,7 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             raise HTTPException(status_code=409, detail="Tu as déjà soumis une réponse pour cette tâche.")
 
         db.query(TaskLock).filter_by(micro_task_id=task_id, worker_id=worker_id).delete()
-        db.add(Submission(micro_task_id=task_id, worker_id=worker_id, reponse=payload.reponse))
+        db.add(Submission(micro_task_id=task_id, worker_id=worker_id, reponse=chiffrer_json(payload.reponse)))
         try:
             db.commit()
         except IntegrityError:
@@ -242,7 +243,7 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         # Le worker est payé dans tous les cas -- gold standard = contrôle
         # qualité invisible, pas une pénalité de rémunération. ---
         if task.is_gold_standard:
-            correct = payload.reponse == task.gold_answer
+            correct = payload.reponse == dechiffrer_json(task.gold_answer)
             worker = db.query(User).get(worker_id)
             worker.trust_score = min(100.0, worker.trust_score + 1) if correct \
                 else max(0.0, worker.trust_score - 5)
@@ -263,8 +264,9 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             return {"status": "en_attente_autres_workers", "soumissions_recues": len(submissions), "paye": None}
 
         workers = [db.query(User).get(s.worker_id) for s in submissions]
+        reponses_dechiffrees = [dechiffrer_json(s.reponse) for s in submissions]
         consensus = valider_consensus(
-            [s.reponse for s in submissions], task.schema_json, task.header,
+            reponses_dechiffrees, task.schema_json, task.header,
             trust_scores=[w.trust_score for w in workers],
         )
 
@@ -272,7 +274,9 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
         # litige ou non -- seul le trust_score encaisse l'écart au consensus.
         task.eu_litige = consensus["status"] not in ("valide", "auto_valide")
         task.status = TaskStatus.completed
-        task.resultat_final = construire_resultat_final(task.header, submissions[0].reponse, consensus)
+        task.resultat_final = chiffrer_json(
+            construire_resultat_final(task.header, reponses_dechiffrees[0], consensus)
+        )
 
         prix = db.query(Project).get(task.project_id).prix_par_ligne
         for worker, sub, ecart in zip(workers, submissions, consensus["ecarts_par_worker"]):
@@ -489,6 +493,11 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
             os.remove(chemin)
 
         for t in tasks:
+            # Chiffrement au repos : raw_data et gold_answer contiennent le
+            # contenu métier du client -- jamais stockés en clair en base.
+            t["raw_data"] = chiffrer_json(t["raw_data"])
+            if t.get("gold_answer") is not None:
+                t["gold_answer"] = chiffrer_json(t["gold_answer"])
             db.add(MicroTask(**t))
         db.commit()
 
@@ -592,7 +601,7 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
             feuille = classeur.active
             feuille.append(taches[0].header)
             for t in taches:
-                feuille.append(t.resultat_final or t.raw_data)
+                feuille.append(dechiffrer_json(t.resultat_final) or dechiffrer_json(t.raw_data))
             buffer = io_module.BytesIO()
             classeur.save(buffer)
             return Response(
@@ -608,7 +617,7 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
         writer = csv.writer(buffer, delimiter=";")
         writer.writerow(taches[0].header)
         for t in taches:
-            writer.writerow(t.resultat_final or t.raw_data)
+            writer.writerow(dechiffrer_json(t.resultat_final) or dechiffrer_json(t.raw_data))
         return Response(
             content=buffer.getvalue(),
             media_type="text/csv",

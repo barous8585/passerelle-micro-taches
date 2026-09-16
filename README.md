@@ -12,6 +12,21 @@ source venv/bin/activate        # sous Windows : venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+## Chiffrement des données clients (obligatoire)
+
+Les données brutes déposées par les clients (`raw_data`, `resultat_final`) et
+les réponses des workers sont chiffrées avant stockage en base -- même en cas
+de fuite du fichier `passerelle.db`, le contenu métier reste illisible sans
+la clé.
+
+1. Génère ta clé : `python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`
+2. Copie `.env.example` en `.env` et colle la clé dans `APP_ENCRYPTION_KEY`
+
+**Sans cette clé, le serveur refuse de démarrer** (contrairement à Telegram,
+ce n'est pas optionnel). Ne la perds jamais et ne la commite jamais : sans
+elle, les données déjà chiffrées deviennent illisibles pour de bon, y
+compris pour toi.
+
 ## Notifications Telegram (optionnel)
 
 Quand un client dépose un nouveau fichier, un message peut être envoyé
@@ -21,7 +36,7 @@ du travail disponible.
 1. Crée un bot via [@BotFather](https://t.me/BotFather) sur Telegram (`/newbot`) -- il te donne un token
 2. Crée un groupe Telegram, ajoute le bot dedans
 3. Envoie un message dans le groupe, puis va sur `https://api.telegram.org/bot<TON_TOKEN>/getUpdates` dans ton navigateur pour trouver le `chat_id` (champ `"chat":{"id": ...}`)
-4. Copie `.env.example` en `.env` et renseigne `TELEGRAM_BOT_TOKEN` et `TELEGRAM_CHAT_ID`
+4. Renseigne `TELEGRAM_BOT_TOKEN` et `TELEGRAM_CHAT_ID` dans le même fichier `.env`
 
 Sans configuration, les notifications sont simplement désactivées -- le
 reste de la plateforme fonctionne normalement.
@@ -54,6 +69,8 @@ tâches, l'authentification par rôle et le flux complet de bout en bout
 | `analyzer.py` | Détection d'anomalies, inférence de schéma, consensus pondéré |
 | `models.py` | Modèles SQLAlchemy (users, projects, micro_tasks, submissions) |
 | `auth.py` | Authentification par mot de passe (PBKDF2) et contrôle des rôles |
+| `crypto.py` | Chiffrement au repos des données clients |
+| `notifications.py` | Alertes Telegram lors d'un nouveau dépôt |
 | `api.py` | Endpoints FastAPI (auth, dépôt client, distribution des tâches) |
 | `client_upload.html` | Interface entreprise : dépôt de CSV |
 | `worker_dashboard.html` | Interface étudiant : traitement des tâches |

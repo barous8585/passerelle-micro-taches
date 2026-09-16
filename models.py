@@ -58,16 +58,16 @@ class MicroTask(Base):
     id = Column(Integer, primary_key=True)
     project_id = Column(Integer, ForeignKey("projects.id"))
     row_id = Column(Integer, nullable=False)
-    raw_data = Column(JSON, nullable=False)
+    raw_data = Column(String, nullable=False)  # chiffré (voir crypto.py) -- contenu métier du client
     header = Column(JSON, nullable=False)
     badges = Column(JSON, default=list)
     schema_json = Column(JSON, nullable=False)
     redundancy_level = Column(Integer, default=1)
     is_gold_standard = Column(Boolean, default=False)
-    gold_answer = Column(JSON, nullable=True)
+    gold_answer = Column(String, nullable=True)  # chiffré -- même contenu métier qu'une ligne propre
     status = Column(Enum(TaskStatus), default=TaskStatus.available)
     eu_litige = Column(Boolean, default=False)  # pour reporting admin -- n'empêche PAS le paiement
-    resultat_final = Column(JSON, nullable=True)  # valeur consensuelle retenue une fois complétée -- c'est CE que le client récupère à l'export
+    resultat_final = Column(String, nullable=True)  # chiffré -- valeur consensuelle retenue, c'est CE que le client récupère à l'export
 
     # Verrouillage anti-doublon : qui a pris la tâche et depuis quand
     assigned_to = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -87,7 +87,7 @@ class Submission(Base):
     id = Column(Integer, primary_key=True)
     micro_task_id = Column(Integer, ForeignKey("micro_tasks.id"))
     worker_id = Column(Integer, ForeignKey("users.id"))
-    reponse = Column(JSON, nullable=False)  # la ligne corrigée
+    reponse = Column(String, nullable=False)  # chiffré -- la ligne corrigée par le worker
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     montant = Column(Float, nullable=True)  # None tant que non payé (redondance pas encore atteinte)
 

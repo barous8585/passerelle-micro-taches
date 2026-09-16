@@ -387,3 +387,23 @@ def test_export_xlsx_produit_un_classeur_valide():
         assert len(lignes) == 2  # en-tête + 1 ligne complétée
     finally:
         os.remove(chemin_temp)
+
+
+def test_donnees_client_illisibles_sur_le_disque():
+    """Vérifie qu'un accès brut au fichier SQLite (vol, sauvegarde mal
+    configurée) ne révèle aucune donnée métier en clair -- le cœur de la
+    protection "sécurité des données clients"."""
+    project_id = creer_projet_isole("Test chiffrement au repos")
+    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+    tache = r.json()
+    valeur_sensible = tache["raw_data"][1]  # l'email de la ligne, ex: jdupont@gmail.com
+    client.post(
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        headers=auth_header("w1@uco.fr", "pw123"),
+    )
+
+    with open(os.path.join(RACINE, "passerelle.db"), "rb") as f:
+        contenu_brut = f.read()
+
+    assert valeur_sensible.encode() not in contenu_brut
+    assert b"Jean Dupont" not in contenu_brut
