@@ -19,6 +19,14 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
 
+# Visible une seule fois au démarrage du serveur -- le signal le plus utile
+# pour diagnostiquer un .env introuvable ou mal rempli, avant même de tenter
+# un dépôt de fichier.
+if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
+    print(f"✅ Notifications Telegram activées (chat_id={TELEGRAM_CHAT_ID})")
+else:
+    print("ℹ️  Notifications Telegram désactivées (TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID absents du .env)")
+
 
 def notifications_configurees() -> bool:
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
@@ -40,10 +48,14 @@ def notifier_nouveau_projet(titre: str, nb_taches: int, prix_par_ligne: float):
     )
 
     try:
-        httpx.post(
+        reponse = httpx.post(
             f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
             json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
             timeout=5,
         )
-    except httpx.HTTPError:
-        pass  # échec réseau/config -- on ignore, le dépôt du client ne doit jamais en dépendre
+        if reponse.status_code != 200:
+            # Visible dans le terminal uvicorn -- utile pour diagnostiquer un
+            # mauvais token/chat_id sans faire échouer le dépôt pour autant.
+            print(f"⚠️  Telegram a refusé la notification ({reponse.status_code}) : {reponse.text}")
+    except httpx.HTTPError as e:
+        print(f"⚠️  Impossible de joindre Telegram (notification ignorée) : {e}")
