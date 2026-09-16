@@ -16,12 +16,33 @@ import random
 import re
 from difflib import SequenceMatcher
 
+import regex  # bibliothèque tierce (distincte de re) : supporte un timeout
+              # sur le matching -- indispensable car col["rule"] est fourni
+              # par le client et peut contenir un motif ReDoS catastrophique.
+
 # ---------------------------------------------------------------------------
 # 1. RÈGLES DE VALIDATION PAR TYPE DE CHAMP
 # ---------------------------------------------------------------------------
 
+TIMEOUT_REGEX_CLIENT = 0.5  # secondes -- au-delà, on considère le motif comme
+                            # trop coûteux et on traite la valeur comme invalide
+                            # plutôt que de bloquer le serveur pour tout le monde.
+
+
+def _valider_regex_client(value, rule):
+    """Applique une regex FOURNIE PAR LE CLIENT à une valeur, avec un
+    filet de sécurité contre les motifs ReDoS (répétitions imbriquées,
+    alternances catastrophiques) et les motifs syntaxiquement invalides."""
+    try:
+        return bool(regex.match(rule, value, timeout=TIMEOUT_REGEX_CLIENT))
+    except TimeoutError:
+        return False  # motif trop coûteux à évaluer -- traité comme non conforme
+    except regex.error:
+        return False  # motif mal formé -- idem, pas une raison de planter
+
+
 VALIDATORS = {
-    "regex": lambda value, rule: bool(re.match(rule, value)),
+    "regex": _valider_regex_client,
     "date": lambda value, rule: bool(re.match(r"^\d{4}-\d{2}-\d{2}$", value)),
     "required": lambda value, rule: value.strip() not in ("", "null", "n/a", "none", "?"),
 }

@@ -94,3 +94,21 @@ def test_valider_consensus_pondere_exclut_worker_peu_fiable():
 def test_similarite_detecte_quasi_identite():
     assert similarite("Jean Dupont", "jean dupont") > 0.95
     assert similarite("Jean Dupont", "Paul Martin") < 0.5
+
+
+def test_regex_client_redos_ne_bloque_pas_le_serveur():
+    """Une regex catastrophique fournie par le client (motif à alternance
+    imbriquée) doit être interrompue par le timeout plutôt que de geler le
+    processus -- sans ce garde-fou, ce test durerait plusieurs minutes."""
+    import time
+
+    schema = {"columns": [{"name": "nom", "type": "regex", "rule": r"^(a|a)+$", "required": True}]}
+    header = ["nom"]
+    valeur_piege = "a" * 40 + "!"  # presque valide, déclenche le pire cas de backtracking
+
+    debut = time.time()
+    badges = detect_anomalies([valeur_piege], header, schema)
+    duree = time.time() - debut
+
+    assert duree < 2.0  # très large marge par rapport au timeout de 0.5s -- juste pour éviter un faux positif
+    assert any(b["type"] == "danger" for b in badges)  # traité comme non conforme, pas planté
