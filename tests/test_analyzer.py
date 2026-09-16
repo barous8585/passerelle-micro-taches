@@ -96,6 +96,45 @@ def test_similarite_detecte_quasi_identite():
     assert similarite("Jean Dupont", "Paul Martin") < 0.5
 
 
+def test_normaliser_telephone_gere_les_formats_courants():
+    from analyzer import normaliser_telephone
+    assert normaliser_telephone("06 12.34-56-78") == "+33612345678"
+    assert normaliser_telephone("+33612345678") == "+33612345678"
+    assert normaliser_telephone("0033612345678") == "+33612345678"
+
+
+def test_normaliser_date_ne_devine_jamais_un_format_ambigu():
+    from analyzer import normaliser_date
+    # Jour > 12 -> sans ambiguïté, jour/mois/année
+    assert normaliser_date("15/03/1990") == "1990-03-15"
+    # Jour <= 12 -> ambigu (pourrait être MM/JJ ou JJ/MM) -> jamais deviné
+    assert normaliser_date("03/04/1998") == "03/04/1998"
+    # Date impossible (mois 13) -> laissée telle quelle pour être flaguée
+    assert normaliser_date("28/13/2000") == "28/13/2000"
+
+
+def test_normaliser_nom_capitalise_et_nettoie_les_espaces():
+    from analyzer import normaliser_nom
+    assert normaliser_nom("jean   dupont") == "Jean Dupont"
+
+
+def test_suggerer_domaine_email_ne_corrige_jamais_seul():
+    from analyzer import suggerer_domaine_email
+    assert suggerer_domaine_email("marie@wanadoo.f") == "wanadoo.fr"
+    assert suggerer_domaine_email("jdupont@gmail.com") is None  # déjà correct
+
+
+def test_nettoyer_ligne_valide_automatiquement_une_ligne_propre_apres_nettoyage():
+    from analyzer import nettoyer_ligne
+    schema = {"columns": [
+        {"name": "nom", "type": "nom", "required": True},
+        {"name": "telephone", "type": "telephone", "required": True},
+    ]}
+    ligne_nettoyee, badges = nettoyer_ligne(["jean   dupont", "06 12.34-56-78"], ["nom", "telephone"], schema)
+    assert ligne_nettoyee == ["Jean Dupont", "+33612345678"]
+    assert badges == []  # zéro anomalie restante -> validable sans worker
+
+
 def test_regex_client_redos_ne_bloque_pas_le_serveur():
     """Une regex catastrophique fournie par le client (motif à alternance
     imbriquée) doit être interrompue par le timeout plutôt que de geler le

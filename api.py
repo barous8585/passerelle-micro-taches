@@ -554,17 +554,29 @@ def ingest_csv(project_id: int, fichier: UploadFile = File(...), user: User = De
             os.remove(chemin)
 
         for t in tasks:
-            # Chiffrement au repos : raw_data et gold_answer contiennent le
-            # contenu métier du client -- jamais stockés en clair en base.
+            # Chiffrement au repos : raw_data, gold_answer et resultat_final
+            # contiennent le contenu métier du client -- jamais stockés en
+            # clair en base.
             t["raw_data"] = chiffrer_json(t["raw_data"])
             if t.get("gold_answer") is not None:
                 t["gold_answer"] = chiffrer_json(t["gold_answer"])
+            if t.get("resultat_final") is not None:
+                t["resultat_final"] = chiffrer_json(t["resultat_final"])
             db.add(MicroTask(**t))
         db.commit()
 
-        notifier_nouveau_projet(projet.titre, len(tasks), projet.prix_par_ligne)
+        # La notification ne compte que le vrai travail restant pour les
+        # workers -- les lignes déjà validées automatiquement ne doivent pas
+        # gonfler artificiellement le volume annoncé.
+        nb_pour_workers = sum(1 for t in tasks if t["status"] == "available")
+        notifier_nouveau_projet(projet.titre, nb_pour_workers, projet.prix_par_ligne)
 
-        return {"nb_taches_creees": len(tasks)}
+        nb_auto_validees = sum(1 for t in tasks if t["status"] == "completed")
+        return {
+            "nb_taches_creees": len(tasks),
+            "nb_validees_automatiquement": nb_auto_validees,
+            "nb_pour_workers": len(tasks) - nb_auto_validees,
+        }
     finally:
         db.close()
 

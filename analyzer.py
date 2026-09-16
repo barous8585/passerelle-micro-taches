@@ -11,6 +11,7 @@ Corrige et enrichit le script initial :
 """
 
 import csv
+import datetime
 import json
 import random
 import re
@@ -28,6 +29,8 @@ TIMEOUT_REGEX_CLIENT = 0.5  # secondes -- au-delà, on considère le motif comme
                             # trop coûteux et on traite la valeur comme invalide
                             # plutôt que de bloquer le serveur pour tout le monde.
 
+TELEPHONE_RE = re.compile(r"^\+33[1-9]\d{8}$")  # format cible après normalisation
+
 
 def _valider_regex_client(value, rule):
     """Applique une regex FOURNIE PAR LE CLIENT à une valeur, avec un
@@ -44,8 +47,135 @@ def _valider_regex_client(value, rule):
 VALIDATORS = {
     "regex": _valider_regex_client,
     "date": lambda value, rule: bool(re.match(r"^\d{4}-\d{2}-\d{2}$", value)),
+    "telephone": lambda value, rule: bool(TELEPHONE_RE.match(value)),
     "required": lambda value, rule: value.strip() not in ("", "null", "n/a", "none", "?"),
 }
+
+
+# ---------------------------------------------------------------------------
+# 1bis. NORMALISATION AUTOMATIQUE -- appliquée AVANT la détection d'anomalies,
+# pour que le worker ne perde jamais son temps sur ce qu'un script règle en
+# une fraction de seconde. Chaque fonction ne fait qu'UNE chose déterministe
+# (pas de "devinette" sur le contenu) -- voir DOMAINES_EMAIL_CONNUS plus bas
+# pour le seul cas où on hésite volontairement à corriger seul.
+# ---------------------------------------------------------------------------
+
+def normaliser_espaces(valeur):
+    if not isinstance(valeur, str):
+        return valeur
+    return re.sub(r"\s+", " ", valeur).strip()
+
+
+def normaliser_telephone(valeur):
+    """Convertit un numéro français vers le format +33XXXXXXXXX, quels que
+    soient les espaces/points/tirets ou le préfixe (0X, +33X, 0033X)."""
+    brut = re.sub(r"[^\d+]", "", valeur)
+    if brut.startswith("0033"):
+        brut = "+33" + brut[4:]
+    elif brut.startswith("33") and not brut.startswith("+"):
+        brut = "+" + brut
+    elif brut.startswith("0") and len(brut) == 10:
+        brut = "+33" + brut[1:]
+    return brut
+
+
+def normaliser_date(valeur):
+    """Convertit JJ/MM/AAAA ou JJ-MM-AAAA vers AAAA-MM-JJ, mais UNIQUEMENT
+    quand le format n'est pas ambigu (jour > 12, donc forcément le jour et
+    pas le mois). Sinon on laisse tel quel -- mieux vaut la faire flaguer
+    "ambiguë" que de deviner et se tromper un mois sur deux."""
+    for sep in ("/", "-"):
+        parts = valeur.split(sep)
+        if len(parts) == 3 and all(p.isdigit() for p in parts) and len(parts[2]) == 4:
+            a, b, annee = int(parts[0]), int(parts[1]), int(parts[2])
+            if a > 12 >= b:  # a ne peut être que le jour
+                try:
+                    return datetime.date(annee, b, a).isoformat()
+                except ValueError:
+                    return valeur  # date impossible (ex: 31 février) -- laissée pour être flaguée
+    return valeur
+
+
+def normaliser_nom(valeur):
+    """Majuscule en début de chaque mot -- imparfait sur des cas rares
+    (ex: 'McDonald' redevient 'Mcdonald'), volontairement accepté car
+    l'enjeu est cosmétique, pas une erreur de fond sur la donnée."""
+    valeur = normaliser_espaces(valeur)
+    return valeur.title() if valeur else valeur
+
+
+NORMALISATION_PAR_TYPE = {
+    "telephone": normaliser_telephone,
+    "date": normaliser_date,
+    "nom": normaliser_nom,
+}
+
+
+# Domaines email très courants -- sert UNIQUEMENT à suggérer une correction
+# au worker (badge d'alerte), jamais à corriger seul. Deviner un domaine
+# email et se tromper produirait une donnée fausse avec une confiance totale.
+DOMAINES_EMAIL_CONNUS = [
+    "gmail.com", "hotmail.com", "hotmail.fr", "outlook.com", "outlook.fr",
+    "yahoo.com", "yahoo.fr", "orange.fr", "wanadoo.fr", "free.fr",
+    "laposte.net", "sfr.fr", "icloud.com", "live.fr",
+]
+
+
+def suggerer_domaine_email(valeur):
+    """Si le domaine ressemble fortement (distance d'édition <= 2) à un
+    domaine connu sans y correspondre exactement, retourne une suggestion
+    textuelle -- ne modifie jamais la valeur elle-même."""
+    if "@" not in valeur:
+        return None
+    domaine = valeur.rsplit("@", 1)[-1].lower().strip()
+    if domaine in DOMAINES_EMAIL_CONNUS:
+        return None  # déjà correct, rien à suggérer
+    for connu in DOMAINES_EMAIL_CONNUS:
+        if abs(len(domaine) - len(connu)) <= 2 and SequenceMatcher(None, domaine, connu).ratio() >= 0.75:
+            return connu
+    return None
+
+
+def nettoyer_ligne(row, header, schema):
+    """
+    Applique la normalisation automatique déterministe à chaque colonne
+    selon son type déclaré, puis lance la détection d'anomalies sur la
+    version nettoyée. Retourne (ligne_nettoyee, badges) -- si badges est
+    vide, la ligne peut être validée sans aucune intervention humaine.
+    """
+    col_index_by_name = {name: i for i, name in enumerate(header)}
+    ligne_nettoyee = list(row)
+
+    for col in schema["columns"]:
+        idx = col_index_by_name.get(col["name"])
+        if idx is None or idx >= len(ligne_nettoyee):
+            continue
+        valeur = normaliser_espaces(ligne_nettoyee[idx])
+        fonction = NORMALISATION_PAR_TYPE.get(col.get("type"))
+        if fonction:
+            valeur = fonction(valeur)
+        ligne_nettoyee[idx] = valeur
+
+    badges = detect_anomalies(ligne_nettoyee, header, schema)
+
+    # Suggestion de domaine email (n'empêche jamais la validation automatique
+    # d'être bloquée -- si le format est déjà valide par ailleurs, on ajoute
+    # juste un avertissement informatif au lieu de compter ça comme une vraie
+    # anomalie bloquante).
+    for col in schema["columns"]:
+        if col.get("type") != "regex":
+            continue
+        idx = col_index_by_name.get(col["name"])
+        if idx is None:
+            continue
+        suggestion = suggerer_domaine_email(ligne_nettoyee[idx])
+        if suggestion:
+            badges.append({
+                "col_index": idx, "type": "warning",
+                "msg": f"Domaine probablement '{suggestion}' ?",
+            })
+
+    return ligne_nettoyee, badges
 
 
 def detect_anomalies(row, header, schema):
@@ -101,9 +231,7 @@ def normaliser_automatiquement(valeur):
     dans le nom ou l'email restera non corrigée : c'est le prix du choix
     de confidentialité, assumé plutôt que masqué.
     """
-    if not isinstance(valeur, str):
-        return valeur
-    return re.sub(r"\s+", " ", valeur).strip()
+    return normaliser_espaces(valeur)
 
 
 def choisir_redondance(nb_badges, seuil_critique=2):
@@ -231,33 +359,47 @@ def process_csv_to_microtasks(file_path, project_id, schema_definition,
         header = next(reader)
 
         for row_id, row in enumerate(reader):
-            badges = detect_anomalies(row, header, schema_definition)
+            ligne_nettoyee, badges = nettoyer_ligne(row, header, schema_definition)
+
             # Une ligne n'est gold standard QUE si on possède réellement sa
             # réponse attendue -- sinon la comparaison n'a aucun sens et pénalise
             # injustement le worker. `taux_gold` sert à choisir, parmi les lignes
             # déjà propres (0 badge), lesquelles promouvoir en gold standard en
-            # utilisant leur propre valeur brute comme réponse de référence.
+            # utilisant leur propre valeur nettoyée comme réponse de référence.
+            # Ce tirage doit se faire AVANT la décision d'auto-validation
+            # ci-dessous : c'est ce qui permet de garder un contrôle qualité
+            # humain sur un échantillon des lignes propres, plutôt que de
+            # toutes les valider sans jamais les faire passer devant un worker.
             is_gold = row_id in gold_answers
             if not is_gold and not badges and random.random() < taux_gold:
                 is_gold = True
-                gold_answers[row_id] = row
+                gold_answers[row_id] = ligne_nettoyee
+
+            # Cas 1 -- ligne propre APRÈS nettoyage automatique et non tirée
+            # au sort comme gold standard : validée sans aucune intervention
+            # humaine, le worker ne la verra jamais.
+            auto_validee = not badges and not is_gold
 
             task_data = {
                 "project_id": project_id,
                 "row_id": row_id,
-                "raw_data": row,
+                "raw_data": ligne_nettoyee,
                 "header": header,
                 "badges": badges,
                 "schema_json": schema_definition,
                 "redundancy_level": 1 if is_gold else choisir_redondance(len(badges)),
                 "is_gold_standard": is_gold,
                 "gold_answer": gold_answers.get(row_id),
-                "status": "available",
+                "status": "completed" if auto_validee else "available",
+                "resultat_final": ligne_nettoyee if auto_validee else None,
             }
             micro_tasks_payload.append(task_data)
 
+    nb_auto = sum(1 for t in micro_tasks_payload if t["status"] == "completed")
+    nb_gold = sum(t["is_gold_standard"] for t in micro_tasks_payload)
     print(f"✅ {len(micro_tasks_payload)} micro-tâches générées "
-          f"({sum(t['is_gold_standard'] for t in micro_tasks_payload)} gold standards).")
+          f"({nb_auto} validées automatiquement, {nb_gold} gold standards, "
+          f"{len(micro_tasks_payload) - nb_auto} pour les workers).")
     return micro_tasks_payload
 
 

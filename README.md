@@ -27,6 +27,23 @@ ce n'est pas optionnel). Ne la perds jamais et ne la commite jamais : sans
 elle, les données déjà chiffrées deviennent illisibles pour de bon, y
 compris pour toi.
 
+## Nettoyage automatique avant toute tâche humaine
+
+À l'ingestion, chaque ligne passe par un nettoyage déterministe avant même
+qu'une micro-tâche ne soit créée : espaces superflus, numéros de téléphone
+normalisés (`+33...`), dates non ambiguës reformatées (AAAA-MM-JJ), noms
+capitalisés (type `nom`). Si plus aucune anomalie ne subsiste après ce
+nettoyage, la ligne est validée automatiquement -- **aucun worker ne la voit
+jamais**, sauf un petit échantillon tiré au sort comme "gold standard" pour
+garder un contrôle qualité humain (voir plus bas).
+
+Deux choses volontairement PAS automatisées :
+- **Domaine email approximatif** (`wanadoo.f` → `wanadoo.fr`) : seulement
+  suggéré en badge, jamais corrigé seul -- une mauvaise déduction produirait
+  une donnée fausse avec une confiance totale, pire que de la laisser flaguée.
+- **Montants écrits en lettres** ("quinze euros") : détecté comme anomalie,
+  jamais converti -- un vrai sujet de traitement du langage, pas une regex.
+
 ## Masquage des colonnes sensibles
 
 À la définition du schéma, le client peut marquer une colonne comme

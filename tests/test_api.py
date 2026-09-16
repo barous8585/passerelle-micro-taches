@@ -162,21 +162,39 @@ def test_creation_projet_et_ingestion_csv():
 # DISTRIBUTION ET VERROUILLAGE ANTI-DOUBLON
 # ---------------------------------------------------------------------------
 
-def creer_projet_isole(nom_projet, client_email="startup@ia.fr"):
+def creer_projet_isole(nom_projet, client_email="startup@ia.fr", taux_gold=0.0, gold_answers=None):
     """Crée un projet + l'ingère avec le CSV de test -> donne à un test un lot
     de micro-tâches totalement frais, sans verrou ni soumission héritée d'un
-    autre test. Évite le couplage d'état entre tests."""
+    autre test. Évite le couplage d'état entre tests.
+
+    Passe par process_csv_to_microtasks() directement (pas l'endpoint HTTP)
+    pour contrôler taux_gold de façon déterministe -- sans ça, le tirage
+    aléatoire par défaut (8%) rendrait les tests qui dépendent d'une
+    redondance précise intermittents."""
+    from analyzer import process_csv_to_microtasks
+    from crypto import chiffrer_json
+    from models import MicroTask, get_engine, get_session_factory
+
     r = client.post(
         "/projects",
         json={"titre": nom_projet, "colonnes_schema": SCHEMA_TEST, "prix_par_ligne": 0.05},
         headers=auth_header(client_email, "pw123"),
     )
     project_id = r.json()["project_id"]
-    with open(CSV_TEST, "rb") as f:
-        client.post(
-            f"/projects/{project_id}/ingest", files={"fichier": ("d.csv", f, "text/csv")},
-            headers=auth_header(client_email, "pw123"),
-        )
+
+    tasks = process_csv_to_microtasks(CSV_TEST, project_id, SCHEMA_TEST, taux_gold=taux_gold, gold_answers=gold_answers)
+    db = get_session_factory(get_engine())()
+    try:
+        for t in tasks:
+            t["raw_data"] = chiffrer_json(t["raw_data"])
+            if t.get("gold_answer") is not None:
+                t["gold_answer"] = chiffrer_json(t["gold_answer"])
+            if t.get("resultat_final") is not None:
+                t["resultat_final"] = chiffrer_json(t["resultat_final"])
+            db.add(MicroTask(**t))
+        db.commit()
+    finally:
+        db.close()
     return project_id
 
 
@@ -184,8 +202,14 @@ def creer_projet_isole(nom_projet, client_email="startup@ia.fr"):
 # DISTRIBUTION ET VERROUILLAGE ANTI-DOUBLON
 # ---------------------------------------------------------------------------
 
+GOLD_LIGNE_PROPRE = {0: ["Jean Dupont", "jdupont@gmail.com", "1998-04-03"]}  # ligne 0 du CSV de test, forcée en gold standard
+
+
 def test_deux_workers_ne_recoivent_jamais_la_meme_ligne_propre():
-    project_id = creer_projet_isole("Test verrouillage")
+    # Ligne 0 forcée en gold standard (redondance=1, worker-facing) --
+    # sans ça, une ligne propre est validée automatiquement et n'atteint
+    # jamais un worker (voir le nouveau pipeline d'auto-nettoyage).
+    project_id = creer_projet_isole("Test verrouillage", gold_answers=dict(GOLD_LIGNE_PROPRE))
     r1 = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
     r2 = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w2@uco.fr", "pw123"))
     assert r1.status_code == 200 and r2.status_code == 200
@@ -193,7 +217,8 @@ def test_deux_workers_ne_recoivent_jamais_la_meme_ligne_propre():
 
 
 def test_worker_ne_peut_pas_soumettre_deux_fois_sur_la_meme_tache():
-    project_id = creer_projet_isole("Test anti double-soumission")
+    # Redondance=1 nécessaire pour un paiement en un seul passage -- forcé via gold standard.
+    project_id = creer_projet_isole("Test anti double-soumission", gold_answers=dict(GOLD_LIGNE_PROPRE))
     r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
     tache = r.json()
 
@@ -225,16 +250,46 @@ def test_worker_ne_peut_pas_soumettre_sans_authentification():
 # ---------------------------------------------------------------------------
 
 def test_ligne_propre_redondance_1_payee_immediatement():
-    project_id = creer_projet_isole("Test paiement immediat")
+    # Forcée en gold standard pour tester le paiement immédiat en redondance=1
+    # -- une ligne propre non tirée au sort est désormais auto-validée sans
+    # jamais atteindre de worker (voir test_pipeline_auto_nettoyage.py).
+    project_id = creer_projet_isole("Test paiement immediat", gold_answers=dict(GOLD_LIGNE_PROPRE))
     r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
     tache = r.json()
-    assert tache["row_id"] == 0  # la ligne propre du CSV de test, toujours servie en premier
+    assert tache["row_id"] == 0
 
     r = client.post(
         f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
         headers=auth_header("w1@uco.fr", "pw123"),
     )
     assert r.json()["paye"] is True
+
+
+def test_ligne_propre_sans_tirage_gold_validee_automatiquement_sans_worker():
+    """Le cœur du nouveau pipeline : une ligne déjà propre après nettoyage
+    automatique, non tirée au sort comme gold standard, doit être marquée
+    complétée dès l'ingestion -- aucun worker ne doit jamais la voir."""
+    project_id = creer_projet_isole("Test auto-validation", taux_gold=0.0)
+
+    r = client.get("/projects/mine", headers=auth_header("startup@ia.fr", "pw123"))
+    projet = next(p for p in r.json()["projets"] if p["project_id"] == project_id)
+    # Lignes 0 et 3 du CSV de test sont propres après nettoyage (espaces
+    # superflus corrigés automatiquement pour la ligne 3) -> auto-validées.
+    assert projet["lignes_completees"] == 2
+
+    # Aucune tâche pour ces deux lignes ne doit jamais être servie à un worker
+    row_ids_vus = set()
+    for _ in range(4):  # borne dure -- au plus 4 lignes au total dans le CSV de test
+        r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
+        if r.status_code == 404:
+            break
+        tache = r.json()
+        row_ids_vus.add(tache["row_id"])
+        client.post(
+            f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+            headers=auth_header("w1@uco.fr", "pw123"),
+        )
+    assert row_ids_vus == {1, 2}  # jamais 0 ni 3
 
 
 def test_litige_est_paye_mais_impacte_le_trust_score():
@@ -322,7 +377,10 @@ def test_projets_disponibles_et_liberation_de_verrou():
     assert r.status_code == 200
     projets = {p["project_id"]: p for p in r.json()["projets"]}
     assert project_id in projets
-    assert projets[project_id]["taches_disponibles"] == 4
+    # Sur les 4 lignes du CSV de test, 2 sont auto-validées sans worker
+    # (lignes 0 et 3, propres après nettoyage automatique) -- seules les
+    # 2 lignes réellement sales (1 et 2) doivent apparaître comme disponibles.
+    assert projets[project_id]["taches_disponibles"] == 2
 
     r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
     task_id = r.json()["task_id"]
@@ -347,15 +405,29 @@ def test_projets_mine_et_export_csv():
     r = client.get("/projects/mine", headers=auth_header("startup@ia.fr", "pw123"))
     projet = next(p for p in r.json()["projets"] if p["project_id"] == project_id)
     assert projet["total_lignes"] == 4
-    assert projet["lignes_completees"] == 0
+    # 2 lignes (0 et 3) sont auto-validées dès l'ingestion -- pas besoin
+    # d'attendre un worker pour qu'elles comptent comme complétées.
+    assert projet["lignes_completees"] == 2
 
-    # Export avant complétion -> refusé
+    # Export partiel possible immédiatement (2 lignes déjà complètes)
     r = client.get(f"/projects/{project_id}/export", headers=auth_header("startup@ia.fr", "pw123"))
-    assert r.status_code == 404
+    assert r.status_code == 200
+    assert "jdupont@gmail.com" in r.text
 
     # Un client ne peut pas exporter le projet d'un autre
     r = client.get(f"/projects/{project_id}/export", headers=auth_header("autre_client@ia.fr", "pw123"))
     assert r.status_code == 403
+
+
+def test_export_refuse_si_aucune_ligne_completee():
+    # Force les 2 lignes propres du CSV (0 et 3) en gold standard, pour
+    # qu'aucune ne s'auto-valide -- seul moyen d'obtenir un projet où
+    # rien n'est encore complété juste après l'ingestion.
+    gold = {0: ["Jean Dupont", "jdupont@gmail.com", "1998-04-03"],
+            3: ["Sophie Legrand", "sophie@legrand.fr", "1990-11-30"]}
+    project_id = creer_projet_isole("Test export vide", gold_answers=gold)
+    r = client.get(f"/projects/{project_id}/export", headers=auth_header("startup@ia.fr", "pw123"))
+    assert r.status_code == 404
 
 
 def test_depot_excel_xlsx_fonctionne_comme_le_csv():
@@ -400,13 +472,9 @@ def test_depot_excel_xlsx_fonctionne_comme_le_csv():
 def test_export_xlsx_produit_un_classeur_valide():
     import openpyxl
 
+    # 2 lignes (0 et 3) sont auto-validées dès l'ingestion -- pas besoin
+    # de faire intervenir un worker pour avoir du contenu à exporter.
     project_id = creer_projet_isole("Test export xlsx")
-    r = client.get("/tasks/next", params={"project_id": project_id}, headers=auth_header("w1@uco.fr", "pw123"))
-    tache = r.json()
-    client.post(
-        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
-        headers=auth_header("w1@uco.fr", "pw123"),
-    )
 
     r = client.get(f"/projects/{project_id}/export?format=xlsx", headers=auth_header("startup@ia.fr", "pw123"))
     assert r.status_code == 200
@@ -419,7 +487,7 @@ def test_export_xlsx_produit_un_classeur_valide():
         wb = openpyxl.load_workbook(chemin_temp)
         lignes = list(wb.active.iter_rows(values_only=True))
         assert lignes[0] == ("nom", "email", "date_naiss")
-        assert len(lignes) == 2  # en-tête + 1 ligne complétée
+        assert len(lignes) == 3  # en-tête + 2 lignes auto-validées (0 et 3)
     finally:
         os.remove(chemin_temp)
 

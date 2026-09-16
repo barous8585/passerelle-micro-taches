@@ -373,7 +373,9 @@ async function analyserFichier() {
       <td>${col.name}</td>
       <td><select onchange="modifierType(${i}, this.value)">
         <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
+        <option value="nom" ${col.type==='nom'?'selected':''}>Nom / prénom (capitalisation auto)</option>
         <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
+        <option value="telephone" ${col.type==='telephone'?'selected':''}>Téléphone (normalisé +33...)</option>
         <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
         <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
       </select></td>
@@ -414,7 +416,7 @@ async function validerEtLancer() {
   const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
   const ingest = await ingestRes.json();
 
-  resEl.textContent = `Projet créé — ${ingest.nb_taches_creees} micro-tâches prêtes.`;
+  resEl.textContent = `Projet créé — ${ingest.nb_validees_automatiquement} ligne(s) validée(s) automatiquement, ${ingest.nb_pour_workers} confiée(s) aux étudiants.`;
   await chargerMesProjets();
   setTimeout(() => afficherProjet(projet.project_id), 600);
 }
