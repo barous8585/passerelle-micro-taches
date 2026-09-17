@@ -27,11 +27,11 @@ from fastapi.responses import HTMLResponse
 from typing import Annotated
 
 from pydantic import BaseModel, Field, StringConstraints
-from sqlalchemy import Column, DateTime, ForeignKey, Integer
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer
 from sqlalchemy.exc import IntegrityError
 
-from analyzer import (infer_schema, normaliser_automatiquement,
-                       process_csv_to_microtasks, valider_consensus)
+from analyzer import (detect_anomalies, infer_schema, normaliser_automatiquement,
+                       normaliser_espaces, process_csv_to_microtasks, valider_consensus)
 from auth import get_current_user, hash_password, init_auth_db, require_role
 from crypto import chiffrer_json, dechiffrer_json
 from notifications import notifier_nouveau_projet
@@ -51,6 +51,17 @@ class TaskLock(Base):
     micro_task_id = Column(Integer, ForeignKey("micro_tasks.id"))
     worker_id = Column(Integer, ForeignKey("users.id"))
     locked_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class Payout(Base):
+    """Trace d'un versement marqué comme effectué par un admin -- le virement
+    réel (Wave, Orange Money, etc.) se fait hors plateforme, cette table sert
+    juste à garder un historique et remettre le solde à zéro."""
+    __tablename__ = "payouts"
+    id = Column(Integer, primary_key=True)
+    worker_id = Column(Integer, ForeignKey("users.id"))
+    montant = Column(Float, nullable=False)
+    date_versement = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 LOCK_TIMEOUT_MINUTES = 15
@@ -280,6 +291,37 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             task.header, dechiffrer_json(task.raw_data), payload.reponse, task.schema_json
         )
 
+        # Contrôle qualité bloquant : les badges affichés au worker (champ
+        # requis vide, format invalide) ne servaient jusqu'ici que d'indice
+        # visuel -- rien n'empêchait de soumettre quand même sans corriger.
+        # On relance la même détection sur SA réponse et on refuse la
+        # soumission si un problème bloquant subsiste sur une colonne QU'IL
+        # PEUT VOIR ET CORRIGER -- jamais sur une colonne sensible, que le
+        # worker ne voit ni ne modifie jamais (ça bloquerait sans issue).
+        # Les simples avertissements (espaces) ne bloquent pas : ils sont
+        # déjà corrigés silencieusement ci-dessous.
+        badges_apres_soumission = detect_anomalies(reponse_complete, task.header, task.schema_json)
+        _, _, badges_visibles_apres_soumission = _filtrer_pour_worker(
+            task.header, reponse_complete, badges_apres_soumission, task.schema_json
+        )
+        bloquants_visibles = [
+            b for b in badges_visibles_apres_soumission
+            if b["type"] == "danger" or b["msg"] == "Champ vide/absent"
+        ]
+        if bloquants_visibles:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": "Certains champs ne sont pas encore corrects, corrige-les avant de valider.",
+                    "colonnes": bloquants_visibles,
+                },
+            )
+
+        # Les espaces superflus restants (colonnes non couvertes par la
+        # normalisation automatique par type, ex. ville/code postal) sont
+        # corrigés silencieusement plutôt que de pénaliser le worker pour ça.
+        reponse_complete = [normaliser_espaces(v) for v in reponse_complete]
+
         # Empêche un worker de soumettre plusieurs fois sur la même tâche
         # (auparavant : chaque re-soumission retraitait ET repayait toutes
         # les soumissions précédentes -- faille exploitable, corrigée ici).
@@ -298,12 +340,23 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
 
         submissions = db.query(Submission).filter_by(micro_task_id=task_id).all()
 
-        # --- Cas gold standard : seul cas où le trust_score bouge FORTEMENT,
-        # car c'est le seul signal 100% fiable (on connaît la vraie réponse).
-        # Le worker est payé dans tous les cas -- gold standard = contrôle
-        # qualité invisible, pas une pénalité de rémunération. ---
+        # --- Cas gold standard : sert à calibrer le trust_score d'un worker
+        # sur des lignes dont on connaît déjà la réponse attendue.
+        #
+        # ATTENTION -- ici, "réponse attendue" vient à 100% du nettoyage
+        # automatique lui-même (aucune vérité externe fournie), donc ce
+        # n'est PAS une vérité absolue : si le worker n'est pas d'accord
+        # avec elle, ça peut vouloir dire qu'il a repéré une vraie erreur
+        # que la machine avait laissée passer. Avant, on jetait purement et
+        # simplement sa correction et on gardait la version machine -- une
+        # ligne fausse pouvait donc rester "correcte" pour toujours, sans
+        # que personne ne s'en aperçoive. Maintenant, un désaccord est traité
+        # comme un litige normal (voir "Projets & litiges" dans l'admin) : la
+        # correction du worker est conservée et la ligne est signalée pour
+        # arbitrage humain, au lieu d'être écrasée en silence.
         if task.is_gold_standard:
-            correct = reponse_complete == dechiffrer_json(task.gold_answer)
+            reponse_reference = dechiffrer_json(task.gold_answer)
+            correct = reponse_complete == reponse_reference
             worker = db.query(User).get(worker_id)
             worker.trust_score = min(100.0, worker.trust_score + 1) if correct \
                 else max(0.0, worker.trust_score - 5)
@@ -312,9 +365,12 @@ def submit_task(task_id: int, payload: SubmissionIn, user: User = Depends(requir
             worker.solde_disponible += prix
             db.query(Submission).filter_by(micro_task_id=task_id, worker_id=worker_id).update({"montant": prix})
             task.status = TaskStatus.completed
-            # La réponse de référence du gold standard EST la valeur propre connue
-            # -- on la restitue telle quelle au client, peu importe ce que le worker a tapé.
-            task.resultat_final = task.gold_answer
+            if correct:
+                task.resultat_final = task.gold_answer
+                task.eu_litige = False
+            else:
+                task.resultat_final = chiffrer_json(reponse_complete)
+                task.eu_litige = True
             db.commit()
             return {"status": "completed", "paye": True}
 
@@ -727,13 +783,19 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
 # approuver ou refuser une demande depuis /admin, sans terminal.
 
 @app.get("/admin/comptes")
-def admin_lister_comptes(statut: str = "en_attente", user: User = Depends(require_role("admin"))):
-    """statut: 'en_attente' (défaut) ou 'tous'."""
+def admin_lister_comptes(
+    statut: str = "en_attente",
+    recherche: str | None = None,
+    user: User = Depends(require_role("admin")),
+):
+    """statut: 'en_attente' (défaut) ou 'tous'. recherche : filtre par email (contient)."""
     db = SessionLocal()
     try:
         q = db.query(User).filter(User.role != RoleEnum.admin)
         if statut == "en_attente":
             q = q.filter_by(approuve=False)
+        if recherche:
+            q = q.filter(User.email.ilike(f"%{recherche.strip()}%"))
         comptes = q.order_by(User.id.desc()).all()
         return {
             "comptes": [
@@ -744,10 +806,138 @@ def admin_lister_comptes(statut: str = "en_attente", user: User = Depends(requir
                     "approuve": c.approuve,
                     "secteur_activite": c.secteur_activite,
                     "trust_score": round(c.trust_score, 1) if c.role == RoleEnum.worker else None,
+                    "tasks_completed": c.tasks_completed if c.role == RoleEnum.worker else None,
+                    "solde_disponible": round(c.solde_disponible, 2) if c.role == RoleEnum.worker else None,
                 }
                 for c in comptes
             ]
         }
+    finally:
+        db.close()
+
+
+@app.get("/admin/paiements")
+def admin_lister_paiements(user: User = Depends(require_role("admin"))):
+    """Workers avec un solde à verser (> 0), triés par montant décroissant --
+    le virement réel se fait hors plateforme (Wave/Orange Money/virement),
+    ceci sert juste à savoir qui est éligible et à garder une trace."""
+    db = SessionLocal()
+    try:
+        workers = (
+            db.query(User)
+            .filter(User.role == RoleEnum.worker, User.solde_disponible > 0)
+            .order_by(User.solde_disponible.desc())
+            .all()
+        )
+        return {
+            "seuil_decaissement": SEUIL_DECAISSEMENT,
+            "workers": [
+                {
+                    "id": w.id,
+                    "email": w.email,
+                    "solde_disponible": round(w.solde_disponible, 2),
+                    "tasks_completed": w.tasks_completed,
+                    "eligible": w.solde_disponible >= SEUIL_DECAISSEMENT,
+                }
+                for w in workers
+            ],
+        }
+    finally:
+        db.close()
+
+
+@app.post("/admin/workers/{worker_id}/marquer-paye")
+def admin_marquer_paye(worker_id: int, user: User = Depends(require_role("admin"))):
+    """Ne déclenche AUCUN virement réel -- l'admin fait le virement lui-même
+    (Wave, Orange Money, etc.) puis clique ici pour remettre le solde à zéro
+    et garder une trace dans payouts."""
+    db = SessionLocal()
+    try:
+        worker = db.query(User).filter_by(id=worker_id, role=RoleEnum.worker).first()
+        if not worker:
+            raise HTTPException(status_code=404, detail="Worker introuvable")
+        if worker.solde_disponible <= 0:
+            raise HTTPException(status_code=400, detail="Rien à verser pour ce compte")
+        montant = worker.solde_disponible
+        db.add(Payout(worker_id=worker.id, montant=montant))
+        worker.solde_disponible = 0.0
+        db.commit()
+        return {"worker_id": worker.id, "montant_verse": round(montant, 2)}
+    finally:
+        db.close()
+
+
+@app.get("/admin/projets")
+def admin_lister_projets(user: User = Depends(require_role("admin"))):
+    db = SessionLocal()
+    try:
+        projets = db.query(Project).order_by(Project.id.desc()).all()
+        resultat = []
+        for p in projets:
+            taches = db.query(MicroTask).filter_by(project_id=p.id).all()
+            client = db.query(User).get(p.client_id)
+            resultat.append({
+                "id": p.id,
+                "titre": p.titre,
+                "client_email": client.email if client else "?",
+                "prix_par_ligne": p.prix_par_ligne,
+                "total_lignes": len(taches),
+                "lignes_completees": sum(1 for t in taches if t.status == TaskStatus.completed),
+                "lignes_litigieuses": sum(1 for t in taches if t.eu_litige),
+            })
+        return {"projets": resultat}
+    finally:
+        db.close()
+
+
+@app.get("/admin/projets/{project_id}/litiges")
+def admin_lister_litiges(project_id: int, user: User = Depends(require_role("admin"))):
+    """Détail des lignes en désaccord entre workers -- montre chaque réponse
+    soumise (déchiffrée) pour permettre un arbitrage manuel éclairé."""
+    db = SessionLocal()
+    try:
+        taches = db.query(MicroTask).filter_by(project_id=project_id, eu_litige=True).all()
+        resultat = []
+        for t in taches:
+            submissions = db.query(Submission).filter_by(micro_task_id=t.id).all()
+            resultat.append({
+                "task_id": t.id,
+                "row_id": t.row_id,
+                "header": t.header,
+                "resultat_final_actuel": dechiffrer_json(t.resultat_final),
+                "soumissions": [
+                    {
+                        "worker_email": (db.query(User).get(s.worker_id) or User(email="?")).email,
+                        "reponse": dechiffrer_json(s.reponse),
+                    }
+                    for s in submissions
+                ],
+            })
+        return {"litiges": resultat}
+    finally:
+        db.close()
+
+
+class ResoudreLitigeIn(BaseModel):
+    valeurs: list[Annotated[str, StringConstraints(max_length=500)]] = Field(..., max_length=50)
+
+
+@app.post("/admin/taches/{task_id}/resoudre-litige")
+def admin_resoudre_litige(task_id: int, payload: ResoudreLitigeIn, user: User = Depends(require_role("admin"))):
+    """L'admin tranche manuellement la valeur finale d'une ligne litigieuse --
+    ne rejoue AUCUN paiement (déjà versé au moment du consensus initial),
+    corrige seulement ce que le client recevra à l'export."""
+    db = SessionLocal()
+    try:
+        tache = db.query(MicroTask).filter_by(id=task_id).first()
+        if not tache:
+            raise HTTPException(status_code=404, detail="Tâche introuvable")
+        if len(payload.valeurs) != len(tache.header):
+            raise HTTPException(status_code=400, detail=f"{len(tache.header)} valeur(s) attendue(s)")
+        tache.resultat_final = chiffrer_json(payload.valeurs)
+        tache.eu_litige = False
+        db.commit()
+        return {"task_id": tache.id, "resolu": True}
     finally:
         db.close()
 

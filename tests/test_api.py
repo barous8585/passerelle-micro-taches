@@ -562,9 +562,14 @@ def test_colonne_sensible_jamais_montree_au_worker_mais_preservee_a_export():
     assert "email" not in tache["header"]
     assert len(tache["header"]) == 2
 
-    # Le worker ne soumet que les 2 colonnes visibles
+    # Le worker ne soumet que les 2 colonnes visibles -- si l'une d'elles a
+    # un badge bloquant (ex. date ambiguë), il doit d'abord la corriger avant
+    # que la soumission soit acceptée.
+    reponse_corrigee = list(tache["raw_data"])
+    idx_date = tache["header"].index("date_naiss")
+    reponse_corrigee[idx_date] = "1998-04-03"
     r = client.post(
-        f"/tasks/{tache['task_id']}/submit", json={"reponse": tache["raw_data"]},
+        f"/tasks/{tache['task_id']}/submit", json={"reponse": reponse_corrigee},
         headers=auth_header("w1@uco.fr", "pw123"),
     )
     assert r.status_code == 200

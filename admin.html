@@ -115,6 +115,32 @@
   .onglets-filtre { display: flex; gap: 6px; margin-bottom: 16px; }
   .onglets-filtre button { padding: 6px 14px; font-size: 12.5px; }
   .onglets-filtre button.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  .ligne-recherche { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .ligne-recherche input { max-width: 240px; margin-bottom: 0; padding: 7px 12px; font-size: 13px; }
+
+  .paiement {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 14px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .paiement .montant { font-family: var(--mono); font-size: 16px; font-weight: 700; color: var(--success); }
+  .paiement .eligible-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--success-bg); color: var(--success); margin-left: 8px; }
+
+  .projet-admin {
+    padding: 14px 16px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 10px;
+  }
+  .projet-admin .ligne-haut { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .projet-admin .titre { font-weight: 600; font-size: 13.5px; }
+  .projet-admin .sousinfo { font-size: 12px; color: var(--text-tertiary); margin-top: 3px; }
+  .projet-admin .litige-badge { color: var(--warning); font-weight: 600; font-size: 12px; }
+
+  .litige-carte { padding: 14px; border: 1.5px solid var(--warning-bg); background: var(--warning-bg); border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .litige-carte .pos { font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 8px; font-weight: 600; }
+  .litige-carte table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 10px; background: #fff; border-radius: 6px; overflow: hidden; }
+  .litige-carte th, .litige-carte td { padding: 6px 8px; border-bottom: 1px solid var(--border); text-align: left; }
+  .litige-carte th { font-size: 10.5px; color: var(--text-tertiary); text-transform: uppercase; }
+  .litige-carte .valeurs input { margin-bottom: 0; padding: 6px 8px; font-size: 12.5px; }
 </style>
 </head>
 <body>
@@ -150,13 +176,28 @@
 
       <div class="stats-grille" id="stats_grille"></div>
 
-      <div class="panel">
+      <div class="panel" style="margin-bottom:20px;">
         <h2>Demandes de compte</h2>
-        <div class="onglets-filtre">
-          <button class="actif" data-filtre="en_attente" onclick="changerFiltre('en_attente')">En attente</button>
-          <button data-filtre="tous" onclick="changerFiltre('tous')">Tous les comptes</button>
+        <div class="ligne-recherche">
+          <div class="onglets-filtre" style="margin-bottom:0;">
+            <button class="actif" data-filtre="en_attente" onclick="changerFiltre('en_attente')">En attente</button>
+            <button data-filtre="tous" onclick="changerFiltre('tous')">Tous les comptes</button>
+          </div>
+          <input type="text" id="recherche_compte" placeholder="Rechercher par email..." oninput="rechercheDebouncee()">
         </div>
         <div id="liste_demandes"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:20px;">
+        <h2>Paiements à verser</h2>
+        <p class="msg" style="margin:-6px 0 14px;">Le virement réel (Wave, Orange Money, etc.) se fait hors plateforme — clique "Marquer comme versé" une fois le virement fait, pour garder une trace et remettre le solde à zéro.</p>
+        <div id="liste_paiements"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Projets &amp; litiges</h2>
+        <div id="liste_projets_admin"></div>
+        <div id="detail_litiges" style="display:none; margin-top:16px; padding-top:16px; border-top:1.5px solid var(--border);"></div>
       </div>
 
     </div>
@@ -227,6 +268,8 @@ async function tenterConnexion(header) {
 
   chargerStats();
   chargerDemandes();
+  chargerPaiements();
+  chargerProjetsAdmin();
 }
 
 if (authHeader) tenterConnexion(authHeader);
@@ -249,14 +292,23 @@ function changerFiltre(f) {
   chargerDemandes();
 }
 
+let timerRecherche = null;
+function rechercheDebouncee() {
+  clearTimeout(timerRecherche);
+  timerRecherche = setTimeout(chargerDemandes, 300);
+}
+
 async function chargerDemandes() {
   const liste = document.getElementById('liste_demandes');
-  const res = await fetch(`/admin/comptes?statut=${filtreActuel}`, { headers: { Authorization: authHeader } });
+  const recherche = document.getElementById('recherche_compte').value.trim();
+  const params = new URLSearchParams({ statut: filtreActuel });
+  if (recherche) params.set('recherche', recherche);
+  const res = await fetch(`/admin/comptes?${params}`, { headers: { Authorization: authHeader } });
   if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
   const data = await res.json();
 
   if (!data.comptes.length) {
-    animer(liste, `<div class="vide">${filtreActuel === 'en_attente' ? 'Aucune demande en attente 🎉' : 'Aucun compte pour le moment.'}</div>`);
+    animer(liste, `<div class="vide">${recherche ? 'Aucun compte ne correspond à cette recherche.' : (filtreActuel === 'en_attente' ? 'Aucune demande en attente 🎉' : 'Aucun compte pour le moment.')}</div>`);
     return;
   }
 
@@ -293,6 +345,118 @@ async function agirSurCompte(id, action) {
     alert('Erreur réseau, réessaie.');
     boutons.forEach(b => b.disabled = false);
   }
+}
+
+// --- Paiements -------------------------------------------------------------
+
+async function chargerPaiements() {
+  const liste = document.getElementById('liste_paiements');
+  const res = await fetch('/admin/paiements', { headers: { Authorization: authHeader } });
+  if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
+  const data = await res.json();
+
+  if (!data.workers.length) {
+    animer(liste, '<div class="vide">Aucun solde à verser pour le moment.</div>');
+    return;
+  }
+
+  animer(liste, data.workers.map(w => `
+    <div class="paiement" id="paiement_${w.id}">
+      <div>
+        <div><strong>${escapeHtml(w.email)}</strong>${w.eligible ? `<span class="eligible-badge">Seuil atteint</span>` : ''}</div>
+        <div class="msg" style="margin-top:2px;">${w.tasks_completed} tâche(s) complétée(s)</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:14px;">
+        <span class="montant">${w.solde_disponible.toFixed(2)} €</span>
+        <button class="succes" onclick="marquerPaye(${w.id}, '${escapeHtml(w.email)}', ${w.solde_disponible})">Marquer comme versé</button>
+      </div>
+    </div>
+  `).join(''));
+}
+
+async function marquerPaye(id, email, montant) {
+  if (!confirm(`Confirmer que tu as bien viré ${montant.toFixed(2)} € à ${email} ?\n\nCeci remet son solde à zéro sur la plateforme — assure-toi d'avoir fait le virement réel avant.`)) return;
+  const bloc = document.getElementById(`paiement_${id}`);
+  bloc.querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    const res = await fetch(`/admin/workers/${id}/marquer-paye`, { method: 'POST', headers: { Authorization: authHeader } });
+    if (!res.ok) { alert("Erreur lors de l'action."); bloc.querySelectorAll('button').forEach(b => b.disabled = false); return; }
+    chargerPaiements();
+  } catch {
+    alert('Erreur réseau, réessaie.');
+    bloc.querySelectorAll('button').forEach(b => b.disabled = false);
+  }
+}
+
+// --- Projets & litiges -------------------------------------------------------
+
+async function chargerProjetsAdmin() {
+  const liste = document.getElementById('liste_projets_admin');
+  const res = await fetch('/admin/projets', { headers: { Authorization: authHeader } });
+  if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
+  const data = await res.json();
+
+  if (!data.projets.length) {
+    animer(liste, '<div class="vide">Aucun projet déposé pour le moment.</div>');
+    return;
+  }
+
+  animer(liste, data.projets.map(p => `
+    <div class="projet-admin">
+      <div class="ligne-haut">
+        <div>
+          <div class="titre">${escapeHtml(p.titre)}</div>
+          <div class="sousinfo">${escapeHtml(p.client_email)} · ${p.lignes_completees}/${p.total_lignes} lignes · ${p.prix_par_ligne.toFixed(2)} €/ligne</div>
+        </div>
+        ${p.lignes_litigieuses > 0
+          ? `<button class="refus" onclick="voirLitiges(${p.id}, '${escapeHtml(p.titre)}')"><span class="litige-badge">${p.lignes_litigieuses} litige(s)</span> — voir</button>`
+          : `<span class="msg" style="margin:0;">Aucun litige</span>`}
+      </div>
+    </div>
+  `).join(''));
+}
+
+async function voirLitiges(projectId, titre) {
+  const zone = document.getElementById('detail_litiges');
+  zone.style.display = 'block';
+  animer(zone, '<div class="bloc-charge"><span class="spinner"></span>Chargement des litiges...</div>');
+
+  const res = await fetch(`/admin/projets/${projectId}/litiges`, { headers: { Authorization: authHeader } });
+  if (!res.ok) { animer(zone, '<div class="vide">Erreur de chargement.</div>'); return; }
+  const data = await res.json();
+
+  if (!data.litiges.length) {
+    animer(zone, '<div class="vide">Plus aucun litige sur ce projet.</div>');
+    return;
+  }
+
+  animer(zone, `<h2>Litiges — ${escapeHtml(titre)}</h2>` + data.litiges.map(l => `
+    <div class="litige-carte">
+      <div class="pos">Ligne #${l.row_id}</div>
+      <table>
+        <tr><th>Worker</th>${l.header.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr>
+        ${l.soumissions.map(s => `<tr><td>${escapeHtml(s.worker_email)}</td>${s.reponse.map(v => `<td>${escapeHtml(v)}</td>`).join('')}</tr>`).join('')}
+      </table>
+      <div class="valeurs" style="display:grid; grid-template-columns:repeat(${l.header.length}, 1fr); gap:8px;" id="valeurs_${l.task_id}">
+        ${l.header.map((h, i) => `<input type="text" data-col="${i}" value="${escapeHtml(l.resultat_final_actuel[i] ?? '')}" placeholder="${escapeHtml(h)}">`).join('')}
+      </div>
+      <button class="principal" style="margin-top:10px;" onclick="resoudreLitige(${l.task_id}, ${projectId}, '${escapeHtml(titre)}')">Valider cette version</button>
+    </div>
+  `).join(''));
+}
+
+async function resoudreLitige(taskId, projectId, titre) {
+  const inputs = document.querySelectorAll(`#valeurs_${taskId} input`);
+  const valeurs = new Array(inputs.length);
+  inputs.forEach(inp => { valeurs[parseInt(inp.dataset.col, 10)] = inp.value; });
+
+  const res = await fetch(`/admin/taches/${taskId}/resoudre-litige`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+    body: JSON.stringify({ valeurs }),
+  });
+  if (!res.ok) { alert('Erreur lors de la résolution du litige.'); return; }
+  chargerProjetsAdmin();
+  voirLitiges(projectId, titre);
 }
 </script>
 </body>

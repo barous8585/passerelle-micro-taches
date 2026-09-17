@@ -129,6 +129,8 @@
   }
   .champ input.a-corriger { border-color: var(--danger); }
   .champ input.a-verifier { border-color: var(--warning); }
+  .champ input.input-bloquant { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-bg); animation: secouer .3s; }
+  @keyframes secouer { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
   .actions-tache { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
 
@@ -532,7 +534,20 @@ async function validerTache() {
     });
 
     if (!res.ok) {
-      msg.textContent = "Erreur lors de l'envoi. Réessaie.";
+      inputs.forEach(inp => inp.classList.remove('input-bloquant'));
+      if (res.status === 422) {
+        const erreur = await res.json();
+        const colonnes = (erreur.detail && erreur.detail.colonnes) || [];
+        colonnes.forEach(b => {
+          const champ = document.querySelector(`#zone_tache input[data-col="${b.col_index}"]`);
+          if (champ) { champ.classList.add('input-bloquant'); champ.focus(); }
+        });
+        msg.textContent = colonnes.length
+          ? `À corriger avant de valider : ${colonnes.map(b => b.msg).join(', ')}.`
+          : "Certains champs ne sont pas encore corrects, corrige-les avant de valider.";
+      } else {
+        msg.textContent = "Erreur lors de l'envoi. Réessaie.";
+      }
       btnPasser.disabled = false;
       btnValider.disabled = false;
       btnValider.textContent = 'Valider';

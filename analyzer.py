@@ -335,7 +335,7 @@ def infer_schema(file_path, sample_size=20):
 
 
 def process_csv_to_microtasks(file_path, project_id, schema_definition,
-                               taux_gold=0.08, gold_answers=None):
+                               taux_gold=0.25, gold_answers=None):
     """
     Découpe le CSV, génère les alertes, injecte des gold standards et
     prépare le payload prêt pour la table `micro_tasks`.
