@@ -174,15 +174,41 @@
 
   .pleine-largeur { width: 100%; margin-top: 4px; }
   button:disabled { opacity: 0.6; cursor: default; }
+
+  button, .item-projet, input, .champ input[type=text] { transition: background .15s ease, border-color .15s ease, opacity .15s ease; }
+
+  .topbar-droite { display: flex; align-items: center; gap: 16px; }
+  .compte-info { display: none; align-items: center; gap: 12px; }
+  .compte-info.visible { display: flex; }
+  .compte-email { font-size: 12px; color: var(--text-secondary); }
+  .btn-deconnexion { padding: 6px 12px; font-size: 12px; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(37,99,235,.2);
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle; margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeIn .25s ease; }
+
+  .bloc-charge { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
 </style>
 </head>
 <body>
 
   <div class="topbar">
     <div class="logo">Passerelle — espace étudiant</div>
-    <div class="stats">
-      <div class="stat argent"><div class="valeur" id="stat_solde">— €</div><div class="label">solde disponible</div></div>
-      <div class="stat"><div class="valeur" id="stat_confiance">—</div><div class="label">indice de confiance</div></div>
+    <div class="topbar-droite">
+      <div class="stats">
+        <div class="stat argent"><div class="valeur" id="stat_solde">— €</div><div class="label">solde disponible</div></div>
+        <div class="stat"><div class="valeur" id="stat_confiance">—</div><div class="label">indice de confiance</div></div>
+      </div>
+      <div class="compte-info" id="compte_info">
+        <span class="compte-email" id="compte_email"></span>
+        <button class="btn-deconnexion" onclick="seDeconnecter()">Se déconnecter</button>
+      </div>
     </div>
   </div>
 
@@ -273,6 +299,29 @@ let historiqueComplet = [];
 
 function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
+function animer(el, html) {
+  el.innerHTML = html;
+  el.classList.remove('anim-in');
+  void el.offsetWidth;
+  el.classList.add('anim-in');
+}
+
+function seDeconnecter() {
+  authHeader = null;
+  tacheCourante = null;
+  projetCourant = null;
+  historiqueComplet = [];
+  sessionStorage.removeItem('passerelle_auth');
+  document.getElementById('compte_info').classList.remove('visible');
+  document.getElementById('grille_principale').style.display = 'none';
+  document.getElementById('bloc_en_attente').style.display = 'none';
+  document.getElementById('bloc_auth').style.display = 'block';
+  document.getElementById('stat_solde').textContent = '— €';
+  document.getElementById('stat_confiance').textContent = '—';
+  document.getElementById('co_password').value = '';
+  basculerOnglet('connexion');
+}
+
 function basculerOnglet(nom) {
   document.querySelectorAll('.auth-onglet').forEach(b => b.classList.toggle('actif', b.dataset.onglet === nom));
   document.getElementById('form_connexion').style.display = nom === 'connexion' ? 'block' : 'none';
@@ -320,6 +369,8 @@ async function tenterConnexion(header) {
   authHeader = header;
   sessionStorage.setItem('passerelle_auth', header);
   document.getElementById('bloc_auth').style.display = 'none';
+  document.getElementById('compte_email').textContent = moi.email;
+  document.getElementById('compte_info').classList.add('visible');
 
   if (!moi.approuve) {
     document.getElementById('bloc_en_attente').style.display = 'block';
@@ -382,17 +433,23 @@ async function chargerProjetsDisponibles() {
   const data = await res.json();
   const liste = document.getElementById('liste_projets');
 
-  if (!data.projets.length) { liste.innerHTML = '<div class="vide">Aucun projet disponible.</div>'; return; }
+  if (!data.projets.length) { animer(liste, '<div class="vide">Aucun projet disponible.</div>'); return; }
 
-  liste.innerHTML = data.projets.map(p => `
+  animer(liste, data.projets.map(p => `
     <button class="item-projet ${p.project_id === projetCourant ? 'actif' : ''}" onclick="choisirProjet(${p.project_id})">
       <div><div class="titre">${p.titre}</div><div class="sousinfo">${p.taches_disponibles} ligne(s) disponible(s)</div></div>
       <div class="prix">${p.prix_par_ligne.toFixed(2)} €</div>
     </button>
-  `).join('');
+  `).join(''));
 }
 
-function choisirProjet(id) { projetCourant = id; chargerProjetsDisponibles(); chargerTacheSuivante(); }
+function choisirProjet(id) {
+  if (id === projetCourant) return;
+  projetCourant = id;
+  chargerProjetsDisponibles();
+  animer(document.getElementById('zone_tache'), '<div class="bloc-charge"><span class="spinner"></span>Chargement de la tâche...</div>');
+  chargerTacheSuivante();
+}
 
 function badgesParColonne(badges) {
   const parColonne = {};
@@ -407,11 +464,11 @@ async function chargerTacheSuivante() {
   const res = await fetch(`/tasks/next?project_id=${projetCourant}`, { headers: { Authorization: authHeader } });
 
   if (res.status === 404) {
-    zone.innerHTML = '<div class="vide">Plus de tâche disponible sur ce projet pour le moment.</div>';
+    animer(zone, '<div class="vide">Plus de tâche disponible sur ce projet pour le moment.</div>');
     tacheCourante = null;
     return;
   }
-  if (!res.ok) { zone.innerHTML = '<div class="vide">Erreur de chargement.</div>'; return; }
+  if (!res.ok) { animer(zone, '<div class="vide">Erreur de chargement. <button onclick="chargerTacheSuivante()">Réessayer</button></div>'); return; }
 
   tacheCourante = await res.json();
   afficherTache(tacheCourante);
@@ -436,35 +493,64 @@ function afficherTache(tache) {
       </div>`;
   });
 
-  html += `<div class="actions-tache"><button onclick="libererEtPasser()">Passer</button><button class="principal" onclick="validerTache()">Valider</button></div>
+  html += `<div class="actions-tache"><button id="btn_passer" onclick="libererEtPasser()">Passer</button><button class="principal" id="btn_valider" onclick="validerTache()">Valider</button></div>
            <p class="msg" id="msg"></p>`;
-  zone.innerHTML = html;
+  animer(zone, html);
 }
 
 async function libererEtPasser() {
-  if (tacheCourante) await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
-  chargerTacheSuivante();
+  const btnPasser = document.getElementById('btn_passer');
+  const btnValider = document.getElementById('btn_valider');
+  if (btnPasser) btnPasser.disabled = true;
+  if (btnValider) btnValider.disabled = true;
+  try {
+    if (tacheCourante) await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
+    animer(document.getElementById('zone_tache'), '<div class="bloc-charge"><span class="spinner"></span>Chargement de la tâche suivante...</div>');
+    await chargerTacheSuivante();
+  } catch {
+    document.getElementById('msg') && (document.getElementById('msg').textContent = 'Erreur réseau, réessaie.');
+  }
 }
 
 async function validerTache() {
   if (!tacheCourante) return;
+  const btnPasser = document.getElementById('btn_passer');
+  const btnValider = document.getElementById('btn_valider');
+  const msg = document.getElementById('msg');
+  btnPasser.disabled = true;
+  btnValider.disabled = true;
+  btnValider.innerHTML = '<span class="spinner"></span>Envoi...';
+
   const inputs = document.querySelectorAll('#zone_tache input[data-col]');
   const reponse = new Array(inputs.length);
   inputs.forEach(inp => { reponse[parseInt(inp.dataset.col, 10)] = inp.value; });
 
-  const res = await fetch(`/tasks/${tacheCourante.task_id}/submit`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-    body: JSON.stringify({ reponse }),
-  });
+  try {
+    const res = await fetch(`/tasks/${tacheCourante.task_id}/submit`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({ reponse }),
+    });
 
-  if (!res.ok) { document.getElementById('msg').textContent = "Erreur lors de l'envoi."; return; }
-  const data = await res.json();
+    if (!res.ok) {
+      msg.textContent = "Erreur lors de l'envoi. Réessaie.";
+      btnPasser.disabled = false;
+      btnValider.disabled = false;
+      btnValider.textContent = 'Valider';
+      return;
+    }
 
-  actualiserHistorique();
-  const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
-  if (moiRes.ok) document.getElementById('stat_confiance').textContent = (await moiRes.json()).trust_score + '/100';
+    actualiserHistorique();
+    const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
+    if (moiRes.ok) document.getElementById('stat_confiance').textContent = (await moiRes.json()).trust_score + '/100';
 
-  chargerTacheSuivante();
+    animer(document.getElementById('zone_tache'), '<div class="bloc-charge"><span class="spinner"></span>Chargement de la tâche suivante...</div>');
+    await chargerTacheSuivante();
+  } catch {
+    msg.textContent = 'Erreur réseau, réessaie.';
+    btnPasser.disabled = false;
+    btnValider.disabled = false;
+    btnValider.textContent = 'Valider';
+  }
 }
 
 async function actualiserHistorique() {
@@ -487,11 +573,11 @@ function filtrerHistorique(filtre) {
 function rendreHistorique(filtre) {
   const liste = document.getElementById('liste_historique');
   const lignes = historiqueComplet.filter(h => filtre === 'tous' || h.statut.startsWith(filtre === 'paye' ? 'paye' : 'en_attente'));
-  liste.innerHTML = lignes.length ? lignes.map(h => `
+  animer(liste, lignes.length ? lignes.map(h => `
     <div class="ligne-registre ${h.statut === 'paye' ? 'paye' : 'attente'}">
       <span>${h.statut === 'paye' ? 'Ligne validée' : 'En vérification'}</span>
       <span class="montant">${h.montant !== null ? '+' + h.montant.toFixed(2) + ' €' : '…'}</span>
-    </div>`).join('') : '<div class="vide">Rien à afficher.</div>';
+    </div>`).join('') : '<div class="vide">Rien à afficher.</div>');
 }
 </script>
 </body>

@@ -104,11 +104,39 @@
   }
   .toggle-mdp:hover { opacity: 1; background: none; }
   button:disabled { opacity: 0.6; cursor: default; }
+
+  button, .item-projet, input, select { transition: background .15s ease, border-color .15s ease, opacity .15s ease; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .compte-info { display: none; align-items: center; gap: 12px; font-weight: 400; }
+  .compte-info.visible { display: flex; }
+  .compte-email { font-size: 12px; color: var(--text-secondary); }
+  .btn-deconnexion { padding: 6px 12px; font-size: 12px; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(37,99,235,.2);
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle; margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeIn .25s ease; }
+
+  .bloc-charge { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
+  .lien-retour { background: none; border: none; color: var(--primary); font-size: 12px; padding: 0; margin-bottom: 12px; cursor: pointer; }
+  .lien-retour:hover { background: none; text-decoration: underline; }
 </style>
 </head>
 <body>
 
-  <div class="topbar">Passerelle — dépôt entreprise</div>
+  <div class="topbar">
+    <span>Passerelle — dépôt entreprise</span>
+    <div class="compte-info" id="compte_info">
+      <span class="compte-email" id="compte_email"></span>
+      <button class="btn-deconnexion" onclick="seDeconnecter()">Se déconnecter</button>
+    </div>
+  </div>
 
   <div class="conteneur">
 
@@ -185,6 +213,28 @@ let projetSelectionne = null;
 
 function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
+function animer(el, html) {
+  el.innerHTML = html;
+  el.classList.remove('anim-in');
+  void el.offsetWidth;
+  el.classList.add('anim-in');
+}
+
+function seDeconnecter() {
+  authHeader = null;
+  schemaCourant = null;
+  fichierSelectionne = null;
+  projetsCache = [];
+  projetSelectionne = null;
+  sessionStorage.removeItem('passerelle_auth_client');
+  document.getElementById('compte_info').classList.remove('visible');
+  document.getElementById('grille_principale').style.display = 'none';
+  document.getElementById('bloc_en_attente').style.display = 'none';
+  document.getElementById('bloc_auth').style.display = 'block';
+  document.getElementById('co_password').value = '';
+  basculerOnglet('connexion');
+}
+
 function basculerOnglet(nom) {
   document.querySelectorAll('.auth-onglet').forEach(b => b.classList.toggle('actif', b.dataset.onglet === nom));
   document.getElementById('form_connexion').style.display = nom === 'connexion' ? 'block' : 'none';
@@ -232,6 +282,8 @@ async function tenterConnexion(header) {
   authHeader = header;
   sessionStorage.setItem('passerelle_auth_client', header);
   document.getElementById('bloc_auth').style.display = 'none';
+  document.getElementById('compte_email').textContent = moi.email;
+  document.getElementById('compte_info').classList.add('visible');
 
   if (!moi.approuve) {
     document.getElementById('bloc_en_attente').style.display = 'block';
@@ -292,13 +344,13 @@ async function chargerMesProjets() {
   projetsCache = (await res.json()).projets;
   const liste = document.getElementById('liste_mes_projets');
 
-  if (!projetsCache.length) { liste.innerHTML = '<div class="vide">Aucun projet déposé.</div>'; return; }
+  if (!projetsCache.length) { animer(liste, '<div class="vide">Aucun projet déposé.</div>'); return; }
 
-  liste.innerHTML = projetsCache.map(p => `
+  animer(liste, projetsCache.map(p => `
     <button class="item-projet ${p.project_id === projetSelectionne ? 'actif' : ''}" onclick="afficherProjet(${p.project_id})">
       <div><div class="titre">${p.titre}</div><div class="sousinfo">${p.lignes_completees}/${p.total_lignes} lignes</div></div>
     </button>
-  `).join('');
+  `).join(''));
 }
 
 function afficherProjet(id) {
@@ -307,39 +359,50 @@ function afficherProjet(id) {
   const p = projetsCache.find(x => x.project_id === id);
   const pct = p.total_lignes ? Math.round(100 * p.lignes_completees / p.total_lignes) : 0;
 
-  document.getElementById('panel_droit').innerHTML = `
+  animer(document.getElementById('panel_droit'), `
     <h2>${p.titre}</h2>
     <div class="barre-progres"><div class="rempli" style="width:${pct}%"></div></div>
     <div class="ligne-stats">
       <span>${p.lignes_completees} / ${p.total_lignes} lignes traitées</span>
       ${p.lignes_litigieuses > 0 ? `<span class="badge-litige">${p.lignes_litigieuses} en désaccord entre étudiants</span>` : ''}
     </div>
-    <button class="principal" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'csv')">
+    <button class="principal" id="btn_export_csv" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'csv', this)">
       ${p.pret_pour_export ? 'Télécharger en CSV' : (p.lignes_completees > 0 ? 'Télécharger le partiel (CSV)' : 'Pas encore de ligne traitée')}
     </button>
-    <button ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'xlsx')" style="margin-left:8px;">
+    <button id="btn_export_xlsx" ${p.pret_pour_export ? '' : (p.lignes_completees > 0 ? '' : 'disabled')} onclick="exporter(${p.project_id}, 'xlsx', this)" style="margin-left:8px;">
       Télécharger en Excel
     </button>
-  `;
+  `);
 }
 
-async function exporter(projectId, format) {
-  const res = await fetch(`/projects/${projectId}/export?format=${format}`, { headers: { Authorization: authHeader } });
-  if (!res.ok) { alert((await res.json()).detail); return; }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `projet_${projectId}_nettoye.${format}`; a.click();
-  URL.revokeObjectURL(url);
+async function exporter(projectId, format, bouton) {
+  const texteOriginal = bouton.textContent;
+  bouton.disabled = true;
+  bouton.innerHTML = '<span class="spinner"></span>Préparation...';
+  try {
+    const res = await fetch(`/projects/${projectId}/export?format=${format}`, { headers: { Authorization: authHeader } });
+    if (!res.ok) { alert((await res.json()).detail); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `projet_${projectId}_nettoye.${format}`; a.click();
+    URL.revokeObjectURL(url);
+  } catch {
+    alert('Erreur réseau pendant le téléchargement.');
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = texteOriginal;
+  }
 }
 
 function afficherDepot() {
   projetSelectionne = null;
   chargerMesProjets();
-  document.getElementById('panel_droit').innerHTML = `
+  animer(document.getElementById('panel_droit'), `
+    <button class="lien-retour" onclick="chargerMesProjets(); document.getElementById('panel_droit').innerHTML='<div class=\\'vide\\'>Sélectionne un projet ou dépose-en un nouveau.</div>';">← Retour</button>
     <h2>Déposer un nouveau fichier</h2>
     <input type="file" id="fichier_csv" accept=".csv,.xlsx">
-    <button onclick="analyserFichier()">Analyser le fichier</button>
+    <button id="btn_analyser" onclick="analyserFichier()">Analyser le fichier</button>
     <p class="msg" style="margin-top:6px;">Formats acceptés : CSV, Excel (.xlsx)</p>
     <div id="etape2" style="display:none; margin-top:16px;">
       <table id="table_schema"></table>
@@ -348,45 +411,64 @@ function afficherDepot() {
       <input type="text" id="titre_projet" value="Nettoyage de données">
       <label>Prix par ligne (€)</label>
       <input type="number" id="prix_ligne" value="0.04" step="0.01">
-      <button class="principal" onclick="validerEtLancer()">Lancer le nettoyage</button>
+      <button class="principal" id="btn_lancer" onclick="validerEtLancer()">Lancer le nettoyage</button>
       <p class="msg" id="resultat"></p>
     </div>
-  `;
+  `);
 }
 
 async function analyserFichier() {
   const input = document.getElementById('fichier_csv');
-  if (!input.files.length) { alert('Choisis un fichier CSV.'); return; }
+  if (!input.files.length) { alert('Choisis un fichier CSV ou Excel.'); return; }
   fichierSelectionne = input.files[0];
 
-  const formData = new FormData();
-  formData.append('fichier', fichierSelectionne);
-  const res = await fetch('/projects/infer-schema', { method: 'POST', headers: { Authorization: authHeader }, body: formData });
-  const data = await res.json();
-  schemaCourant = data.schema_suggere;
+  const btn = document.getElementById('btn_analyser');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Analyse en cours...';
 
-  const table = document.getElementById('table_schema');
-  table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th><th>Sensible</th></tr>';
-  schemaCourant.columns.forEach((col, i) => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${col.name}</td>
-      <td><select onchange="modifierType(${i}, this.value)">
-        <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
-        <option value="nom" ${col.type==='nom'?'selected':''}>Nom / prénom (capitalisation auto)</option>
-        <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
-        <option value="telephone" ${col.type==='telephone'?'selected':''}>Téléphone (normalisé +33...)</option>
-        <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
-        <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
-      </select></td>
-      <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
-      <td><input type="checkbox" ${col.sensible?'checked':''} onchange="schemaCourant.columns[${i}].sensible = this.checked" title="Jamais montrée au worker, corrigée automatiquement seulement (espaces)"></td>
-    `;
-    table.appendChild(tr);
-  });
+  try {
+    const formData = new FormData();
+    formData.append('fichier', fichierSelectionne);
+    const res = await fetch('/projects/infer-schema', { method: 'POST', headers: { Authorization: authHeader }, body: formData });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Erreur lors de l\'analyse du fichier.' }));
+      alert(err.detail);
+      return;
+    }
+    const data = await res.json();
+    schemaCourant = data.schema_suggere;
 
-  document.getElementById('apercu_texte').textContent = JSON.stringify(data.apercu_lignes.slice(0, 2));
-  document.getElementById('etape2').style.display = 'block';
+    const table = document.getElementById('table_schema');
+    table.innerHTML = '<tr><th>Colonne</th><th>Type détecté</th><th>Obligatoire</th><th>Sensible</th></tr>';
+    schemaCourant.columns.forEach((col, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${col.name}</td>
+        <td><select onchange="modifierType(${i}, this.value)">
+          <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
+          <option value="nom" ${col.type==='nom'?'selected':''}>Nom / prénom (capitalisation auto)</option>
+          <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
+          <option value="telephone" ${col.type==='telephone'?'selected':''}>Téléphone (normalisé +33...)</option>
+          <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
+          <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
+        </select></td>
+        <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
+        <td><input type="checkbox" ${col.sensible?'checked':''} onchange="schemaCourant.columns[${i}].sensible = this.checked" title="Jamais montrée au worker, corrigée automatiquement seulement (espaces)"></td>
+      `;
+      table.appendChild(tr);
+    });
+
+    document.getElementById('apercu_texte').textContent = JSON.stringify(data.apercu_lignes.slice(0, 2));
+    const etape2 = document.getElementById('etape2');
+    etape2.style.display = 'block';
+    etape2.classList.remove('anim-in'); void etape2.offsetWidth; etape2.classList.add('anim-in');
+    etape2.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch {
+    alert('Erreur réseau pendant l\'analyse du fichier.');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Analyser le fichier';
+  }
 }
 
 function modifierType(idx, valeur) {
@@ -398,27 +480,53 @@ function modifierType(idx, valeur) {
 
 async function validerEtLancer() {
   const resEl = document.getElementById('resultat');
-  resEl.textContent = 'Création du projet...';
+  const btn = document.getElementById('btn_lancer');
+  const titre = document.getElementById('titre_projet').value.trim();
+  const prix = parseFloat(document.getElementById('prix_ligne').value);
 
-  const projetRes = await fetch('/projects', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
-    body: JSON.stringify({
-      titre: document.getElementById('titre_projet').value,
-      colonnes_schema: schemaCourant,
-      prix_par_ligne: parseFloat(document.getElementById('prix_ligne').value),
-    }),
-  });
-  const projet = await projetRes.json();
+  if (!titre) { resEl.style.color = 'var(--danger)'; resEl.textContent = 'Donne un titre au projet.'; return; }
+  if (!(prix > 0)) { resEl.style.color = 'var(--danger)'; resEl.textContent = 'Le prix par ligne doit être supérieur à 0.'; return; }
 
-  resEl.textContent = 'Découpage du fichier en micro-tâches...';
-  const formData = new FormData();
-  formData.append('fichier', fichierSelectionne);
-  const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
-  const ingest = await ingestRes.json();
+  resEl.style.color = '';
+  btn.disabled = true;
 
-  resEl.textContent = `Projet créé — ${ingest.nb_validees_automatiquement} ligne(s) validée(s) automatiquement, ${ingest.nb_pour_workers} confiée(s) aux étudiants.`;
-  await chargerMesProjets();
-  setTimeout(() => afficherProjet(projet.project_id), 600);
+  try {
+    btn.innerHTML = '<span class="spinner"></span>Création du projet...';
+    resEl.textContent = 'Création du projet...';
+    const projetRes = await fetch('/projects', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({ titre, colonnes_schema: schemaCourant, prix_par_ligne: prix }),
+    });
+    if (!projetRes.ok) {
+      const err = await projetRes.json().catch(() => ({ detail: 'Erreur lors de la création du projet.' }));
+      resEl.style.color = 'var(--danger)'; resEl.textContent = err.detail;
+      return;
+    }
+    const projet = await projetRes.json();
+
+    btn.innerHTML = '<span class="spinner"></span>Découpage en micro-tâches...';
+    resEl.textContent = 'Découpage du fichier en micro-tâches...';
+    const formData = new FormData();
+    formData.append('fichier', fichierSelectionne);
+    const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
+    if (!ingestRes.ok) {
+      const err = await ingestRes.json().catch(() => ({ detail: "Erreur lors du découpage du fichier." }));
+      resEl.style.color = 'var(--danger)'; resEl.textContent = err.detail;
+      return;
+    }
+    const ingest = await ingestRes.json();
+
+    resEl.style.color = 'var(--success)';
+    resEl.textContent = `Projet créé — ${ingest.nb_validees_automatiquement} ligne(s) validée(s) automatiquement, ${ingest.nb_pour_workers} confiée(s) aux étudiants.`;
+    await chargerMesProjets();
+    setTimeout(() => afficherProjet(projet.project_id), 600);
+  } catch {
+    resEl.style.color = 'var(--danger)';
+    resEl.textContent = 'Erreur réseau — vérifie ta connexion et réessaie.';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Lancer le nettoyage';
+  }
 }
 </script>
 </body>
