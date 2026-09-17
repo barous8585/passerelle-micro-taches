@@ -1,0 +1,6 @@
+# Config Netlify -- fait correspondre les URLs propres aux fichiers HTML
+# statiques, pour retrouver les mêmes routes qu'avant (servies par FastAPI
+# en local : /, /worker, /admin).
+/           /client_upload.html    200
+/worker     /worker_dashboard.html 200
+/admin      /admin.html            200

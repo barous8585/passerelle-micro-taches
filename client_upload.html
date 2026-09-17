@@ -4,95 +4,107 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Passerelle — Dépôt entreprise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #F8FAFC;
+    --bg: #FAFAFA;
     --surface: #FFFFFF;
-    --border: #E2E8F0;
-    --border-strong: #CBD5E1;
-    --text: #0F172A;
-    --text-secondary: #64748B;
-    --primary: #2563EB;
-    --primary-hover: #1D4ED8;
-    --success: #16A34A;
-    --success-bg: #F0FDF4;
-    --danger: #DC2626;
-    --danger-bg: #FEF2F2;
-    --warning: #D97706;
-    --radius: 8px;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --border: #ECECF0;
+    --border-strong: #DDDCE4;
+    --text: #16161A;
+    --text-secondary: #7A7A85;
+    --text-tertiary: #A5A5B0;
+    --primary: #5B5BF0;
+    --primary-hover: #4A4AD9;
+    --primary-bg: #F0F0FE;
+    --success: #10B981;
+    --success-bg: #ECFDF5;
+    --danger: #F43F5E;
+    --danger-bg: #FFF1F3;
+    --warning: #F59E0B;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow-sm: 0 1px 2px rgba(20,20,30,.04);
+    --shadow-md: 0 2px 8px rgba(20,20,30,.05), 0 1px 2px rgba(20,20,30,.04);
+    --shadow-lg: 0 8px 24px rgba(20,20,30,.08), 0 2px 6px rgba(20,20,30,.05);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 
   .topbar {
-    background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 24px;
-    font-weight: 600; font-size: 15px; position: sticky; top: 0; z-index: 5;
+    background: rgba(255,255,255,.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border); padding: 16px 32px;
+    font-weight: 700; font-size: 16px; letter-spacing: -0.02em; position: sticky; top: 0; z-index: 5;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
   }
 
-  .conteneur { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .conteneur { max-width: 1140px; margin: 0 auto; padding: 32px; }
 
-  .grille { display: grid; grid-template-columns: 320px 1fr; gap: 20px; align-items: start; }
-  @media (max-width: 860px) { .grille { grid-template-columns: 1fr; } }
+  .grille { display: grid; grid-template-columns: 320px 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .grille { grid-template-columns: 1fr; } .conteneur { padding: 18px; } }
 
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-  .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow-sm); }
+  .panel h2 { font-size: 12px; font-weight: 700; margin: 0 0 16px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-tertiary); }
 
-  label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
   input[type=email], input[type=password], input[type=text], input[type=number], input[type=file] {
-    width: 100%; padding: 8px 10px; font-size: 14px; font-family: inherit;
-    border: 1px solid var(--border-strong); border-radius: 6px; margin-bottom: 12px; background: #fff;
+    width: 100%; padding: 10px 12px; font-size: 14.5px; font-family: inherit;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; background: var(--bg);
   }
-  input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-bg); }
 
   .rang { display: flex; gap: 8px; }
   button {
-    font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px;
-    border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface);
-    color: var(--text); cursor: pointer;
+    font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 16px;
+    border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface);
+    color: var(--text); cursor: pointer; letter-spacing: -0.005em;
   }
-  button:hover { background: var(--bg); }
-  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); }
-  button.principal:hover { background: var(--primary-hover); }
-  button:disabled { opacity: 0.5; cursor: default; }
+  button:hover { background: var(--bg); border-color: var(--border-strong); }
+  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: var(--shadow-sm); }
+  button.principal:hover { background: var(--primary-hover); border-color: var(--primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  button:disabled { opacity: 0.5; cursor: default; transform: none; }
   button.pleine-largeur { width: 100%; margin-bottom: 14px; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
-  th, td { border-bottom: 1px solid var(--border); padding: 7px 6px; text-align: left; }
-  th { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
-  select { padding: 5px 8px; border-radius: 5px; border: 1px solid var(--border-strong); font-family: inherit; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 12px 0; }
+  th, td { border-bottom: 1px solid var(--border); padding: 9px 8px; text-align: left; }
+  th { color: var(--text-tertiary); font-weight: 700; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  select { padding: 6px 10px; border-radius: var(--radius-sm); border: 1.5px solid var(--border); font-family: inherit; background: var(--bg); font-size: 13px; }
 
-  .apercu { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 5px; padding: 8px; margin: 8px 0; overflow-x: auto; }
+  .apercu { font-family: var(--mono); font-size: 12px; color: var(--text-secondary); background: var(--bg); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 10px; margin: 10px 0; overflow-x: auto; }
 
-  .msg { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
+  .msg { font-size: 12.5px; color: var(--text-secondary); margin: 8px 0 0; }
 
   .item-projet {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--bg); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
+    padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
   }
-  .item-projet.actif { border-color: var(--primary); background: #EFF6FF; }
-  .item-projet .titre { font-weight: 500; font-size: 13px; }
-  .item-projet .sousinfo { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+  .item-projet:hover { border-color: var(--border-strong); background: var(--bg); }
+  .item-projet.actif { border-color: var(--primary); background: var(--primary-bg); }
+  .item-projet .titre { font-weight: 600; font-size: 13.5px; }
+  .item-projet .sousinfo { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
 
-  .barre-progres { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; margin: 10px 0; }
-  .barre-progres .rempli { height: 100%; background: var(--success); }
-  .ligne-stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
-  .badge-litige { color: var(--warning); }
+  .barre-progres { height: 7px; background: var(--border); border-radius: 999px; overflow: hidden; margin: 12px 0; }
+  .barre-progres .rempli { height: 100%; background: var(--success); border-radius: 999px; transition: width .4s ease; }
+  .ligne-stats { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--text-secondary); margin-bottom: 16px; }
+  .badge-litige { color: var(--warning); font-weight: 600; }
 
-  .vide { text-align: center; padding: 30px 10px; color: var(--text-secondary); font-size: 13px; }
+  .vide { text-align: center; padding: 34px 10px; color: var(--text-tertiary); font-size: 13px; }
 
-  .auth-onglets { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .auth-onglets { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 20px; gap: 4px; }
   .auth-onglet {
     flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
-    border-radius: 0; padding: 10px 0; font-weight: 500; color: var(--text-secondary);
+    border-radius: 0; padding: 12px 0; font-weight: 600; color: var(--text-tertiary);
   }
   .auth-onglet.actif { color: var(--primary); border-bottom-color: var(--primary); }
-  .auth-onglet:hover { background: none; }
+  .auth-onglet:hover { background: none; color: var(--text); }
 
-  .erreur-champ { font-size: 12px; color: var(--danger); margin: -10px 0 10px; min-height: 15px; }
+  .erreur-champ { font-size: 12px; color: var(--danger); margin: -11px 0 12px; min-height: 15px; font-weight: 500; }
   .erreur-champ:empty { display: none; }
 
   .champ-mdp { position: relative; margin-bottom: 0; }
@@ -103,28 +115,26 @@
     opacity: 0.6;
   }
   .toggle-mdp:hover { opacity: 1; background: none; }
-  button:disabled { opacity: 0.6; cursor: default; }
 
-  button, .item-projet, input, select { transition: background .15s ease, border-color .15s ease, opacity .15s ease; }
+  button, .item-projet, input, select { transition: background .15s ease, border-color .15s ease, opacity .15s ease, transform .15s ease, box-shadow .15s ease; }
 
-  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
   .compte-info { display: none; align-items: center; gap: 12px; font-weight: 400; }
   .compte-info.visible { display: flex; }
-  .compte-email { font-size: 12px; color: var(--text-secondary); }
-  .btn-deconnexion { padding: 6px 12px; font-size: 12px; }
+  .compte-email { font-size: 12.5px; color: var(--text-tertiary); }
+  .btn-deconnexion { padding: 7px 14px; font-size: 12.5px; }
 
   .spinner {
-    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(37,99,235,.2);
+    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(91,91,240,.2);
     border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite;
     vertical-align: middle; margin-right: 7px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-  .anim-in { animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeIn .3s cubic-bezier(.16,1,.3,1); }
 
-  .bloc-charge { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
-  .lien-retour { background: none; border: none; color: var(--primary); font-size: 12px; padding: 0; margin-bottom: 12px; cursor: pointer; }
+  .bloc-charge { text-align: center; padding: 30px 10px; color: var(--text-tertiary); font-size: 13px; }
+  .lien-retour { background: none; border: none; color: var(--primary); font-size: 12.5px; font-weight: 600; padding: 0; margin-bottom: 14px; cursor: pointer; }
   .lien-retour:hover { background: none; text-decoration: underline; }
 </style>
 </head>
@@ -205,6 +215,12 @@
   </div>
 
 <script>
+// URL du backend (Render une fois déployé). Vide = même origine (utile en
+// local, quand cette page et l'API tournent sur le même serveur uvicorn).
+// À la mise en ligne séparée (Netlify + Render), remplace par ex. par
+// 'https://api.tondomaine.fr'.
+const API_BASE = '';
+
 let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
 let schemaCourant = null;
 let fichierSelectionne = null;
@@ -212,6 +228,8 @@ let projetsCache = [];
 let projetSelectionne = null;
 
 function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
+
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function animer(el, html) {
   el.innerHTML = html;
@@ -274,7 +292,7 @@ async function seConnecter() {
 
 async function tenterConnexion(header) {
   const msg = document.getElementById('msg_connexion');
-  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  const res = await fetch(API_BASE + '/auth/me', { headers: { Authorization: header } });
   if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_client'); return; }
   const moi = await res.json();
   if (moi.role !== 'client') { msg.textContent = "Ce compte n'est pas un compte entreprise."; return; }
@@ -319,7 +337,7 @@ async function creerCompte() {
   bouton.disabled = true;
   bouton.textContent = 'Création...';
   try {
-    const res = await fetch('/auth/register', {
+    const res = await fetch(API_BASE + '/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, role: 'client', secteur_activite }),
     });
@@ -339,7 +357,7 @@ async function creerCompte() {
 }
 
 async function chargerMesProjets() {
-  const res = await fetch('/projects/mine', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/projects/mine', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   projetsCache = (await res.json()).projets;
   const liste = document.getElementById('liste_mes_projets');
@@ -380,7 +398,7 @@ async function exporter(projectId, format, bouton) {
   bouton.disabled = true;
   bouton.innerHTML = '<span class="spinner"></span>Préparation...';
   try {
-    const res = await fetch(`/projects/${projectId}/export?format=${format}`, { headers: { Authorization: authHeader } });
+    const res = await fetch(`${API_BASE}/projects/${projectId}/export?format=${format}`, { headers: { Authorization: authHeader } });
     if (!res.ok) { alert((await res.json()).detail); return; }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -429,7 +447,7 @@ async function analyserFichier() {
   try {
     const formData = new FormData();
     formData.append('fichier', fichierSelectionne);
-    const res = await fetch('/projects/infer-schema', { method: 'POST', headers: { Authorization: authHeader }, body: formData });
+    const res = await fetch(API_BASE + '/projects/infer-schema', { method: 'POST', headers: { Authorization: authHeader }, body: formData });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Erreur lors de l\'analyse du fichier.' }));
       alert(err.detail);
@@ -444,14 +462,33 @@ async function analyserFichier() {
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${col.name}</td>
-        <td><select onchange="modifierType(${i}, this.value)">
-          <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
-          <option value="nom" ${col.type==='nom'?'selected':''}>Nom / prénom (capitalisation auto)</option>
-          <option value="regex" ${col.type==='regex'?'selected':''}>Email</option>
-          <option value="telephone" ${col.type==='telephone'?'selected':''}>Téléphone (normalisé +33...)</option>
-          <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
-          <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
-        </select></td>
+        <td>
+          <select onchange="modifierType(${i}, this.value)">
+            <option value="string" ${col.type==='string'?'selected':''}>Texte libre</option>
+            <option value="nom" ${col.type==='nom'?'selected':''}>Nom / prénom (capitalisation auto)</option>
+            <option value="regex" ${col.type==='regex'?'selected':''}>Format personnalisé (motif)</option>
+            <option value="telephone" ${col.type==='telephone'?'selected':''}>Téléphone (normalisé +33...)</option>
+            <option value="date" ${col.type==='date'?'selected':''}>Date (AAAA-MM-JJ)</option>
+            <option value="number" ${col.type==='number'?'selected':''}>Nombre</option>
+          </select>
+          <div class="bloc-regex" id="regex_${i}" style="${col.type==='regex' ? '' : 'display:none;'} margin-top:6px;">
+            <select onchange="appliquerPresetRegex(${i}, this.value)" style="margin-bottom:4px; font-size:12px;">
+              <option value="">-- modèle courant --</option>
+              <option value="email">Email</option>
+              <option value="cp_fr">Code postal (France, 5 chiffres)</option>
+              <option value="tel_intl">Téléphone international (E.164)</option>
+              <option value="ref_alphanum">Référence produit / SKU (lettres + chiffres)</option>
+              <option value="entier">Nombre entier uniquement</option>
+              <option value="siret">SIRET (14 chiffres)</option>
+            </select>
+            <input type="text" value="${escapeHtml(col.rule || '')}" placeholder="Ton propre motif (regex), ex: ^[A-Z]{2}\\d{4}$"
+                   oninput="schemaCourant.columns[${i}].rule = this.value" style="font-family: var(--mono); font-size:12.5px;">
+            <div style="font-size:11px; color: var(--text-tertiary); margin-top:2px;">
+              Sert pour n'importe quelle colonne au format que tu connais (référence interne, code, identifiant...) --
+              même si aucun type prédéfini ne correspond à tes données.
+            </div>
+          </div>
+        </td>
         <td><input type="checkbox" ${col.required?'checked':''} onchange="schemaCourant.columns[${i}].required = this.checked"></td>
         <td><input type="checkbox" ${col.sensible?'checked':''} onchange="schemaCourant.columns[${i}].sensible = this.checked" title="Jamais montrée au worker, corrigée automatiquement seulement (espaces)"></td>
       `;
@@ -474,8 +511,31 @@ async function analyserFichier() {
 function modifierType(idx, valeur) {
   const col = schemaCourant.columns[idx];
   col.type = valeur;
-  if (valeur === 'regex') col.rule = '^[\\w.-]+@[\\w.-]+\\.\\w+$';
-  else delete col.rule;
+  if (valeur === 'regex') {
+    if (!col.rule) col.rule = '^[\\w.-]+@[\\w.-]+\\.\\w+$';
+    document.getElementById(`regex_${idx}`).style.display = '';
+  } else {
+    delete col.rule;
+    const bloc = document.getElementById(`regex_${idx}`);
+    if (bloc) bloc.style.display = 'none';
+  }
+}
+
+const PRESETS_REGEX = {
+  email: '^[\\w.-]+@[\\w.-]+\\.\\w+$',
+  cp_fr: '^\\d{5}$',
+  tel_intl: '^\\+[1-9]\\d{7,14}$',
+  ref_alphanum: '^[A-Za-z0-9_-]+$',
+  entier: '^-?\\d+$',
+  siret: '^\\d{14}$',
+};
+
+function appliquerPresetRegex(idx, cle) {
+  if (!cle) return;
+  const col = schemaCourant.columns[idx];
+  col.rule = PRESETS_REGEX[cle];
+  const input = document.querySelector(`#regex_${idx} input[type="text"]`);
+  if (input) input.value = col.rule;
 }
 
 async function validerEtLancer() {
@@ -493,7 +553,7 @@ async function validerEtLancer() {
   try {
     btn.innerHTML = '<span class="spinner"></span>Création du projet...';
     resEl.textContent = 'Création du projet...';
-    const projetRes = await fetch('/projects', {
+    const projetRes = await fetch(API_BASE + '/projects', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
       body: JSON.stringify({ titre, colonnes_schema: schemaCourant, prix_par_ligne: prix }),
     });
@@ -508,7 +568,7 @@ async function validerEtLancer() {
     resEl.textContent = 'Découpage du fichier en micro-tâches...';
     const formData = new FormData();
     formData.append('fichier', fichierSelectionne);
-    const ingestRes = await fetch(`/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
+    const ingestRes = await fetch(`${API_BASE}/projects/${projet.project_id}/ingest`, { method: 'POST', headers: { Authorization: authHeader }, body: formData });
     if (!ingestRes.ok) {
       const err = await ingestRes.json().catch(() => ({ detail: "Erreur lors du découpage du fichier." }));
       resEl.style.color = 'var(--danger)'; resEl.textContent = err.detail;

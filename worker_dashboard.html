@@ -4,25 +4,34 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Passerelle — Espace étudiant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #F8FAFC;
+    --bg: #FAFAFA;
     --surface: #FFFFFF;
-    --border: #E2E8F0;
-    --border-strong: #CBD5E1;
-    --text: #0F172A;
-    --text-secondary: #64748B;
-    --primary: #2563EB;
-    --primary-hover: #1D4ED8;
-    --success: #16A34A;
-    --success-bg: #F0FDF4;
-    --danger: #DC2626;
-    --danger-bg: #FEF2F2;
-    --warning: #D97706;
+    --border: #ECECF0;
+    --border-strong: #DDDCE4;
+    --text: #16161A;
+    --text-secondary: #7A7A85;
+    --text-tertiary: #A5A5B0;
+    --primary: #5B5BF0;
+    --primary-hover: #4A4AD9;
+    --primary-bg: #F0F0FE;
+    --success: #10B981;
+    --success-bg: #ECFDF5;
+    --danger: #F43F5E;
+    --danger-bg: #FFF1F3;
+    --warning: #F59E0B;
     --warning-bg: #FFFBEB;
-    --radius: 8px;
-    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow-sm: 0 1px 2px rgba(20,20,30,.04);
+    --shadow-md: 0 2px 8px rgba(20,20,30,.05), 0 1px 2px rgba(20,20,30,.04);
+    --shadow-lg: 0 8px 24px rgba(20,20,30,.08), 0 2px 6px rgba(20,20,30,.05);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
 
   * { box-sizing: border-box; }
@@ -32,13 +41,17 @@
     font-family: var(--font);
     background: var(--bg);
     color: var(--text);
-    font-size: 14px;
+    font-size: 14.5px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
   }
 
   .topbar {
-    background: var(--surface);
+    background: rgba(255,255,255,.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border-bottom: 1px solid var(--border);
-    padding: 14px 24px;
+    padding: 16px 32px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -49,115 +62,117 @@
     z-index: 5;
   }
 
-  .topbar .logo { font-weight: 600; font-size: 15px; }
+  .topbar .logo { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
 
-  .stats { display: flex; gap: 20px; }
+  .stats { display: flex; gap: 28px; }
   .stat { text-align: right; }
-  .stat .valeur { font-weight: 600; font-size: 15px; }
+  .stat .valeur { font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
   .stat.argent .valeur { color: var(--success); }
-  .stat .label { font-size: 11px; color: var(--text-secondary); }
+  .stat .label { font-size: 11px; color: var(--text-tertiary); margin-top: 1px; }
 
-  .conteneur { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .conteneur { max-width: 1140px; margin: 0 auto; padding: 32px; }
 
   .grille {
     display: grid;
     grid-template-columns: 340px 1fr;
     grid-template-areas: "projets tache" "historique tache";
-    gap: 20px;
+    gap: 24px;
     align-items: start;
   }
   @media (max-width: 860px) {
     .grille { grid-template-columns: 1fr; grid-template-areas: "tache" "projets" "historique"; }
+    .conteneur { padding: 18px; }
   }
 
-  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
-  .panel h2 { font-size: 13px; font-weight: 600; margin: 0 0 14px; text-transform: none; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow-sm); }
+  .panel h2 { font-size: 12px; font-weight: 700; margin: 0 0 16px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-tertiary); }
   .panel-projets { grid-area: projets; }
   .panel-tache { grid-area: tache; }
   .panel-historique { grid-area: historique; }
 
-  label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
   input[type=email], input[type=password], input[type=text] {
-    width: 100%; padding: 8px 10px; font-size: 14px; font-family: inherit;
-    border: 1px solid var(--border-strong); border-radius: 6px; margin-bottom: 12px; background: #fff;
+    width: 100%; padding: 10px 12px; font-size: 14.5px; font-family: inherit;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; background: var(--bg);
   }
-  input:focus { outline: 2px solid var(--primary); outline-offset: 1px; }
+  input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-bg); }
 
   .rang { display: flex; gap: 8px; }
   button {
-    font-family: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px;
-    border-radius: 6px; border: 1px solid var(--border-strong); background: var(--surface);
-    color: var(--text); cursor: pointer;
+    font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 16px;
+    border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface);
+    color: var(--text); cursor: pointer; letter-spacing: -0.005em;
   }
-  button:hover { background: var(--bg); }
-  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); }
-  button.principal:hover { background: var(--primary-hover); }
-  button:disabled { opacity: 0.5; cursor: default; }
+  button:hover { background: var(--bg); border-color: var(--border-strong); }
+  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: var(--shadow-sm); }
+  button.principal:hover { background: var(--primary-hover); border-color: var(--primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  button:disabled { opacity: 0.5; cursor: default; transform: none; }
 
   .item-projet {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
-    background: var(--bg); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
+    padding: 12px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--surface); cursor: pointer; text-align: left; width: 100%; margin-bottom: 8px;
   }
-  .item-projet.actif { border-color: var(--primary); background: #EFF6FF; }
-  .item-projet .titre { font-weight: 500; font-size: 13px; }
-  .item-projet .sousinfo { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-  .item-projet .prix { font-family: var(--mono); font-size: 12px; color: var(--success); }
+  .item-projet:hover { border-color: var(--border-strong); background: var(--bg); }
+  .item-projet.actif { border-color: var(--primary); background: var(--primary-bg); }
+  .item-projet .titre { font-weight: 600; font-size: 13.5px; }
+  .item-projet .sousinfo { font-size: 11.5px; color: var(--text-tertiary); margin-top: 2px; }
+  .item-projet .prix { font-family: var(--mono); font-size: 12px; color: var(--success); font-weight: 500; }
 
-  .vide { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
+  .vide { text-align: center; padding: 30px 10px; color: var(--text-tertiary); font-size: 13px; }
 
-  .ligne-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
-  .ligne-info .pos { font-size: 12px; color: var(--text-secondary); }
-  .ligne-info .prix-ligne { font-family: var(--mono); font-size: 13px; color: var(--success); font-weight: 600; }
+  .ligne-info { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+  .ligne-info .pos { font-size: 12px; color: var(--text-tertiary); font-weight: 500; }
+  .ligne-info .prix-ligne { font-family: var(--mono); font-size: 14px; color: var(--success); font-weight: 700; }
 
-  .champ { margin-bottom: 16px; }
-  .champ .nom-colonne { font-size: 11px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
+  .champ { margin-bottom: 18px; }
+  .champ .nom-colonne { font-size: 11.5px; color: var(--text-tertiary); margin-bottom: 5px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
   .champ .brut {
-    font-family: var(--mono); font-size: 12px; color: var(--text-secondary);
-    background: var(--bg); border: 1px dashed var(--border-strong); border-radius: 5px;
-    padding: 5px 8px; margin-bottom: 6px; word-break: break-word;
+    font-family: var(--mono); font-size: 12.5px; color: var(--text-secondary);
+    background: var(--bg); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm);
+    padding: 6px 10px; margin-bottom: 7px; word-break: break-word;
   }
-  .badges { margin-bottom: 6px; display: flex; flex-wrap: wrap; gap: 5px; }
-  .badge { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; }
+  .badges { margin-bottom: 7px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 600; }
   .badge.danger { background: var(--danger-bg); color: var(--danger); }
   .badge.warning { background: var(--warning-bg); color: var(--warning); }
-  .badge.info { background: #EFF6FF; color: var(--primary); }
+  .badge.info { background: var(--primary-bg); color: var(--primary); }
 
   .champ input[type=text] {
-    width: 100%; padding: 9px 10px; font-family: var(--mono); font-size: 13px;
-    border: 1.5px solid var(--border-strong); border-radius: 6px; background: #fff; margin-bottom: 0;
+    width: 100%; padding: 10px 12px; font-family: var(--mono); font-size: 13.5px;
+    border: 1.5px solid var(--border-strong); border-radius: var(--radius-sm); background: #fff; margin-bottom: 0;
   }
   .champ input.a-corriger { border-color: var(--danger); }
   .champ input.a-verifier { border-color: var(--warning); }
   .champ input.input-bloquant { border-color: var(--danger); box-shadow: 0 0 0 3px var(--danger-bg); animation: secouer .3s; }
   @keyframes secouer { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
 
-  .actions-tache { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .actions-tache { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
 
-  .msg { font-size: 12px; color: var(--text-secondary); margin: 8px 0 0; }
+  .msg { font-size: 12.5px; color: var(--text-secondary); margin: 8px 0 0; }
 
   .registre { display: flex; flex-direction: column; }
-  .ligne-registre { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .ligne-registre { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .ligne-registre:last-child { border-bottom: none; }
-  .ligne-registre .montant { font-family: var(--mono); }
+  .ligne-registre .montant { font-family: var(--mono); font-weight: 500; }
   .ligne-registre.paye .montant { color: var(--success); }
-  .ligne-registre.attente .montant { color: var(--text-secondary); }
+  .ligne-registre.attente .montant { color: var(--text-tertiary); }
 
-  .filtres { display: flex; gap: 6px; margin-bottom: 10px; }
-  .filtres button { padding: 5px 10px; font-size: 12px; }
+  .filtres { display: flex; gap: 6px; margin-bottom: 12px; }
+  .filtres button { padding: 5px 12px; font-size: 12px; }
   .filtres button.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-  .auth-onglets { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .auth-onglets { display: flex; border-bottom: 1.5px solid var(--border); margin-bottom: 20px; gap: 4px; }
   .auth-onglet {
     flex: 1; background: none; border: none; border-bottom: 2px solid transparent;
-    border-radius: 0; padding: 10px 0; font-weight: 500; color: var(--text-secondary);
+    border-radius: 0; padding: 12px 0; font-weight: 600; color: var(--text-tertiary);
   }
   .auth-onglet.actif { color: var(--primary); border-bottom-color: var(--primary); }
-  .auth-onglet:hover { background: none; }
+  .auth-onglet:hover { background: none; color: var(--text); }
 
-  .erreur-champ { font-size: 12px; color: var(--danger); margin: -10px 0 10px; min-height: 15px; }
+  .erreur-champ { font-size: 12px; color: var(--danger); margin: -11px 0 12px; min-height: 15px; font-weight: 500; }
   .erreur-champ:empty { display: none; }
-  .indication-neutre { font-size: 12px; color: var(--text-secondary); margin: -10px 0 12px; }
+  .indication-neutre { font-size: 12px; color: var(--text-tertiary); margin: -11px 0 14px; }
 
   .champ-mdp { position: relative; margin-bottom: 0; }
   .champ-mdp input { padding-right: 38px; margin-bottom: 0; }
@@ -169,33 +184,32 @@
   .toggle-mdp:hover { opacity: 1; background: none; }
 
   .ligne-confidentialite {
-    display: flex; align-items: flex-start; gap: 6px; font-size: 12px;
-    color: var(--text-secondary); margin: 8px 0 0; cursor: pointer;
+    display: flex; align-items: flex-start; gap: 7px; font-size: 12px;
+    color: var(--text-secondary); margin: 10px 0 0; cursor: pointer; line-height: 1.5;
   }
   .ligne-confidentialite input { margin-top: 2px; width: auto; }
 
-  .pleine-largeur { width: 100%; margin-top: 4px; }
-  button:disabled { opacity: 0.6; cursor: default; }
+  .pleine-largeur { width: 100%; margin-top: 6px; }
 
-  button, .item-projet, input, .champ input[type=text] { transition: background .15s ease, border-color .15s ease, opacity .15s ease; }
+  button, .item-projet, input, .champ input[type=text] { transition: background .15s ease, border-color .15s ease, opacity .15s ease, transform .15s ease, box-shadow .15s ease; }
 
-  .topbar-droite { display: flex; align-items: center; gap: 16px; }
+  .topbar-droite { display: flex; align-items: center; gap: 20px; }
   .compte-info { display: none; align-items: center; gap: 12px; }
   .compte-info.visible { display: flex; }
-  .compte-email { font-size: 12px; color: var(--text-secondary); }
-  .btn-deconnexion { padding: 6px 12px; font-size: 12px; }
+  .compte-email { font-size: 12.5px; color: var(--text-tertiary); }
+  .btn-deconnexion { padding: 7px 14px; font-size: 12.5px; }
 
   .spinner {
-    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(37,99,235,.2);
+    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(91,91,240,.2);
     border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite;
     vertical-align: middle; margin-right: 7px;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-  .anim-in { animation: fadeIn .25s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeIn .3s cubic-bezier(.16,1,.3,1); }
 
-  .bloc-charge { text-align: center; padding: 24px 10px; color: var(--text-secondary); font-size: 13px; }
+  .bloc-charge { text-align: center; padding: 30px 10px; color: var(--text-tertiary); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -294,6 +308,12 @@
   </div>
 
 <script>
+// URL du backend (Render une fois déployé). Vide = même origine (utile en
+// local, quand cette page et l'API tournent sur le même serveur uvicorn).
+// À la mise en ligne séparée (Netlify + Render), remplace par ex. par
+// 'https://api.tondomaine.fr'.
+const API_BASE = '';
+
 let authHeader = sessionStorage.getItem('passerelle_auth') || null;
 let tacheCourante = null;
 let projetCourant = null;
@@ -363,7 +383,7 @@ async function seConnecter() {
 
 async function tenterConnexion(header) {
   const msg = document.getElementById('msg_connexion');
-  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  const res = await fetch(API_BASE + '/auth/me', { headers: { Authorization: header } });
   if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth'); return; }
   const moi = await res.json();
   if (moi.role !== 'worker') { msg.textContent = "Ce compte n'est pas un compte étudiant."; return; }
@@ -410,7 +430,7 @@ async function creerCompte() {
   bouton.disabled = true;
   bouton.textContent = 'Création...';
   try {
-    const res = await fetch('/auth/register', {
+    const res = await fetch(API_BASE + '/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, role: 'worker', accepte_confidentialite }),
     });
@@ -430,7 +450,7 @@ async function creerCompte() {
 }
 
 async function chargerProjetsDisponibles() {
-  const res = await fetch('/projects/available', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/projects/available', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   const data = await res.json();
   const liste = document.getElementById('liste_projets');
@@ -463,7 +483,7 @@ function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;',
 
 async function chargerTacheSuivante() {
   const zone = document.getElementById('zone_tache');
-  const res = await fetch(`/tasks/next?project_id=${projetCourant}`, { headers: { Authorization: authHeader } });
+  const res = await fetch(`${API_BASE}/tasks/next?project_id=${projetCourant}`, { headers: { Authorization: authHeader } });
 
   if (res.status === 404) {
     animer(zone, '<div class="vide">Plus de tâche disponible sur ce projet pour le moment.</div>');
@@ -506,7 +526,7 @@ async function libererEtPasser() {
   if (btnPasser) btnPasser.disabled = true;
   if (btnValider) btnValider.disabled = true;
   try {
-    if (tacheCourante) await fetch(`/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
+    if (tacheCourante) await fetch(`${API_BASE}/tasks/${tacheCourante.task_id}/release`, { method: 'POST', headers: { Authorization: authHeader } });
     animer(document.getElementById('zone_tache'), '<div class="bloc-charge"><span class="spinner"></span>Chargement de la tâche suivante...</div>');
     await chargerTacheSuivante();
   } catch {
@@ -528,7 +548,7 @@ async function validerTache() {
   inputs.forEach(inp => { reponse[parseInt(inp.dataset.col, 10)] = inp.value; });
 
   try {
-    const res = await fetch(`/tasks/${tacheCourante.task_id}/submit`, {
+    const res = await fetch(`${API_BASE}/tasks/${tacheCourante.task_id}/submit`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
       body: JSON.stringify({ reponse }),
     });
@@ -555,7 +575,7 @@ async function validerTache() {
     }
 
     actualiserHistorique();
-    const moiRes = await fetch('/auth/me', { headers: { Authorization: authHeader } });
+    const moiRes = await fetch(API_BASE + '/auth/me', { headers: { Authorization: authHeader } });
     if (moiRes.ok) document.getElementById('stat_confiance').textContent = (await moiRes.json()).trust_score + '/100';
 
     animer(document.getElementById('zone_tache'), '<div class="bloc-charge"><span class="spinner"></span>Chargement de la tâche suivante...</div>');
@@ -569,7 +589,7 @@ async function validerTache() {
 }
 
 async function actualiserHistorique() {
-  const res = await fetch('/tasks/mine', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/tasks/mine', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   const data = await res.json();
   document.getElementById('stat_solde').textContent = data.solde_disponible.toFixed(2).replace('.', ',') + ' €';

@@ -23,6 +23,7 @@ import os
 import tempfile
 
 from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from typing import Annotated
 
@@ -67,7 +68,33 @@ class Payout(Base):
 LOCK_TIMEOUT_MINUTES = 15
 
 app = FastAPI(title="Passerelle de Micro-Tâches Data")
-engine = get_engine()
+
+# CORS -- nécessaire dès que le frontend (Netlify) et le backend (Render) ne
+# sont plus sur le même nom de domaine. FRONTEND_ORIGINS est une liste
+# d'origines autorisées séparées par des virgules (ex. sur Render :
+# "https://passerelle-data.netlify.app,https://tondomaine.fr"). En local,
+# personne n'a besoin de CORS (même origine), donc la valeur par défaut
+# n'autorise rien d'externe -- pas de risque à l'oublier en dev.
+_ORIGINES_AUTORISEES = [
+    o.strip() for o in os.environ.get("FRONTEND_ORIGINS", "").split(",") if o.strip()
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_ORIGINES_AUTORISEES,
+    allow_credentials=False,  # l'auth passe par un header Authorization, pas des cookies
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# DATABASE_URL -- fourni automatiquement par Render quand tu ajoutes une base
+# PostgreSQL gérée au service. Absent (ex. en local) -> repli sur SQLite comme
+# avant. Render fournit parfois une URL commençant par "postgres://" (ancien
+# format) alors que SQLAlchemy 2.x exige "postgresql://" -- on corrige au vol.
+_DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./passerelle.db")
+if _DATABASE_URL.startswith("postgres://"):
+    _DATABASE_URL = _DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+engine = get_engine(_DATABASE_URL)
 SessionLocal = get_session_factory(engine)  # crée toutes les tables, y compris task_locks
 init_auth_db(SessionLocal)  # partage le même moteur/session avec auth.py -- voir auth.py
 

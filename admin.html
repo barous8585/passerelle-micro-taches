@@ -205,6 +205,12 @@
   </div>
 
 <script>
+// URL du backend (Render une fois déployé). Vide = même origine (utile en
+// local, quand cette page et l'API tournent sur le même serveur uvicorn).
+// À la mise en ligne séparée (Netlify + Render), remplace par ex. par
+// 'https://api.tondomaine.fr'.
+const API_BASE = '';
+
 let authHeader = sessionStorage.getItem('passerelle_auth_admin') || null;
 let filtreActuel = 'en_attente';
 
@@ -254,7 +260,7 @@ async function seConnecter() {
 
 async function tenterConnexion(header) {
   const msg = document.getElementById('msg_connexion');
-  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  const res = await fetch(API_BASE + '/auth/me', { headers: { Authorization: header } });
   if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_admin'); return; }
   const moi = await res.json();
   if (moi.role !== 'admin') { msg.textContent = "Ce compte n'est pas un compte admin."; return; }
@@ -275,7 +281,7 @@ async function tenterConnexion(header) {
 if (authHeader) tenterConnexion(authHeader);
 
 async function chargerStats() {
-  const res = await fetch('/admin/stats', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/admin/stats', { headers: { Authorization: authHeader } });
   if (!res.ok) return;
   const s = await res.json();
   animer(document.getElementById('stats_grille'), `
@@ -303,7 +309,7 @@ async function chargerDemandes() {
   const recherche = document.getElementById('recherche_compte').value.trim();
   const params = new URLSearchParams({ statut: filtreActuel });
   if (recherche) params.set('recherche', recherche);
-  const res = await fetch(`/admin/comptes?${params}`, { headers: { Authorization: authHeader } });
+  const res = await fetch(`${API_BASE}/admin/comptes?${params}`, { headers: { Authorization: authHeader } });
   if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
   const data = await res.json();
 
@@ -336,7 +342,7 @@ async function agirSurCompte(id, action) {
   const boutons = bloc.querySelectorAll('button');
   boutons.forEach(b => b.disabled = true);
   try {
-    const res = await fetch(`/admin/comptes/${id}/${action}`, { method: 'POST', headers: { Authorization: authHeader } });
+    const res = await fetch(`${API_BASE}/admin/comptes/${id}/${action}`, { method: 'POST', headers: { Authorization: authHeader } });
     if (!res.ok) { alert("Erreur lors de l'action."); boutons.forEach(b => b.disabled = false); return; }
     bloc.style.opacity = '0';
     bloc.style.transform = 'translateX(8px)';
@@ -351,7 +357,7 @@ async function agirSurCompte(id, action) {
 
 async function chargerPaiements() {
   const liste = document.getElementById('liste_paiements');
-  const res = await fetch('/admin/paiements', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/admin/paiements', { headers: { Authorization: authHeader } });
   if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
   const data = await res.json();
 
@@ -379,7 +385,7 @@ async function marquerPaye(id, email, montant) {
   const bloc = document.getElementById(`paiement_${id}`);
   bloc.querySelectorAll('button').forEach(b => b.disabled = true);
   try {
-    const res = await fetch(`/admin/workers/${id}/marquer-paye`, { method: 'POST', headers: { Authorization: authHeader } });
+    const res = await fetch(`${API_BASE}/admin/workers/${id}/marquer-paye`, { method: 'POST', headers: { Authorization: authHeader } });
     if (!res.ok) { alert("Erreur lors de l'action."); bloc.querySelectorAll('button').forEach(b => b.disabled = false); return; }
     chargerPaiements();
   } catch {
@@ -392,7 +398,7 @@ async function marquerPaye(id, email, montant) {
 
 async function chargerProjetsAdmin() {
   const liste = document.getElementById('liste_projets_admin');
-  const res = await fetch('/admin/projets', { headers: { Authorization: authHeader } });
+  const res = await fetch(API_BASE + '/admin/projets', { headers: { Authorization: authHeader } });
   if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
   const data = await res.json();
 
@@ -421,7 +427,7 @@ async function voirLitiges(projectId, titre) {
   zone.style.display = 'block';
   animer(zone, '<div class="bloc-charge"><span class="spinner"></span>Chargement des litiges...</div>');
 
-  const res = await fetch(`/admin/projets/${projectId}/litiges`, { headers: { Authorization: authHeader } });
+  const res = await fetch(`${API_BASE}/admin/projets/${projectId}/litiges`, { headers: { Authorization: authHeader } });
   if (!res.ok) { animer(zone, '<div class="vide">Erreur de chargement.</div>'); return; }
   const data = await res.json();
 
@@ -450,7 +456,7 @@ async function resoudreLitige(taskId, projectId, titre) {
   const valeurs = new Array(inputs.length);
   inputs.forEach(inp => { valeurs[parseInt(inp.dataset.col, 10)] = inp.value; });
 
-  const res = await fetch(`/admin/taches/${taskId}/resoudre-litige`, {
+  const res = await fetch(`${API_BASE}/admin/taches/${taskId}/resoudre-litige`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: authHeader },
     body: JSON.stringify({ valeurs }),
   });
