@@ -1017,17 +1017,17 @@ def admin_refuser_compte(user_id: int, user: User = Depends(require_role("admin"
 
 @app.get("/admin", response_class=HTMLResponse)
 def page_admin():
-    with open("admin.html", encoding="utf-8") as f:
+    with open("site/admin.html", encoding="utf-8") as f:
         return f.read()
 
 
 @app.get("/", response_class=HTMLResponse)
 def page_depot_client():
-    with open("client_upload.html", encoding="utf-8") as f:
+    with open("site/client_upload.html", encoding="utf-8") as f:
         return f.read()
 
 
 @app.get("/worker", response_class=HTMLResponse)
 def page_worker_dashboard():
-    with open("worker_dashboard.html", encoding="utf-8") as f:
+    with open("site/worker_dashboard.html", encoding="utf-8") as f:
         return f.read()
