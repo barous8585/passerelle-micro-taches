@@ -1,20 +1,47 @@
 """
-admin_tools.py — Outil en ligne de commande pour valider manuellement les
-comptes client et worker avant qu'ils puissent utiliser la plateforme.
+admin_tools.py — Outil en ligne de commande pour le tout premier compte
+admin, seule porte d'entrée à l'espace /admin (voir README, section
+"Espace admin").
 
-Pas d'interface web pour l'instant (voir README, section "Statut") -- un
-script suffit pour un lancement pilote où tu approuves toi-même chaque
-compte. Un vrai tableau de bord admin reste un chantier à part.
+Une fois CE compte créé, toute la validation des demandes (client/worker)
+se fait depuis l'interface web /admin -- ce script ne sert plus qu'à
+bootstrap le premier admin, ou en secours si /admin est inaccessible.
 
 Usage :
+    python3 admin_tools.py --creer-admin email@exemple.fr
     python3 admin_tools.py --lister
     python3 admin_tools.py --approuver email@exemple.fr
     python3 admin_tools.py --refuser email@exemple.fr
 """
 
 import argparse
+import getpass
 
-from models import User, get_engine, get_session_factory
+from auth import hash_password
+from models import RoleEnum, User, get_engine, get_session_factory
+
+
+def creer_admin(db, email):
+    if db.query(User).filter_by(email=email).first():
+        print(f"Un compte existe déjà avec l'email {email}")
+        return
+    mot_de_passe = getpass.getpass("Mot de passe du compte admin : ")
+    confirmation = getpass.getpass("Confirme le mot de passe : ")
+    if mot_de_passe != confirmation:
+        print("Les deux mots de passe ne correspondent pas -- rien n'a été créé.")
+        return
+    if len(mot_de_passe) < 8:
+        print("Le mot de passe doit faire au moins 8 caractères -- rien n'a été créé.")
+        return
+    user = User(
+        email=email,
+        role=RoleEnum.admin,
+        password_hash=hash_password(mot_de_passe),
+        approuve=True,  # un admin s'auto-valide -- personne d'autre ne peut le faire pour le premier compte
+    )
+    db.add(user)
+    db.commit()
+    print(f"✅ Compte admin {email} créé. Connecte-toi sur /admin.")
 
 
 def lister_comptes_en_attente(db):
@@ -51,6 +78,7 @@ def refuser(db, email):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gestion manuelle des comptes en attente de validation.")
+    parser.add_argument("--creer-admin", metavar="EMAIL", help="Crée le premier compte admin (accès à /admin)")
     parser.add_argument("--lister", action="store_true", help="Liste les comptes en attente")
     parser.add_argument("--approuver", metavar="EMAIL", help="Approuve un compte par email")
     parser.add_argument("--refuser", metavar="EMAIL", help="Repasse un compte en attente")
@@ -58,7 +86,9 @@ if __name__ == "__main__":
 
     db = get_session_factory(get_engine())()
     try:
-        if args.approuver:
+        if args.creer_admin:
+            creer_admin(db, args.creer_admin)
+        elif args.approuver:
             approuver(db, args.approuver)
         elif args.refuser:
             refuser(db, args.refuser)

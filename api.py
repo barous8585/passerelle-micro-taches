@@ -719,6 +719,91 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# ESPACE ADMIN -- validation des demandes de compte (client/worker)
+# ---------------------------------------------------------------------------
+# Remplace le script admin_tools.py au quotidien : un compte admin (créé une
+# fois via `python3 admin_tools.py --creer-admin ...`) peut désormais
+# approuver ou refuser une demande depuis /admin, sans terminal.
+
+@app.get("/admin/comptes")
+def admin_lister_comptes(statut: str = "en_attente", user: User = Depends(require_role("admin"))):
+    """statut: 'en_attente' (défaut) ou 'tous'."""
+    db = SessionLocal()
+    try:
+        q = db.query(User).filter(User.role != RoleEnum.admin)
+        if statut == "en_attente":
+            q = q.filter_by(approuve=False)
+        comptes = q.order_by(User.id.desc()).all()
+        return {
+            "comptes": [
+                {
+                    "id": c.id,
+                    "email": c.email,
+                    "role": c.role.value,
+                    "approuve": c.approuve,
+                    "secteur_activite": c.secteur_activite,
+                    "trust_score": round(c.trust_score, 1) if c.role == RoleEnum.worker else None,
+                }
+                for c in comptes
+            ]
+        }
+    finally:
+        db.close()
+
+
+@app.get("/admin/stats")
+def admin_stats(user: User = Depends(require_role("admin"))):
+    db = SessionLocal()
+    try:
+        return {
+            "clients_approuves": db.query(User).filter_by(role=RoleEnum.client, approuve=True).count(),
+            "workers_approuves": db.query(User).filter_by(role=RoleEnum.worker, approuve=True).count(),
+            "comptes_en_attente": db.query(User).filter(User.role != RoleEnum.admin, User.approuve == False).count(),  # noqa: E712
+            "projets_actifs": db.query(Project).count(),
+        }
+    finally:
+        db.close()
+
+
+@app.post("/admin/comptes/{user_id}/approuver")
+def admin_approuver_compte(user_id: int, user: User = Depends(require_role("admin"))):
+    db = SessionLocal()
+    try:
+        cible = db.query(User).filter_by(id=user_id).first()
+        if not cible:
+            raise HTTPException(status_code=404, detail="Compte introuvable")
+        if cible.role == RoleEnum.admin:
+            raise HTTPException(status_code=400, detail="Un compte admin ne se gère pas depuis cette interface")
+        cible.approuve = True
+        db.commit()
+        return {"id": cible.id, "email": cible.email, "approuve": True}
+    finally:
+        db.close()
+
+
+@app.post("/admin/comptes/{user_id}/refuser")
+def admin_refuser_compte(user_id: int, user: User = Depends(require_role("admin"))):
+    db = SessionLocal()
+    try:
+        cible = db.query(User).filter_by(id=user_id).first()
+        if not cible:
+            raise HTTPException(status_code=404, detail="Compte introuvable")
+        if cible.role == RoleEnum.admin:
+            raise HTTPException(status_code=400, detail="Un compte admin ne se gère pas depuis cette interface")
+        cible.approuve = False
+        db.commit()
+        return {"id": cible.id, "email": cible.email, "approuve": False}
+    finally:
+        db.close()
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def page_admin():
+    with open("admin.html", encoding="utf-8") as f:
+        return f.read()
+
+
 @app.get("/", response_class=HTMLResponse)
 def page_depot_client():
     with open("client_upload.html", encoding="utf-8") as f:
