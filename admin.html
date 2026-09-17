@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin — ProxyShop</title>
+<link rel="stylesheet" href="/static/style.css"/>
+</head>
+<body class="admin-body">
+
+<header class="header">
+  <div class="logo">⚙️ Admin ProxyShop</div>
+  <a href="/" class="admin-link">← Accueil</a>
+</header>
+
+<main class="container" style="padding-bottom: 40px">
+
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-label">Commandes totales</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-encaisse">—</div><div class="stat-label">FCFA encaissés</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-paye">—</div><div class="stat-label">En attente d'achat</div></div>
+    <div class="stat-card"><div class="stat-val" id="s-transit">—</div><div class="stat-label">En transit</div></div>
+  </div>
+
+  <!-- Filtres -->
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="filtrer('',this)">Toutes</button>
+    <button class="filter-btn" onclick="filtrer('payé',this)">Payé</button>
+    <button class="filter-btn" onclick="filtrer('acheté',this)">Acheté</button>
+    <button class="filter-btn" onclick="filtrer('expédié',this)">Expédié</button>
+    <button class="filter-btn" onclick="filtrer('arrivé',this)">Arrivé</button>
+  </div>
+
+  <!-- Liste commandes -->
+  <div id="commandes-list"></div>
+
+  <!-- Paramètres -->
+  <div class="card" style="margin-top:24px">
+    <div class="step-label">Paramètres de calcul</div>
+    <h2 style="margin-bottom:16px">Formule de prix</h2>
+    <div class="field">
+      <label>Taux de change majoré (€ → FCFA)</label>
+      <input type="number" id="p-taux" step="1" />
+    </div>
+    <div class="field">
+      <label>Commission fixe (FCFA)</label>
+      <input type="number" id="p-comm" step="100" />
+    </div>
+    <div class="field">
+      <label>Frais de port de base (FCFA)</label>
+      <input type="number" id="p-port" step="100" />
+    </div>
+    <div class="formula-preview">
+      (Prix € × <b id="fp-taux">—</b>) + <b id="fp-comm">—</b> + <b id="fp-port">—</b> FCFA
+    </div>
+    <button class="btn-next" style="margin-top:12px" onclick="sauvegarderConfig()">💾 Sauvegarder</button>
+    <div id="config-msg" style="margin-top:8px;font-size:12px;color:#1D9E75;display:none">✓ Configuration sauvegardée</div>
+  </div>
+
+</main>
+
+<!-- Modal statut -->
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem">
+  <div class="card" style="width:100%;max-width:400px;margin:0">
+    <h3 id="modal-title" style="margin-bottom:12px"></h3>
+    <div class="field">
+      <label>Nouveau statut</label>
+      <select id="modal-statut">
+        <option value="payé">Payé</option>
+        <option value="acheté">Acheté en Europe</option>
+        <option value="expédié">Expédié</option>
+        <option value="arrivé">Arrivé au pays</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Note interne (optionnel)</label>
+      <input type="text" id="modal-note" placeholder="N° de suivi, commentaire…" />
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn-back" onclick="closeModal()">Annuler</button>
+      <button class="btn-next" onclick="confirmerStatut()">Mettre à jour</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = "http://localhost:8000";
+let currentRef = "";
+
+function fcfa(n) { return Math.round(n).toLocaleString('fr-FR') + ' FCFA'; }
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+async function chargerStats() {
+  try {
+    const d = await fetch(`${API}/api/admin/stats`).then(r=>r.json());
+    document.getElementById('s-total').textContent = d.total_commandes;
+    document.getElementById('s-encaisse').textContent = Math.round(d.encaisse_fcfa/1000)+'k';
+    document.getElementById('s-paye').textContent = d.by_statut['payé'] || 0;
+    document.getElementById('s-transit').textContent = d.by_statut['expédié'] || 0;
+  } catch(e) {}
+}
+
+// ── Commandes ─────────────────────────────────────────────────────────────────
+async function chargerCommandes(statut='') {
+  const url = statut ? `${API}/api/admin/commandes?statut=${encodeURIComponent(statut)}` : `${API}/api/admin/commandes`;
+  const list = document.getElementById('commandes-list');
+  list.innerHTML = '<div style="text-align:center;padding:24px;color:#aaa">Chargement…</div>';
+  try {
+    const commandes = await fetch(url).then(r=>r.json());
+    if (!commandes.length) { list.innerHTML='<div style="text-align:center;padding:24px;color:#aaa">Aucune commande</div>'; return; }
+    list.innerHTML = commandes.map(c => `
+      <div class="commande-card">
+        <div class="cmd-header">
+          <div>
+            <div class="cmd-ref">${c.ref}</div>
+            <div class="cmd-date">${new Date(c.created_at).toLocaleDateString('fr-FR')} · ${c.operateur}</div>
+          </div>
+          <span class="statut-badge statut-${c.statut}">${c.statut.toUpperCase()}</span>
+        </div>
+        <div class="cmd-produit">${c.nom_produit}</div>
+        <div class="cmd-detail">${c.taille||''} ${c.couleur?'· '+c.couleur:''}</div>
+        <div class="cmd-client">👤 ${c.client_nom} · ${c.client_tel} · ${c.client_pays}</div>
+        <div class="cmd-prix">${fcfa(c.prix_fcfa)} <span style="color:#aaa;font-size:11px">(${c.prix_euro} €)</span></div>
+        <a class="cmd-lien" href="${c.lien_produit}" target="_blank">🔗 Ouvrir le produit sur le site européen ↗</a>
+        ${c.notes_admin ? `<div class="cmd-note">📝 ${c.notes_admin}</div>` : ''}
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn-status" onclick="openModal('${c.ref}','${c.nom_produit}','${c.statut}')">✏️ Changer statut</button>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+    list.innerHTML='<div style="text-align:center;padding:24px;color:#e74c3c">Erreur de connexion au serveur.</div>';
+  }
+}
+
+function filtrer(statut, btn) {
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  chargerCommandes(statut);
+}
+
+// ── Modal statut ──────────────────────────────────────────────────────────────
+function openModal(ref, nom, statut) {
+  currentRef = ref;
+  document.getElementById('modal-title').textContent = nom;
+  document.getElementById('modal-statut').value = statut;
+  document.getElementById('modal-note').value = '';
+  const overlay = document.getElementById('modal-overlay');
+  overlay.style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').style.display = 'none';
+}
+
+async function confirmerStatut() {
+  const statut = document.getElementById('modal-statut').value;
+  const note = document.getElementById('modal-note').value.trim();
+  try {
+    await fetch(`${API}/api/admin/commandes/${currentRef}/statut`, {
+      method:'PATCH',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ statut, notes_admin: note||null })
+    });
+    closeModal();
+    chargerCommandes();
+    chargerStats();
+  } catch(e) { alert('Erreur lors de la mise à jour.'); }
+}
+
+// ── Config ────────────────────────────────────────────────────────────────────
+async function chargerConfig() {
+  try {
+    const c = await fetch(`${API}/api/admin/config`).then(r=>r.json());
+    document.getElementById('p-taux').value = c.taux_change;
+    document.getElementById('p-comm').value = c.commission;
+    document.getElementById('p-port').value = c.frais_port;
+    majFormule();
+  } catch(e) {}
+}
+
+function majFormule() {
+  document.getElementById('fp-taux').textContent = document.getElementById('p-taux').value;
+  document.getElementById('fp-comm').textContent = parseInt(document.getElementById('p-comm').value||0).toLocaleString('fr-FR');
+  document.getElementById('fp-port').textContent = parseInt(document.getElementById('p-port').value||0).toLocaleString('fr-FR');
+}
+
+['p-taux','p-comm','p-port'].forEach(id => document.getElementById(id).addEventListener('input', majFormule));
+
+async function sauvegarderConfig() {
+  try {
+    await fetch(`${API}/api/admin/config`, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        taux_change: parseFloat(document.getElementById('p-taux').value),
+        commission: parseFloat(document.getElementById('p-comm').value),
+        frais_port: parseFloat(document.getElementById('p-port').value),
+      })
+    });
+    const msg = document.getElementById('config-msg');
+    msg.style.display='block';
+    setTimeout(()=>msg.style.display='none', 3000);
+  } catch(e) { alert('Erreur lors de la sauvegarde.'); }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+chargerStats();
+chargerCommandes();
+chargerConfig();
+setInterval(() => { chargerStats(); chargerCommandes(); }, 30000); // refresh auto 30s
+</script>
+</body>
+</html>
