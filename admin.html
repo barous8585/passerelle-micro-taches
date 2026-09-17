@@ -1,215 +1,299 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Admin — ProxyShop</title>
-<link rel="stylesheet" href="/static/style.css"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Passerelle — Espace admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAFA;
+    --surface: #FFFFFF;
+    --border: #ECECF0;
+    --border-strong: #DDDCE4;
+    --text: #16161A;
+    --text-secondary: #7A7A85;
+    --text-tertiary: #A5A5B0;
+    --primary: #5B5BF0;
+    --primary-hover: #4A4AD9;
+    --primary-bg: #F0F0FE;
+    --success: #10B981;
+    --success-bg: #ECFDF5;
+    --danger: #F43F5E;
+    --danger-bg: #FFF1F3;
+    --warning: #F59E0B;
+    --warning-bg: #FFFBEB;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow-sm: 0 1px 2px rgba(20,20,30,.04);
+    --shadow-md: 0 2px 8px rgba(20,20,30,.05), 0 1px 2px rgba(20,20,30,.04);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+
+  .topbar {
+    background: rgba(255,255,255,.85); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border); padding: 16px 32px;
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    position: sticky; top: 0; z-index: 5;
+  }
+  .topbar .logo { font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+
+  .conteneur { max-width: 1000px; margin: 0 auto; padding: 32px; }
+  @media (max-width: 720px) { .conteneur { padding: 18px; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow-sm); }
+  .panel h2 { font-size: 12px; font-weight: 700; margin: 0 0 16px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-tertiary); }
+
+  label { display: block; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+  input[type=email], input[type=password] {
+    width: 100%; padding: 10px 12px; font-size: 14.5px; font-family: inherit;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm); margin-bottom: 14px; background: var(--bg);
+  }
+  input:focus { outline: none; border-color: var(--primary); background: #fff; box-shadow: 0 0 0 3px var(--primary-bg); }
+
+  button {
+    font-family: inherit; font-size: 13.5px; font-weight: 600; padding: 9px 16px;
+    border-radius: var(--radius-sm); border: 1.5px solid var(--border); background: var(--surface);
+    color: var(--text); cursor: pointer; letter-spacing: -0.005em;
+    transition: background .15s ease, border-color .15s ease, opacity .15s ease, transform .15s ease, box-shadow .15s ease;
+  }
+  button:hover { background: var(--bg); border-color: var(--border-strong); }
+  button.principal { background: var(--primary); color: #fff; border-color: var(--primary); box-shadow: var(--shadow-sm); }
+  button.principal:hover { background: var(--primary-hover); border-color: var(--primary-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+  button.succes { background: var(--success); color: #fff; border-color: var(--success); }
+  button.succes:hover { filter: brightness(0.92); }
+  button.refus { background: var(--surface); color: var(--danger); border-color: var(--danger-bg); }
+  button.refus:hover { background: var(--danger-bg); border-color: var(--danger); }
+  button:disabled { opacity: 0.5; cursor: default; transform: none; }
+  button.pleine-largeur { width: 100%; margin-top: 6px; }
+
+  .msg { font-size: 12.5px; color: var(--text-secondary); margin: 8px 0 0; }
+  .erreur-champ { font-size: 12px; color: var(--danger); margin: -11px 0 12px; min-height: 15px; font-weight: 500; }
+  .erreur-champ:empty { display: none; }
+
+  .compte-info { display: none; align-items: center; gap: 12px; }
+  .compte-info.visible { display: flex; }
+  .compte-email { font-size: 12.5px; color: var(--text-tertiary); }
+  .btn-deconnexion { padding: 7px 14px; font-size: 12.5px; }
+
+  .stats-grille { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 720px) { .stats-grille { grid-template-columns: repeat(2, 1fr); } }
+  .stat-carte { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow-sm); }
+  .stat-carte .valeur { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat-carte .label { font-size: 11.5px; color: var(--text-tertiary); margin-top: 4px; font-weight: 500; }
+
+  .demande {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 16px; border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .demande .infos { display: flex; flex-direction: column; gap: 3px; }
+  .demande .email { font-weight: 600; font-size: 13.5px; }
+  .demande .details { font-size: 12px; color: var(--text-tertiary); }
+  .demande .role-badge { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 3px 9px; border-radius: 999px; margin-right: 6px; }
+  .demande .role-badge.client { background: var(--primary-bg); color: var(--primary); }
+  .demande .role-badge.worker { background: var(--success-bg); color: var(--success); }
+  .demande .actions { display: flex; gap: 8px; }
+
+  .vide { text-align: center; padding: 34px 10px; color: var(--text-tertiary); font-size: 13px; }
+
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(91,91,240,.2);
+    border-top-color: var(--primary); border-radius: 50%; animation: spin .6s linear infinite;
+    vertical-align: middle; margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .anim-in { animation: fadeIn .3s cubic-bezier(.16,1,.3,1); }
+
+  .onglets-filtre { display: flex; gap: 6px; margin-bottom: 16px; }
+  .onglets-filtre button { padding: 6px 14px; font-size: 12.5px; }
+  .onglets-filtre button.actif { background: var(--primary); color: #fff; border-color: var(--primary); }
+</style>
 </head>
-<body class="admin-body">
+<body>
 
-<header class="header">
-  <div class="logo">⚙️ Admin ProxyShop</div>
-  <a href="/" class="admin-link">← Accueil</a>
-</header>
-
-<main class="container" style="padding-bottom: 40px">
-
-  <!-- Stats -->
-  <div class="stats-grid" id="stats-grid">
-    <div class="stat-card"><div class="stat-val" id="s-total">—</div><div class="stat-label">Commandes totales</div></div>
-    <div class="stat-card"><div class="stat-val" id="s-encaisse">—</div><div class="stat-label">FCFA encaissés</div></div>
-    <div class="stat-card"><div class="stat-val" id="s-paye">—</div><div class="stat-label">En attente d'achat</div></div>
-    <div class="stat-card"><div class="stat-val" id="s-transit">—</div><div class="stat-label">En transit</div></div>
-  </div>
-
-  <!-- Filtres -->
-  <div class="filter-bar">
-    <button class="filter-btn active" onclick="filtrer('',this)">Toutes</button>
-    <button class="filter-btn" onclick="filtrer('payé',this)">Payé</button>
-    <button class="filter-btn" onclick="filtrer('acheté',this)">Acheté</button>
-    <button class="filter-btn" onclick="filtrer('expédié',this)">Expédié</button>
-    <button class="filter-btn" onclick="filtrer('arrivé',this)">Arrivé</button>
-  </div>
-
-  <!-- Liste commandes -->
-  <div id="commandes-list"></div>
-
-  <!-- Paramètres -->
-  <div class="card" style="margin-top:24px">
-    <div class="step-label">Paramètres de calcul</div>
-    <h2 style="margin-bottom:16px">Formule de prix</h2>
-    <div class="field">
-      <label>Taux de change majoré (€ → FCFA)</label>
-      <input type="number" id="p-taux" step="1" />
-    </div>
-    <div class="field">
-      <label>Commission fixe (FCFA)</label>
-      <input type="number" id="p-comm" step="100" />
-    </div>
-    <div class="field">
-      <label>Frais de port de base (FCFA)</label>
-      <input type="number" id="p-port" step="100" />
-    </div>
-    <div class="formula-preview">
-      (Prix € × <b id="fp-taux">—</b>) + <b id="fp-comm">—</b> + <b id="fp-port">—</b> FCFA
-    </div>
-    <button class="btn-next" style="margin-top:12px" onclick="sauvegarderConfig()">💾 Sauvegarder</button>
-    <div id="config-msg" style="margin-top:8px;font-size:12px;color:#1D9E75;display:none">✓ Configuration sauvegardée</div>
-  </div>
-
-</main>
-
-<!-- Modal statut -->
-<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:100;display:none;align-items:center;justify-content:center;padding:1rem">
-  <div class="card" style="width:100%;max-width:400px;margin:0">
-    <h3 id="modal-title" style="margin-bottom:12px"></h3>
-    <div class="field">
-      <label>Nouveau statut</label>
-      <select id="modal-statut">
-        <option value="payé">Payé</option>
-        <option value="acheté">Acheté en Europe</option>
-        <option value="expédié">Expédié</option>
-        <option value="arrivé">Arrivé au pays</option>
-      </select>
-    </div>
-    <div class="field">
-      <label>Note interne (optionnel)</label>
-      <input type="text" id="modal-note" placeholder="N° de suivi, commentaire…" />
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn-back" onclick="closeModal()">Annuler</button>
-      <button class="btn-next" onclick="confirmerStatut()">Mettre à jour</button>
+  <div class="topbar">
+    <div class="logo">Passerelle — espace admin</div>
+    <div class="compte-info" id="compte_info">
+      <span class="compte-email" id="compte_email"></span>
+      <button class="btn-deconnexion" onclick="seDeconnecter()">Se déconnecter</button>
     </div>
   </div>
-</div>
+
+  <div class="conteneur">
+
+    <div class="panel" id="bloc_auth" style="max-width:400px; margin: 40px auto 0;">
+      <h2 style="text-align:center;">Connexion admin</h2>
+      <form id="form_connexion" onsubmit="event.preventDefault(); seConnecter();">
+        <label>Email</label>
+        <input type="email" id="co_email" placeholder="admin@passerelle.fr" autocomplete="username">
+        <div class="erreur-champ" id="co_email_erreur"></div>
+        <label>Mot de passe</label>
+        <input type="password" id="co_password" placeholder="Ton mot de passe" autocomplete="current-password">
+        <button type="submit" class="principal pleine-largeur" id="btn_connexion">Se connecter</button>
+        <p class="msg" id="msg_connexion"></p>
+      </form>
+      <p class="msg" style="margin-top:14px; text-align:center;">
+        Pas encore de compte admin ? Crée-le depuis le serveur :<br>
+        <code style="font-family:var(--mono); font-size:11px;">python3 admin_tools.py --creer-admin ton@email.fr</code>
+      </p>
+    </div>
+
+    <div id="espace_admin" style="display:none;">
+
+      <div class="stats-grille" id="stats_grille"></div>
+
+      <div class="panel">
+        <h2>Demandes de compte</h2>
+        <div class="onglets-filtre">
+          <button class="actif" data-filtre="en_attente" onclick="changerFiltre('en_attente')">En attente</button>
+          <button data-filtre="tous" onclick="changerFiltre('tous')">Tous les comptes</button>
+        </div>
+        <div id="liste_demandes"></div>
+      </div>
+
+    </div>
+
+  </div>
 
 <script>
-const API = "http://localhost:8000";
-let currentRef = "";
+let authHeader = sessionStorage.getItem('passerelle_auth_admin') || null;
+let filtreActuel = 'en_attente';
 
-function fcfa(n) { return Math.round(n).toLocaleString('fr-FR') + ' FCFA'; }
+function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
-// ── Stats ─────────────────────────────────────────────────────────────────────
-async function chargerStats() {
-  try {
-    const d = await fetch(`${API}/api/admin/stats`).then(r=>r.json());
-    document.getElementById('s-total').textContent = d.total_commandes;
-    document.getElementById('s-encaisse').textContent = Math.round(d.encaisse_fcfa/1000)+'k';
-    document.getElementById('s-paye').textContent = d.by_statut['payé'] || 0;
-    document.getElementById('s-transit').textContent = d.by_statut['expédié'] || 0;
-  } catch(e) {}
+function animer(el, html) {
+  el.innerHTML = html;
+  el.classList.remove('anim-in');
+  void el.offsetWidth;
+  el.classList.add('anim-in');
 }
 
-// ── Commandes ─────────────────────────────────────────────────────────────────
-async function chargerCommandes(statut='') {
-  const url = statut ? `${API}/api/admin/commandes?statut=${encodeURIComponent(statut)}` : `${API}/api/admin/commandes`;
-  const list = document.getElementById('commandes-list');
-  list.innerHTML = '<div style="text-align:center;padding:24px;color:#aaa">Chargement…</div>';
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function seDeconnecter() {
+  authHeader = null;
+  sessionStorage.removeItem('passerelle_auth_admin');
+  document.getElementById('compte_info').classList.remove('visible');
+  document.getElementById('espace_admin').style.display = 'none';
+  document.getElementById('bloc_auth').style.display = 'block';
+  document.getElementById('co_password').value = '';
+}
+
+function emailValide(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email); }
+
+async function seConnecter() {
+  const email = document.getElementById('co_email').value.trim();
+  const password = document.getElementById('co_password').value;
+  const erreurEmail = document.getElementById('co_email_erreur');
+  const msg = document.getElementById('msg_connexion');
+  const bouton = document.getElementById('btn_connexion');
+  erreurEmail.textContent = '';
+  msg.textContent = '';
+
+  if (!emailValide(email)) { erreurEmail.textContent = 'Adresse email invalide.'; return; }
+  if (!password) { msg.textContent = 'Renseigne ton mot de passe.'; return; }
+
+  bouton.disabled = true;
+  bouton.innerHTML = '<span class="spinner"></span>Connexion...';
   try {
-    const commandes = await fetch(url).then(r=>r.json());
-    if (!commandes.length) { list.innerHTML='<div style="text-align:center;padding:24px;color:#aaa">Aucune commande</div>'; return; }
-    list.innerHTML = commandes.map(c => `
-      <div class="commande-card">
-        <div class="cmd-header">
-          <div>
-            <div class="cmd-ref">${c.ref}</div>
-            <div class="cmd-date">${new Date(c.created_at).toLocaleDateString('fr-FR')} · ${c.operateur}</div>
-          </div>
-          <span class="statut-badge statut-${c.statut}">${c.statut.toUpperCase()}</span>
-        </div>
-        <div class="cmd-produit">${c.nom_produit}</div>
-        <div class="cmd-detail">${c.taille||''} ${c.couleur?'· '+c.couleur:''}</div>
-        <div class="cmd-client">👤 ${c.client_nom} · ${c.client_tel} · ${c.client_pays}</div>
-        <div class="cmd-prix">${fcfa(c.prix_fcfa)} <span style="color:#aaa;font-size:11px">(${c.prix_euro} €)</span></div>
-        <a class="cmd-lien" href="${c.lien_produit}" target="_blank">🔗 Ouvrir le produit sur le site européen ↗</a>
-        ${c.notes_admin ? `<div class="cmd-note">📝 ${c.notes_admin}</div>` : ''}
-        <div style="display:flex;gap:8px;margin-top:10px">
-          <button class="btn-status" onclick="openModal('${c.ref}','${c.nom_produit}','${c.statut}')">✏️ Changer statut</button>
-        </div>
-      </div>
-    `).join('');
-  } catch(e) {
-    list.innerHTML='<div style="text-align:center;padding:24px;color:#e74c3c">Erreur de connexion au serveur.</div>';
+    await tenterConnexion(construireAuthHeader(email, password));
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = 'Se connecter';
   }
 }
 
-function filtrer(statut, btn) {
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  chargerCommandes(statut);
+async function tenterConnexion(header) {
+  const msg = document.getElementById('msg_connexion');
+  const res = await fetch('/auth/me', { headers: { Authorization: header } });
+  if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_admin'); return; }
+  const moi = await res.json();
+  if (moi.role !== 'admin') { msg.textContent = "Ce compte n'est pas un compte admin."; return; }
+
+  authHeader = header;
+  sessionStorage.setItem('passerelle_auth_admin', header);
+  document.getElementById('bloc_auth').style.display = 'none';
+  document.getElementById('compte_email').textContent = moi.email;
+  document.getElementById('compte_info').classList.add('visible');
+  document.getElementById('espace_admin').style.display = 'block';
+
+  chargerStats();
+  chargerDemandes();
 }
 
-// ── Modal statut ──────────────────────────────────────────────────────────────
-function openModal(ref, nom, statut) {
-  currentRef = ref;
-  document.getElementById('modal-title').textContent = nom;
-  document.getElementById('modal-statut').value = statut;
-  document.getElementById('modal-note').value = '';
-  const overlay = document.getElementById('modal-overlay');
-  overlay.style.display = 'flex';
+if (authHeader) tenterConnexion(authHeader);
+
+async function chargerStats() {
+  const res = await fetch('/admin/stats', { headers: { Authorization: authHeader } });
+  if (!res.ok) return;
+  const s = await res.json();
+  animer(document.getElementById('stats_grille'), `
+    <div class="stat-carte"><div class="valeur">${s.comptes_en_attente}</div><div class="label">demande(s) en attente</div></div>
+    <div class="stat-carte"><div class="valeur">${s.clients_approuves}</div><div class="label">clients actifs</div></div>
+    <div class="stat-carte"><div class="valeur">${s.workers_approuves}</div><div class="label">étudiants actifs</div></div>
+    <div class="stat-carte"><div class="valeur">${s.projets_actifs}</div><div class="label">projets déposés</div></div>
+  `);
 }
 
-function closeModal() {
-  document.getElementById('modal-overlay').style.display = 'none';
+function changerFiltre(f) {
+  filtreActuel = f;
+  document.querySelectorAll('.onglets-filtre button').forEach(b => b.classList.toggle('actif', b.dataset.filtre === f));
+  chargerDemandes();
 }
 
-async function confirmerStatut() {
-  const statut = document.getElementById('modal-statut').value;
-  const note = document.getElementById('modal-note').value.trim();
+async function chargerDemandes() {
+  const liste = document.getElementById('liste_demandes');
+  const res = await fetch(`/admin/comptes?statut=${filtreActuel}`, { headers: { Authorization: authHeader } });
+  if (!res.ok) { animer(liste, '<div class="vide">Erreur de chargement.</div>'); return; }
+  const data = await res.json();
+
+  if (!data.comptes.length) {
+    animer(liste, `<div class="vide">${filtreActuel === 'en_attente' ? 'Aucune demande en attente 🎉' : 'Aucun compte pour le moment.'}</div>`);
+    return;
+  }
+
+  animer(liste, data.comptes.map(c => `
+    <div class="demande" id="demande_${c.id}">
+      <div class="infos">
+        <div class="email"><span class="role-badge ${c.role}">${c.role === 'client' ? 'Entreprise' : 'Étudiant'}</span>${escapeHtml(c.email)}</div>
+        <div class="details">
+          ${c.role === 'client' ? (c.secteur_activite ? 'Secteur : ' + escapeHtml(c.secteur_activite) : '') : 'Indice de confiance : ' + c.trust_score + '/100'}
+          ${c.approuve ? ' · compte actif' : ' · en attente'}
+        </div>
+      </div>
+      <div class="actions">
+        ${c.approuve
+          ? `<button class="refus" onclick="agirSurCompte(${c.id}, 'refuser')">Suspendre</button>`
+          : `<button class="refus" onclick="agirSurCompte(${c.id}, 'refuser')">Refuser</button>
+             <button class="succes" onclick="agirSurCompte(${c.id}, 'approuver')">Approuver</button>`}
+      </div>
+    </div>
+  `).join(''));
+}
+
+async function agirSurCompte(id, action) {
+  const bloc = document.getElementById(`demande_${id}`);
+  const boutons = bloc.querySelectorAll('button');
+  boutons.forEach(b => b.disabled = true);
   try {
-    await fetch(`${API}/api/admin/commandes/${currentRef}/statut`, {
-      method:'PATCH',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ statut, notes_admin: note||null })
-    });
-    closeModal();
-    chargerCommandes();
-    chargerStats();
-  } catch(e) { alert('Erreur lors de la mise à jour.'); }
+    const res = await fetch(`/admin/comptes/${id}/${action}`, { method: 'POST', headers: { Authorization: authHeader } });
+    if (!res.ok) { alert("Erreur lors de l'action."); boutons.forEach(b => b.disabled = false); return; }
+    bloc.style.opacity = '0';
+    bloc.style.transform = 'translateX(8px)';
+    setTimeout(() => { chargerDemandes(); chargerStats(); }, 150);
+  } catch {
+    alert('Erreur réseau, réessaie.');
+    boutons.forEach(b => b.disabled = false);
+  }
 }
-
-// ── Config ────────────────────────────────────────────────────────────────────
-async function chargerConfig() {
-  try {
-    const c = await fetch(`${API}/api/admin/config`).then(r=>r.json());
-    document.getElementById('p-taux').value = c.taux_change;
-    document.getElementById('p-comm').value = c.commission;
-    document.getElementById('p-port').value = c.frais_port;
-    majFormule();
-  } catch(e) {}
-}
-
-function majFormule() {
-  document.getElementById('fp-taux').textContent = document.getElementById('p-taux').value;
-  document.getElementById('fp-comm').textContent = parseInt(document.getElementById('p-comm').value||0).toLocaleString('fr-FR');
-  document.getElementById('fp-port').textContent = parseInt(document.getElementById('p-port').value||0).toLocaleString('fr-FR');
-}
-
-['p-taux','p-comm','p-port'].forEach(id => document.getElementById(id).addEventListener('input', majFormule));
-
-async function sauvegarderConfig() {
-  try {
-    await fetch(`${API}/api/admin/config`, {
-      method:'PUT',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        taux_change: parseFloat(document.getElementById('p-taux').value),
-        commission: parseFloat(document.getElementById('p-comm').value),
-        frais_port: parseFloat(document.getElementById('p-port').value),
-      })
-    });
-    const msg = document.getElementById('config-msg');
-    msg.style.display='block';
-    setTimeout(()=>msg.style.display='none', 3000);
-  } catch(e) { alert('Erreur lors de la sauvegarde.'); }
-}
-
-// ── Init ──────────────────────────────────────────────────────────────────────
-chargerStats();
-chargerCommandes();
-chargerConfig();
-setInterval(() => { chargerStats(); chargerCommandes(); }, 30000); // refresh auto 30s
 </script>
 </body>
 </html>
