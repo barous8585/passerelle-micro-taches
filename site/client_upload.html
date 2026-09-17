@@ -219,7 +219,7 @@
 // local, quand cette page et l'API tournent sur le même serveur uvicorn).
 // À la mise en ligne séparée (Netlify + Render), remplace par ex. par
 // 'https://api.tondomaine.fr'.
-const API_BASE = '';
+const API_BASE = 'https://thaka-api.onrender.com';
 
 let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
 let schemaCourant = null;
