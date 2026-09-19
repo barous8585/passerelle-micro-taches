@@ -1,11 +1,12 @@
 """
-notifications.py — Alerte le groupe Telegram des workers quand de nouvelles
-micro-tâches deviennent disponibles.
+notifications.py — Intégration Telegram : alerte le groupe des workers
+quand de nouvelles micro-tâches deviennent disponibles, ET envoie des
+messages privés individuels (liaison de compte, codes de connexion --
+voir auth.py / api.py).
 
 Best-effort par conception : si le token n'est pas configuré, si Telegram
 est injoignable, ou si le chat_id est invalide, on ne fait JAMAIS échouer
-le dépôt du client pour ça -- la notification est un bonus, pas une
-dépendance critique du flux métier.
+l'action réelle (dépôt client, connexion) pour ça.
 """
 
 import os
@@ -16,7 +17,7 @@ from dotenv import load_dotenv
 load_dotenv()  # lit les variables depuis un fichier .env local (jamais commité)
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")  # groupe de diffusion (nouvelles tâches)
 APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:8000")
 
 # Visible une seule fois au démarrage du serveur -- le signal le plus utile
@@ -30,6 +31,36 @@ else:
 
 def notifications_configurees() -> bool:
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+
+
+def bot_configure() -> bool:
+    """Différent de notifications_configurees() : ne vérifie QUE le token du
+    bot, pas le chat_id du groupe de diffusion -- utilisé pour les messages
+    privés (liaison de compte, codes de connexion), qui n'ont pas besoin du
+    groupe pour fonctionner."""
+    return bool(TELEGRAM_BOT_TOKEN)
+
+
+def envoyer_message_telegram(chat_id: str, texte: str) -> bool:
+    """Envoie un message privé à un chat_id individuel (pas le groupe de
+    diffusion). Renvoie True/False plutôt que de lever une exception --
+    l'appelant décide comment réagir à un échec (ex: le worker doit être
+    prévenu si son code de connexion n'a pas pu partir)."""
+    if not bot_configure():
+        return False
+    try:
+        reponse = httpx.post(
+            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id": chat_id, "text": texte},
+            timeout=5,
+        )
+        if reponse.status_code != 200:
+            print(f"⚠️  Telegram a refusé l'envoi ({reponse.status_code}) : {reponse.text}")
+            return False
+        return True
+    except httpx.HTTPError as e:
+        print(f"⚠️  Impossible de joindre Telegram : {e}")
+        return False
 
 
 def notifier_nouveau_projet(titre: str, nb_taches: int, prix_par_ligne: float):
@@ -46,16 +77,24 @@ def notifier_nouveau_projet(titre: str, nb_taches: int, prix_par_ligne: float):
         f"💰 {prix_par_ligne:.2f} €/ligne (~{gain_estime:.2f} € au total sur ce lot)\n\n"
         f"👉 {APP_BASE_URL}/worker"
     )
+    envoyer_message_telegram(TELEGRAM_CHAT_ID, message)
 
-    try:
-        reponse = httpx.post(
-            f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": message},
-            timeout=5,
-        )
-        if reponse.status_code != 200:
-            # Visible dans le terminal uvicorn -- utile pour diagnostiquer un
-            # mauvais token/chat_id sans faire échouer le dépôt pour autant.
-            print(f"⚠️  Telegram a refusé la notification ({reponse.status_code}) : {reponse.text}")
-    except httpx.HTTPError as e:
-        print(f"⚠️  Impossible de joindre Telegram (notification ignorée) : {e}")
+
+def envoyer_code_connexion(chat_id: str, code: str) -> bool:
+    """Message privé envoyé à chaque tentative de connexion d'un compte lié
+    à Telegram -- ce code remplace le mot de passe, valable 10 minutes."""
+    message = (
+        "🔐 Code de connexion Passerelle\n\n"
+        f"Ton code : {code}\n\n"
+        "Valable 10 minutes. Ne le partage avec personne -- l'équipe "
+        "Passerelle ne te le demandera jamais par un autre canal."
+    )
+    return envoyer_message_telegram(chat_id, message)
+
+
+def envoyer_confirmation_liaison(chat_id: str) -> bool:
+    return envoyer_message_telegram(
+        chat_id,
+        "✅ Ton compte Telegram est maintenant lié à ton compte Passerelle. "
+        "Tes prochaines connexions se feront par code envoyé ici, plus par mot de passe.",
+    )

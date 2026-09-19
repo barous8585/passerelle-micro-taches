@@ -27,8 +27,17 @@ SCHEMA_TEST = {
 
 
 def auth_header(email, password):
-    jeton = base64.b64encode(f"{email}:{password}".encode()).decode()
-    return {"Authorization": f"Basic {jeton}"}
+    """Authentification par jeton de session (voir auth.py) -- se connecte
+    réellement via /auth/login et renvoie le header Bearer à utiliser pour
+    les requêtes suivantes, comme le fait le front."""
+    r = client.post("/auth/login", json={"email": email, "password": password})
+    if r.status_code != 200:
+        # Certains tests appellent auth_header() avec un mauvais mot de passe
+        # exprès (ex: verrouillage anti-brute-force) -- on renvoie un header
+        # invalide plutôt que de lever une exception, pour laisser le test
+        # vérifier lui-même le code d'erreur renvoyé par l'endpoint protégé.
+        return {"Authorization": "Bearer jeton-invalide"}
+    return {"Authorization": f"Bearer {r.json()['token']}"}
 
 
 def approuver(email):
@@ -87,14 +96,16 @@ def test_connexion_mauvais_mot_de_passe_refusee():
 
 
 def test_compte_verrouille_temporairement_apres_echecs_repetes():
+    """Le verrouillage se vérifie désormais à la connexion (/auth/login),
+    plus sur chaque requête authentifiée -- voir auth.py."""
     client.post("/auth/register", json={"email": "bruteforce@uco.fr", "password": "bonmdp123", "role": "worker", "accepte_confidentialite": True})
 
     for _ in range(5):
-        r = client.get("/auth/me", headers=auth_header("bruteforce@uco.fr", "mauvais"))
+        r = client.post("/auth/login", json={"email": "bruteforce@uco.fr", "password": "mauvais"})
         assert r.status_code == 401
 
     # Même avec le BON mot de passe, le compte reste verrouillé
-    r = client.get("/auth/me", headers=auth_header("bruteforce@uco.fr", "bonmdp123"))
+    r = client.post("/auth/login", json={"email": "bruteforce@uco.fr", "password": "bonmdp123"})
     assert r.status_code == 429
 
 
@@ -585,3 +596,169 @@ def test_colonne_sensible_jamais_montree_au_worker_mais_preservee_a_export():
     # Mais l'export final récupère bien le VRAI email, jamais vu par le worker
     r = client.get(f"/projects/{project_id}/export", headers=auth_header("startup@ia.fr", "pw123"))
     assert "jdupont@gmail.com" in r.text
+
+
+def test_deconnexion_revoque_le_jeton_immediatement():
+    """La déconnexion coupe l'accès tout de suite -- pas besoin d'attendre
+    l'expiration naturelle du jeton (DUREE_SESSION_HEURES)."""
+    client.post("/auth/register", json={"email": "revoc@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("revoc@uco.fr")
+
+    login = client.post("/auth/login", json={"email": "revoc@uco.fr", "password": "pw123456"})
+    assert login.status_code == 200
+    header = {"Authorization": f"Bearer {login.json()['token']}"}
+
+    # Le jeton fonctionne avant déconnexion
+    assert client.get("/auth/me", headers=header).status_code == 200
+
+    r = client.post("/auth/logout", headers=header)
+    assert r.status_code == 200
+
+    # Le même jeton est désormais rejeté
+    assert client.get("/auth/me", headers=header).status_code == 401
+
+
+def test_mauvais_jeton_rejete():
+    r = client.get("/auth/me", headers={"Authorization": "Bearer jeton-qui-nexiste-pas"})
+    assert r.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# CONNEXION PAR CODE TELEGRAM (remplace le mot de passe une fois lié)
+# ---------------------------------------------------------------------------
+
+def _activer_bot_telegram_de_test(monkeypatch):
+    """TELEGRAM_BOT_TOKEN est importé PAR VALEUR dans api.py (`from
+    notifications import TELEGRAM_BOT_TOKEN`) -- le patcher sur le module
+    notifications ne suffit donc pas, il faut aussi patcher api.py. Les
+    envois réels sont remplacés par un no-op réussi : ces tests vérifient le
+    flux d'authentification, pas l'intégration réseau avec Telegram."""
+    import api
+    import notifications
+    monkeypatch.setattr(api, "TELEGRAM_BOT_TOKEN", "jeton-bot-de-test")
+    monkeypatch.setattr(notifications, "envoyer_message_telegram", lambda chat_id, texte: True)
+
+
+def test_liaison_telegram_puis_mot_de_passe_refuse_ensuite(monkeypatch):
+    _activer_bot_telegram_de_test(monkeypatch)
+
+    client.post("/auth/register", json={"email": "tg1@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("tg1@uco.fr")
+    header = auth_header("tg1@uco.fr", "pw123456")
+
+    assert client.get("/auth/me", headers=header).json()["telegram_lie"] is False
+
+    r = client.post("/auth/telegram/generer-code", headers=header)
+    assert r.status_code == 200
+    code = r.json()["code"]
+    assert len(code) == 8
+
+    # Simule le webhook Telegram recevant ce code depuis le chat privé du worker
+    r = client.post("/telegram/webhook", json={"message": {"text": code, "chat": {"id": 555111222}}})
+    assert r.status_code == 200
+
+    assert client.get("/auth/me", headers=header).json()["telegram_lie"] is True
+
+    # Le mot de passe ne fonctionne plus une fois le compte lié
+    r = client.post("/auth/login", json={"email": "tg1@uco.fr", "password": "pw123456"})
+    assert r.status_code == 409
+
+
+def test_webhook_ignore_silencieusement_un_code_inconnu():
+    r = client.post("/telegram/webhook", json={"message": {"text": "CODEBIDON", "chat": {"id": 1}}})
+    assert r.status_code == 200
+
+
+def test_otp_demander_reponse_identique_compte_existant_ou_non(monkeypatch):
+    """Anti-énumération : impossible de deviner si un email est inscrit à
+    partir de la réponse de /auth/otp/demander."""
+    _activer_bot_telegram_de_test(monkeypatch)
+
+    client.post("/auth/register", json={"email": "tg2@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("tg2@uco.fr")
+    header = auth_header("tg2@uco.fr", "pw123456")
+    code_liaison = client.post("/auth/telegram/generer-code", headers=header).json()["code"]
+    client.post("/telegram/webhook", json={"message": {"text": code_liaison, "chat": {"id": 555111333}}})
+
+    r_existant = client.post("/auth/otp/demander", json={"email": "tg2@uco.fr"})
+    r_inexistant = client.post("/auth/otp/demander", json={"email": "personne@uco.fr"})
+    assert r_existant.status_code == r_inexistant.status_code == 200
+    assert r_existant.json()["message"] == r_inexistant.json()["message"]
+
+
+def test_otp_connexion_bon_code_puis_code_non_reutilisable(monkeypatch):
+    _activer_bot_telegram_de_test(monkeypatch)
+
+    client.post("/auth/register", json={"email": "tg3@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("tg3@uco.fr")
+    header = auth_header("tg3@uco.fr", "pw123456")
+    code_liaison = client.post("/auth/telegram/generer-code", headers=header).json()["code"]
+    client.post("/telegram/webhook", json={"message": {"text": code_liaison, "chat": {"id": 555111444}}})
+
+    from models import User, get_engine, get_session_factory
+    db = get_session_factory(get_engine())()
+    try:
+        client.post("/auth/otp/demander", json={"email": "tg3@uco.fr"})
+        otp = db.query(User).filter_by(email="tg3@uco.fr").first().otp_code
+    finally:
+        db.close()
+    assert otp is not None and len(otp) == 6
+
+    # Mauvais code -> refusé
+    assert client.post("/auth/otp/verifier", json={"email": "tg3@uco.fr", "code": "000000"}).status_code == 401
+
+    # Bon code -> jeton de session valide
+    r = client.post("/auth/otp/verifier", json={"email": "tg3@uco.fr", "code": otp})
+    assert r.status_code == 200
+    token = r.json()["token"]
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
+
+    # Le même code ne peut pas être réutilisé (consommé après succès)
+    r = client.post("/auth/otp/verifier", json={"email": "tg3@uco.fr", "code": otp})
+    assert r.status_code == 401
+
+
+def test_otp_verrouille_apres_5_echecs(monkeypatch):
+    _activer_bot_telegram_de_test(monkeypatch)
+
+    client.post("/auth/register", json={"email": "tg4@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("tg4@uco.fr")
+    header = auth_header("tg4@uco.fr", "pw123456")
+    code_liaison = client.post("/auth/telegram/generer-code", headers=header).json()["code"]
+    client.post("/telegram/webhook", json={"message": {"text": code_liaison, "chat": {"id": 555111555}}})
+
+    client.post("/auth/otp/demander", json={"email": "tg4@uco.fr"})
+    for _ in range(5):
+        r = client.post("/auth/otp/verifier", json={"email": "tg4@uco.fr", "code": "999999"})
+        assert r.status_code == 401
+
+    # Le 6e essai est bloqué par le verrouillage, même avec un mauvais code
+    r = client.post("/auth/otp/verifier", json={"email": "tg4@uco.fr", "code": "999999"})
+    assert r.status_code == 429
+
+
+def test_generer_code_telegram_refuse_si_bot_non_configure(monkeypatch):
+    """Sans TELEGRAM_BOT_TOKEN, la liaison est refusée proprement plutôt que
+    de planter. On force explicitement l'absence de token plutôt que de
+    compter sur l'environnement (une vraie valeur peut être présente dans le
+    .env local, utilisée par ailleurs pour les notifications de groupe)."""
+    import api
+    monkeypatch.setattr(api, "TELEGRAM_BOT_TOKEN", None)
+
+    client.post("/auth/register", json={"email": "tg5@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    approuver("tg5@uco.fr")
+    header = auth_header("tg5@uco.fr", "pw123456")
+    r = client.post("/auth/telegram/generer-code", headers=header)
+    assert r.status_code == 503
+
+
+def test_admin_configurer_webhook_refuse_sans_app_base_url_https(monkeypatch):
+    _activer_bot_telegram_de_test(monkeypatch)
+    monkeypatch.delenv("APP_BASE_URL", raising=False)
+
+    client.post("/auth/register", json={"email": "clientadmin@ia.fr", "password": "pw123456", "role": "client", "secteur_activite": "test"})
+    approuver("clientadmin@ia.fr")
+
+    # Un compte non-admin ne peut pas configurer le webhook
+    r = client.post("/admin/telegram/configurer-webhook", headers=auth_header("clientadmin@ia.fr", "pw123456"))
+    assert r.status_code == 403

@@ -169,6 +169,21 @@
         <p class="msg" id="msg_connexion"></p>
       </form>
 
+      <div id="form_otp" class="auth-form" style="display:none;">
+        <button type="button" class="lien-retour" onclick="quitterModeOtp()">&larr; Retour</button>
+        <p style="font-size:13px; color:var(--text-secondary); line-height:1.5;">
+          Ce compte se connecte par code Telegram. Demande un code, il arrive en message privé
+          depuis le bot Passerelle.
+        </p>
+        <button type="button" class="principal pleine-largeur" id="btn_demander_otp" onclick="demanderOtp()">Recevoir mon code Telegram</button>
+        <div id="bloc_saisie_otp" style="display:none; margin-top:14px;">
+          <label>Code reçu sur Telegram</label>
+          <input type="text" id="otp_code" placeholder="123456" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+          <button type="button" class="principal pleine-largeur" id="btn_valider_otp" onclick="validerOtp()" style="margin-top:8px;">Valider le code</button>
+        </div>
+        <p class="msg" id="msg_otp"></p>
+      </div>
+
       <form id="form_creation" class="auth-form" style="display:none;" onsubmit="event.preventDefault(); creerCompte();">
         <label>Email professionnel</label>
         <input type="email" id="cr_email" placeholder="contact@monentreprise.fr" autocomplete="username">
@@ -220,14 +235,16 @@
 // À la mise en ligne séparée (Netlify + Render), remplace par ex. par
 // 'https://api.tondomaine.fr'.
 const API_BASE = 'https://thaka-api.onrender.com';
+// Nom d'utilisateur du bot Telegram (sans le @), pour le lien direct affiché
+// lors de la liaison de compte. À remplacer par le vrai @nomdubot une fois connu.
+const TELEGRAM_BOT_USERNAME = 'TonBotPasserelle';
 
 let authHeader = sessionStorage.getItem('passerelle_auth_client') || null;
+let emailOtpEnCours = null;
 let schemaCourant = null;
 let fichierSelectionne = null;
 let projetsCache = [];
 let projetSelectionne = null;
-
-function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
@@ -239,6 +256,9 @@ function animer(el, html) {
 }
 
 function seDeconnecter() {
+  // Révoque le jeton côté serveur -- best-effort, on ne bloque jamais la
+  // déconnexion locale si ça échoue (réseau coupé, jeton déjà expiré...).
+  if (authHeader) fetch(API_BASE + '/auth/logout', { method: 'POST', headers: { Authorization: authHeader } }).catch(() => {});
   authHeader = null;
   schemaCourant = null;
   fichierSelectionne = null;
@@ -283,17 +303,97 @@ async function seConnecter() {
   bouton.disabled = true;
   bouton.textContent = 'Connexion...';
   try {
-    await tenterConnexion(construireAuthHeader(email, password));
+    const res = await fetch(API_BASE + '/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.status === 409) {
+      // Compte déjà lié à Telegram -- le mot de passe ne fonctionne plus,
+      // on bascule vers la connexion par code.
+      afficherModeOtp(email);
+      return;
+    }
+    if (!res.ok) {
+      const erreur = await res.json().catch(() => ({}));
+      msg.textContent = erreur.detail || 'Email ou mot de passe incorrect.';
+      return;
+    }
+    const { token } = await res.json();
+    await tenterConnexion('Bearer ' + token);
   } finally {
     bouton.disabled = false;
     bouton.textContent = 'Se connecter';
   }
 }
 
+function afficherModeOtp(email) {
+  emailOtpEnCours = email;
+  document.getElementById('form_connexion').style.display = 'none';
+  document.getElementById('form_creation').style.display = 'none';
+  document.querySelector('.auth-onglets').style.display = 'none';
+  document.getElementById('form_otp').style.display = 'block';
+  document.getElementById('bloc_saisie_otp').style.display = 'none';
+  document.getElementById('msg_otp').textContent = '';
+  document.getElementById('btn_demander_otp').style.display = 'block';
+}
+
+function quitterModeOtp() {
+  emailOtpEnCours = null;
+  document.getElementById('form_otp').style.display = 'none';
+  document.querySelector('.auth-onglets').style.display = 'flex';
+  basculerOnglet('connexion');
+}
+
+async function demanderOtp() {
+  const bouton = document.getElementById('btn_demander_otp');
+  const msg = document.getElementById('msg_otp');
+  bouton.disabled = true;
+  bouton.textContent = 'Envoi...';
+  try {
+    const res = await fetch(API_BASE + '/auth/otp/demander', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailOtpEnCours }),
+    });
+    const data = await res.json().catch(() => ({}));
+    msg.style.color = '';
+    msg.textContent = data.message || 'Code envoyé si le compte est lié à Telegram.';
+    document.getElementById('bloc_saisie_otp').style.display = 'block';
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = 'Renvoyer un code';
+  }
+}
+
+async function validerOtp() {
+  const code = document.getElementById('otp_code').value.trim();
+  const msg = document.getElementById('msg_otp');
+  const bouton = document.getElementById('btn_valider_otp');
+  if (!code) { msg.textContent = 'Entre le code reçu sur Telegram.'; return; }
+  bouton.disabled = true;
+  bouton.textContent = 'Vérification...';
+  try {
+    const res = await fetch(API_BASE + '/auth/otp/verifier', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailOtpEnCours, code }),
+    });
+    if (!res.ok) {
+      const erreur = await res.json().catch(() => ({}));
+      msg.style.color = '';
+      msg.textContent = erreur.detail || 'Code invalide.';
+      return;
+    }
+    const { token } = await res.json();
+    await tenterConnexion('Bearer ' + token);
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = 'Valider le code';
+  }
+}
+
 async function tenterConnexion(header) {
   const msg = document.getElementById('msg_connexion');
   const res = await fetch(API_BASE + '/auth/me', { headers: { Authorization: header } });
-  if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_client'); return; }
+  if (!res.ok) { msg.textContent = 'Session expirée, reconnecte-toi.'; sessionStorage.removeItem('passerelle_auth_client'); return; }
   const moi = await res.json();
   if (moi.role !== 'client') { msg.textContent = "Ce compte n'est pas un compte entreprise."; return; }
 
@@ -308,7 +408,56 @@ async function tenterConnexion(header) {
     return;
   }
   document.getElementById('grille_principale').style.display = 'grid';
+  afficherBandeauTelegram(moi.telegram_lie);
   chargerMesProjets();
+}
+
+function afficherBandeauTelegram(dejaLie) {
+  const existant = document.getElementById('bandeau_telegram');
+  if (existant) existant.remove();
+  if (dejaLie) return;
+
+  const bandeau = document.createElement('div');
+  bandeau.className = 'panel anim-in';
+  bandeau.id = 'bandeau_telegram';
+  bandeau.style.marginBottom = '20px';
+  bandeau.innerHTML = `
+    <h2 style="margin-top:0;">🔐 Sécuriser mon compte avec Telegram</h2>
+    <p style="font-size:13px; color:var(--text-secondary); line-height:1.6;">
+      Lie ton compte à Telegram pour te connecter avec un code à usage unique, envoyé en
+      message privé, plutôt qu'avec un mot de passe fixe.
+    </p>
+    <div id="zone_code_telegram"></div>
+  `;
+  document.getElementById('grille_principale').prepend(bandeau);
+  document.getElementById('zone_code_telegram').innerHTML =
+    `<button class="principal" onclick="genererCodeTelegram()">Lier mon compte Telegram</button>`;
+}
+
+async function genererCodeTelegram() {
+  const zone = document.getElementById('zone_code_telegram');
+  zone.innerHTML = '<span class="spinner"></span>Génération du code...';
+  try {
+    const res = await fetch(API_BASE + '/auth/telegram/generer-code', {
+      method: 'POST', headers: { Authorization: authHeader },
+    });
+    if (!res.ok) {
+      const erreur = await res.json().catch(() => ({}));
+      zone.innerHTML = `<p class="msg">${escapeHtml(erreur.detail || 'Impossible de générer un code pour le moment.')}</p>`;
+      return;
+    }
+    const { code, duree_minutes } = await res.json();
+    zone.innerHTML = `
+      <ol style="font-size:13px; color:var(--text-secondary); line-height:1.8; padding-left:18px;">
+        <li>Ouvre <a href="https://t.me/${TELEGRAM_BOT_USERNAME}" target="_blank" rel="noopener">@${TELEGRAM_BOT_USERNAME}</a> sur Telegram et appuie sur <b>Démarrer</b> (/start).</li>
+        <li>Colle-lui ce code : <code style="font-size:15px; font-weight:700; letter-spacing:1px;">${escapeHtml(code)}</code></li>
+        <li>Tu reçois une confirmation, et tes prochaines connexions se font par code Telegram.</li>
+      </ol>
+      <p style="font-size:12px; color:var(--text-tertiary);">Code valable ${duree_minutes} minutes.</p>
+    `;
+  } catch (e) {
+    zone.innerHTML = '<p class="msg">Erreur réseau, réessaie.</p>';
+  }
 }
 
 if (authHeader) tenterConnexion(authHeader);

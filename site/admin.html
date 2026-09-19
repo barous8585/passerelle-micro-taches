@@ -194,10 +194,20 @@
         <div id="liste_paiements"></div>
       </div>
 
-      <div class="panel">
+      <div class="panel" style="margin-bottom:20px;">
         <h2>Projets &amp; litiges</h2>
         <div id="liste_projets_admin"></div>
         <div id="detail_litiges" style="display:none; margin-top:16px; padding-top:16px; border-top:1.5px solid var(--border);"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Journal d'accès</h2>
+        <p class="msg" style="margin:-6px 0 14px;">Traçabilité en cas de doute sur un accès anormal : connexions, exports de données, et qui a traité quelle ligne.</p>
+        <div class="onglets-filtre">
+          <button class="actif" data-vue-journal="connexions" onclick="changerVueJournal('connexions')">Connexions &amp; exports</button>
+          <button data-vue-journal="lignes" onclick="changerVueJournal('lignes')">Lignes traitées</button>
+        </div>
+        <div id="liste_journal"></div>
       </div>
 
     </div>
@@ -214,8 +224,6 @@ const API_BASE = 'https://thaka-api.onrender.com';
 let authHeader = sessionStorage.getItem('passerelle_auth_admin') || null;
 let filtreActuel = 'en_attente';
 
-function construireAuthHeader(email, motdepasse) { return 'Basic ' + btoa(email + ':' + motdepasse); }
-
 function animer(el, html) {
   el.innerHTML = html;
   el.classList.remove('anim-in');
@@ -226,6 +234,7 @@ function animer(el, html) {
 function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function seDeconnecter() {
+  if (authHeader) fetch(API_BASE + '/auth/logout', { method: 'POST', headers: { Authorization: authHeader } }).catch(() => {});
   authHeader = null;
   sessionStorage.removeItem('passerelle_auth_admin');
   document.getElementById('compte_info').classList.remove('visible');
@@ -251,7 +260,17 @@ async function seConnecter() {
   bouton.disabled = true;
   bouton.innerHTML = '<span class="spinner"></span>Connexion...';
   try {
-    await tenterConnexion(construireAuthHeader(email, password));
+    const res = await fetch(API_BASE + '/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const erreur = await res.json().catch(() => ({}));
+      msg.textContent = erreur.detail || 'Email ou mot de passe incorrect.';
+      return;
+    }
+    const { token } = await res.json();
+    await tenterConnexion('Bearer ' + token);
   } finally {
     bouton.disabled = false;
     bouton.textContent = 'Se connecter';
@@ -261,7 +280,7 @@ async function seConnecter() {
 async function tenterConnexion(header) {
   const msg = document.getElementById('msg_connexion');
   const res = await fetch(API_BASE + '/auth/me', { headers: { Authorization: header } });
-  if (!res.ok) { msg.textContent = 'Email ou mot de passe incorrect.'; sessionStorage.removeItem('passerelle_auth_admin'); return; }
+  if (!res.ok) { msg.textContent = 'Session expirée, reconnecte-toi.'; sessionStorage.removeItem('passerelle_auth_admin'); return; }
   const moi = await res.json();
   if (moi.role !== 'admin') { msg.textContent = "Ce compte n'est pas un compte admin."; return; }
 
@@ -276,6 +295,7 @@ async function tenterConnexion(header) {
   chargerDemandes();
   chargerPaiements();
   chargerProjetsAdmin();
+  chargerJournalAcces();
 }
 
 if (authHeader) tenterConnexion(authHeader);
@@ -463,6 +483,61 @@ async function resoudreLitige(taskId, projectId, titre) {
   if (!res.ok) { alert('Erreur lors de la résolution du litige.'); return; }
   chargerProjetsAdmin();
   voirLitiges(projectId, titre);
+}
+
+// --- Journal d'accès ---------------------------------------------------------
+
+let journalCache = null;
+let vueJournalActuelle = 'connexions';
+
+async function chargerJournalAcces() {
+  const zone = document.getElementById('liste_journal');
+  animer(zone, '<div class="bloc-charge"><span class="spinner"></span>Chargement...</div>');
+  const res = await fetch(API_BASE + '/admin/journal-acces', { headers: { Authorization: authHeader } });
+  if (!res.ok) { animer(zone, '<div class="vide">Erreur de chargement.</div>'); return; }
+  journalCache = await res.json();
+  afficherJournal();
+}
+
+function changerVueJournal(vue) {
+  vueJournalActuelle = vue;
+  document.querySelectorAll('[data-vue-journal]').forEach(b => b.classList.toggle('actif', b.dataset.vueJournal === vue));
+  afficherJournal();
+}
+
+function afficherJournal() {
+  const zone = document.getElementById('liste_journal');
+  if (!journalCache) return;
+
+  if (vueJournalActuelle === 'connexions') {
+    const lignes = journalCache.connexions_et_exports;
+    if (!lignes.length) { animer(zone, '<div class="vide">Aucun événement pour le moment.</div>'); return; }
+    animer(zone, `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr style="text-align:left; color:var(--text-tertiary); font-size:11.5px; text-transform:uppercase;">
+        <th style="padding:6px 8px;">Quand</th><th style="padding:6px 8px;">Qui</th><th style="padding:6px 8px;">Action</th><th style="padding:6px 8px;">Projet</th>
+      </tr>
+      ${lignes.map(l => `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 8px; white-space:nowrap;">${new Date(l.date).toLocaleString('fr-FR')}</td>
+        <td style="padding:6px 8px;">${escapeHtml(l.email)} <span style="color:var(--text-tertiary);">(${l.role})</span></td>
+        <td style="padding:6px 8px;">${l.action === 'connexion' ? 'Connexion' : 'Export de données'}</td>
+        <td style="padding:6px 8px;">${l.projet ? escapeHtml(l.projet) : '—'}</td>
+      </tr>`).join('')}
+    </table>`);
+  } else {
+    const lignes = journalCache.traitement_lignes;
+    if (!lignes.length) { animer(zone, '<div class="vide">Aucune ligne traitée pour le moment.</div>'); return; }
+    animer(zone, `<table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <tr style="text-align:left; color:var(--text-tertiary); font-size:11.5px; text-transform:uppercase;">
+        <th style="padding:6px 8px;">Quand</th><th style="padding:6px 8px;">Worker</th><th style="padding:6px 8px;">Projet</th><th style="padding:6px 8px;">Ligne</th>
+      </tr>
+      ${lignes.map(l => `<tr style="border-top:1px solid var(--border);">
+        <td style="padding:6px 8px; white-space:nowrap;">${new Date(l.date).toLocaleString('fr-FR')}</td>
+        <td style="padding:6px 8px;">${escapeHtml(l.worker_email)}</td>
+        <td style="padding:6px 8px;">${l.projet ? escapeHtml(l.projet) : '—'}</td>
+        <td style="padding:6px 8px;">#${l.ligne}</td>
+      </tr>`).join('')}
+    </table>`);
+  }
 }
 </script>
 </body>

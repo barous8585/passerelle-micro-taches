@@ -22,7 +22,7 @@ import datetime
 import os
 import tempfile
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from typing import Annotated
@@ -33,10 +33,13 @@ from sqlalchemy.exc import IntegrityError
 
 from analyzer import (detect_anomalies, infer_schema, normaliser_automatiquement,
                        normaliser_espaces, process_csv_to_microtasks, valider_consensus)
-from auth import get_current_user, hash_password, init_auth_db, require_role
+from auth import (authentifier, creer_session, generer_code_liaison, generer_otp,
+                   get_current_user, hash_password, init_auth_db, lier_via_code,
+                   require_role, revoquer_session, security, verifier_otp)
 from crypto import chiffrer_json, dechiffrer_json
-from notifications import notifier_nouveau_projet
-from models import (Base, MicroTask, Project, RoleEnum, Submission,
+from notifications import (TELEGRAM_BOT_TOKEN, envoyer_code_connexion,
+                            envoyer_confirmation_liaison, notifier_nouveau_projet)
+from models import (AccessLog, Base, MicroTask, Project, RoleEnum, Submission,
                      TaskStatus, User, get_engine, get_session_factory)
 
 SEUIL_TRUST_BAISSE = 0.4   # écart moyen <= ce seuil -> le worker a divergé du consensus
@@ -66,6 +69,21 @@ class Payout(Base):
 
 
 LOCK_TIMEOUT_MINUTES = 15
+
+
+def _journaliser_acces(db, user: User, action: str, project_id: int | None = None):
+    """Consigne un événement significatif (connexion, export) dans le
+    journal d'accès. Best-effort : une erreur ici ne doit jamais faire
+    échouer l'action réelle de l'utilisateur, donc on avale l'exception."""
+    try:
+        db.add(AccessLog(
+            user_id=user.id, email=user.email, role=user.role.value,
+            action=action, project_id=project_id,
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
+
 
 app = FastAPI(title="Passerelle de Micro-Tâches Data")
 
@@ -173,11 +191,50 @@ def register(payload: RegisterIn):
         db.close()
 
 
+class LoginIn(BaseModel):
+    email: Annotated[str, StringConstraints(max_length=255)]
+    password: Annotated[str, StringConstraints(max_length=200)]
+
+
+@app.post("/auth/login")
+def login(payload: LoginIn):
+    """Vérifie email + mot de passe UNE SEULE FOIS et renvoie un jeton de
+    session temporaire (voir auth.py) -- le front ne renverra plus jamais
+    le mot de passe après ça, seulement ce jeton, qui expire tout seul."""
+    db = SessionLocal()
+    try:
+        user = authentifier(db, payload.email, payload.password)
+        jeton = creer_session(db, user)
+        _journaliser_acces(db, user, "connexion")
+        return {
+            "token": jeton,
+            "id": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "approuve": user.approuve,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/auth/logout")
+def logout(credentials=Depends(security)):
+    """Révoque le jeton immédiatement, sans attendre son expiration
+    naturelle -- utile si l'appareil est partagé ou en cas de doute."""
+    db = SessionLocal()
+    try:
+        revoquer_session(db, credentials.credentials)
+        return {"status": "deconnecte"}
+    finally:
+        db.close()
+
+
 @app.get("/auth/me")
 def me(user: User = Depends(get_current_user)):
-    """Utilisé par le front pour vérifier la connexion ET afficher un
-    indicateur de performance agrégé au worker -- sans jamais révéler quelles
-    lignes précises étaient des gold standards."""
+    """Utilisé par le front pour vérifier que le jeton de session est
+    toujours valide ET afficher un indicateur de performance agrégé au
+    worker -- sans jamais révéler quelles lignes précises étaient des gold
+    standards."""
     return {
         "id": user.id,
         "email": user.email,
@@ -185,7 +242,96 @@ def me(user: User = Depends(get_current_user)):
         "approuve": user.approuve,
         "trust_score": round(user.trust_score, 1),
         "tasks_completed": user.tasks_completed,
+        "telegram_lie": bool(user.telegram_chat_id),
     }
+
+
+@app.post("/auth/telegram/generer-code")
+def telegram_generer_code(user: User = Depends(get_current_user)):
+    """Génère un code à coller dans le bot Telegram pour lier le compte --
+    appelé depuis une session encore authentifiée par mot de passe, avant
+    la liaison. Une fois liée, la connexion par mot de passe ne fonctionne
+    plus (voir authentifier() dans auth.py)."""
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="Le bot Telegram n'est pas configuré côté serveur.")
+    db = SessionLocal()
+    try:
+        # `user` vient de Depends(get_current_user), une session déjà fermée --
+        # le mutable en place ne serait pas suivi par CETTE session. On
+        # recharge la ligne dans `db` avant de la modifier et de committer.
+        user_frais = db.query(User).filter_by(id=user.id).first()
+        code = generer_code_liaison(db, user_frais)
+        return {"code": code, "duree_minutes": 10}
+    finally:
+        db.close()
+
+
+class OtpDemandeIn(BaseModel):
+    email: Annotated[str, StringConstraints(max_length=255)]
+
+
+@app.post("/auth/otp/demander")
+def otp_demander(payload: OtpDemandeIn):
+    """Déclenche l'envoi d'un code de connexion via Telegram. Renvoie
+    toujours le même message générique, que le compte existe ou non et
+    qu'il soit lié à Telegram ou non -- éviter de révéler si un email est
+    inscrit sur la plateforme (énumération de comptes)."""
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter_by(email=payload.email).first()
+        if user and user.telegram_chat_id:
+            code = generer_otp(db, user)
+            envoyer_code_connexion(user.telegram_chat_id, code)
+        return {"message": "Si ce compte existe et est lié à Telegram, un code vient d'être envoyé."}
+    finally:
+        db.close()
+
+
+class OtpVerifierIn(BaseModel):
+    email: Annotated[str, StringConstraints(max_length=255)]
+    code: Annotated[str, StringConstraints(max_length=10)]
+
+
+@app.post("/auth/otp/verifier")
+def otp_verifier(payload: OtpVerifierIn):
+    db = SessionLocal()
+    try:
+        user = verifier_otp(db, payload.email, payload.code)
+        jeton = creer_session(db, user)
+        _journaliser_acces(db, user, "connexion")
+        return {
+            "token": jeton,
+            "id": user.id,
+            "email": user.email,
+            "role": user.role.value,
+            "approuve": user.approuve,
+        }
+    finally:
+        db.close()
+
+
+@app.post("/telegram/webhook")
+async def telegram_webhook(request: Request):
+    """Reçoit les messages envoyés au bot Telegram par les utilisateurs.
+    On ne traite QUE le cas d'un code de liaison valide -- tout le reste
+    (spam, "/start" seul, texte quelconque) est silencieusement ignoré.
+    Renvoie toujours 200 : Telegram réessaie indéfiniment sinon."""
+    try:
+        update = await request.json()
+        message = update.get("message") or {}
+        texte = message.get("text", "")
+        chat_id = message.get("chat", {}).get("id")
+        if texte and chat_id:
+            db = SessionLocal()
+            try:
+                user = lier_via_code(db, texte, chat_id)
+                if user:
+                    envoyer_confirmation_liaison(str(chat_id))
+            finally:
+                db.close()
+    except Exception as e:
+        print(f"⚠️  Erreur webhook Telegram (ignorée) : {e}")
+    return {"ok": True}
 
 
 class SubmissionIn(BaseModel):
@@ -764,6 +910,7 @@ def exporter_projet(project_id: int, format: str = "csv", user: User = Depends(r
 
         projet.date_dernier_export = datetime.datetime.utcnow()
         db.commit()
+        _journaliser_acces(db, user, "export_projet", project_id=project_id)
 
         from fastapi.responses import Response
 
@@ -978,6 +1125,72 @@ def admin_stats(user: User = Depends(require_role("admin"))):
             "workers_approuves": db.query(User).filter_by(role=RoleEnum.worker, approuve=True).count(),
             "comptes_en_attente": db.query(User).filter(User.role != RoleEnum.admin, User.approuve == False).count(),  # noqa: E712
             "projets_actifs": db.query(Project).count(),
+        }
+    finally:
+        db.close()
+
+
+@app.post("/admin/telegram/configurer-webhook")
+def admin_configurer_webhook_telegram(user: User = Depends(require_role("admin"))):
+    """À appeler UNE FOIS après déploiement (ou après changement de domaine)
+    pour dire à Telegram où envoyer les messages reçus par le bot. Sans ça,
+    la liaison de compte (/telegram/webhook) ne reçoit jamais rien."""
+    if not TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=503, detail="TELEGRAM_BOT_TOKEN absent -- configure-le d'abord sur Render.")
+    import httpx as _httpx
+    url_cible = f"{os.environ.get('APP_BASE_URL', '').rstrip('/')}/telegram/webhook"
+    if not url_cible.startswith("https://"):
+        raise HTTPException(status_code=400, detail=f"APP_BASE_URL doit être une URL https publique (actuel : {url_cible!r}).")
+    reponse = _httpx.post(
+        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/setWebhook",
+        json={"url": url_cible}, timeout=10,
+    )
+    return {"telegram_reponse": reponse.json(), "webhook_configure": url_cible}
+
+
+@app.get("/admin/journal-acces")
+def admin_journal_acces(project_id: int | None = None, user: User = Depends(require_role("admin"))):
+    """Journal basique pour répondre à 'qui a accédé à quoi, quand' en cas
+    de doute sur une fuite : connexions + exports (table access_logs), et
+    qui a traité quelle ligne (table submissions, déjà existante -- on la
+    joint ici pour l'exposer proprement plutôt que de dupliquer le suivi)."""
+    db = SessionLocal()
+    try:
+        q_acces = db.query(AccessLog).order_by(AccessLog.created_at.desc())
+        if project_id is not None:
+            q_acces = q_acces.filter_by(project_id=project_id)
+        acces = q_acces.limit(200).all()
+
+        q_soumissions = (
+            db.query(Submission, MicroTask, User)
+            .join(MicroTask, Submission.micro_task_id == MicroTask.id)
+            .join(User, Submission.worker_id == User.id)
+            .order_by(Submission.created_at.desc())
+        )
+        if project_id is not None:
+            q_soumissions = q_soumissions.filter(MicroTask.project_id == project_id)
+        soumissions = q_soumissions.limit(200).all()
+
+        titres_projets = {p.id: p.titre for p in db.query(Project).all()}
+
+        return {
+            "connexions_et_exports": [
+                {
+                    "email": a.email, "role": a.role, "action": a.action,
+                    "projet": titres_projets.get(a.project_id) if a.project_id else None,
+                    "date": a.created_at.isoformat(),
+                }
+                for a in acces
+            ],
+            "traitement_lignes": [
+                {
+                    "worker_email": worker.email,
+                    "projet": titres_projets.get(tache.project_id),
+                    "ligne": tache.row_id,
+                    "date": sub.created_at.isoformat(),
+                }
+                for sub, tache, worker in soumissions
+            ],
         }
     finally:
         db.close()

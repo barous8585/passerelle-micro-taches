@@ -46,6 +46,30 @@ class User(Base):
     tentatives_echouees = Column(Integer, default=0)  # protection brute-force -- voir auth.py
     verrouille_jusqua = Column(DateTime, nullable=True)
 
+    # --- Connexion par code Telegram à usage unique (remplace le mot de
+    # passe une fois lié -- voir auth.py) ---
+    telegram_chat_id = Column(String, nullable=True)  # identifiant privé Telegram, obtenu une fois lié
+    telegram_code_liaison = Column(String, nullable=True)  # code temporaire affiché sur le site pour lier le compte
+    telegram_liaison_expire = Column(DateTime, nullable=True)
+    otp_code = Column(String, nullable=True)  # code de connexion à usage unique envoyé via Telegram
+    otp_expire = Column(DateTime, nullable=True)
+    otp_tentatives = Column(Integer, default=0)  # protection brute-force sur la vérification du code
+
+
+class SessionToken(Base):
+    """Jeton de session temporaire -- remplace l'envoi du mot de passe à
+    chaque requête (HTTP Basic Auth). Créé une fois au login, expire tout
+    seul (voir DUREE_SESSION_HEURES dans auth.py), et peut être révoqué
+    immédiatement à la déconnexion. Un jeton qui fuite a donc une durée de
+    vie limitée et peut être coupé -- contrairement à un mot de passe qui
+    reste valable tant qu'il n'est pas changé manuellement."""
+    __tablename__ = "session_tokens"
+    id = Column(Integer, primary_key=True)
+    token = Column(String, unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
 
 class Project(Base):
     __tablename__ = "projects"
@@ -96,6 +120,22 @@ class Submission(Base):
     montant = Column(Float, nullable=True)  # None tant que non payé (redondance pas encore atteinte)
 
     task = relationship("MicroTask", back_populates="submissions")
+
+
+class AccessLog(Base):
+    """Journal d'accès basique -- traçabilité en cas de doute sur une fuite
+    ou un accès anormal. Volontairement limité aux événements significatifs
+    (connexion, export de données) et non à chaque requête API, pour rester
+    lisible et ne pas saturer la base. Le détail "qui a traité quelle ligne"
+    est déjà couvert par la table submissions (worker_id + created_at)."""
+    __tablename__ = "access_logs"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    email = Column(String, nullable=False)
+    role = Column(String, nullable=False)
+    action = Column(String, nullable=False)  # "connexion" | "export_projet"
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 def get_engine(db_url="sqlite:///./passerelle.db"):
