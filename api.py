@@ -38,7 +38,8 @@ from auth import (authentifier, creer_session, generer_code_liaison, generer_otp
                    require_role, revoquer_session, security, verifier_otp)
 from crypto import chiffrer_json, dechiffrer_json
 from notifications import (TELEGRAM_BOT_TOKEN, envoyer_code_connexion,
-                            envoyer_confirmation_liaison, notifier_nouveau_projet)
+                            envoyer_confirmation_approbation, envoyer_confirmation_liaison,
+                            notifier_nouveau_projet, notifier_nouvelle_inscription)
 from models import (AccessLog, Base, MicroTask, Project, RoleEnum, Submission,
                      TaskStatus, User, get_engine, get_session_factory)
 
@@ -186,6 +187,7 @@ def register(payload: RegisterIn):
         )
         db.add(user)
         db.commit()
+        notifier_nouvelle_inscription(user.email, user.role.value, user.secteur_activite)
         return {"user_id": user.id, "role": user.role.value, "approuve": user.approuve}
     finally:
         db.close()
@@ -1207,6 +1209,8 @@ def admin_approuver_compte(user_id: int, user: User = Depends(require_role("admi
             raise HTTPException(status_code=400, detail="Un compte admin ne se gère pas depuis cette interface")
         cible.approuve = True
         db.commit()
+        if cible.telegram_chat_id:
+            envoyer_confirmation_approbation(cible.telegram_chat_id)
         return {"id": cible.id, "email": cible.email, "approuve": True}
     finally:
         db.close()
@@ -1235,6 +1239,12 @@ def page_admin():
 
 
 @app.get("/", response_class=HTMLResponse)
+def page_accueil():
+    with open("site/index.html", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/entreprise", response_class=HTMLResponse)
 def page_depot_client():
     with open("site/client_upload.html", encoding="utf-8") as f:
         return f.read()
