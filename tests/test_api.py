@@ -762,3 +762,94 @@ def test_admin_configurer_webhook_refuse_sans_app_base_url_https(monkeypatch):
     # Un compte non-admin ne peut pas configurer le webhook
     r = client.post("/admin/telegram/configurer-webhook", headers=auth_header("clientadmin@ia.fr", "pw123456"))
     assert r.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# NOTIFICATIONS SUR INSCRIPTION / APPROBATION (alerte l'équipe en temps réel
+# plutôt que de laisser un compte en attente sans que personne ne le sache)
+# ---------------------------------------------------------------------------
+
+def test_inscription_declenche_une_notification_telegram_si_bot_configure(monkeypatch):
+    import notifications
+    messages_envoyes = []
+    monkeypatch.setattr(notifications, "TELEGRAM_BOT_TOKEN", "jeton-bot-de-test")
+    monkeypatch.setattr(notifications, "TELEGRAM_CHAT_ID", "-100999")
+    monkeypatch.setattr(
+        notifications, "envoyer_message_telegram",
+        lambda chat_id, texte: messages_envoyes.append((chat_id, texte)) or True,
+    )
+
+    r = client.post("/auth/register", json={
+        "email": "notif@ia.fr", "password": "pw123456", "role": "client", "secteur_activite": "retail",
+    })
+    assert r.status_code == 200
+    assert len(messages_envoyes) == 1
+    assert messages_envoyes[0][0] == "-100999"
+    assert "notif@ia.fr" in messages_envoyes[0][1]
+
+
+def test_inscription_ne_plante_pas_sans_bot_configure():
+    """Comportement par défaut de la suite de tests (pas de token) -- doit
+    rester silencieux, jamais faire échouer l'inscription elle-même."""
+    r = client.post("/auth/register", json={
+        "email": "sansnotif@ia.fr", "password": "pw123456", "role": "client", "secteur_activite": "retail",
+    })
+    assert r.status_code == 200
+
+
+def _creer_admin_de_test(email, password):
+    """Un compte admin ne se crée pas via /auth/register (volontairement
+    refusé, voir register()) -- on l'insère directement en base, comme le
+    ferait une opération manuelle en production."""
+    from auth import hash_password
+    from models import RoleEnum, User, get_engine, get_session_factory
+
+    db = get_session_factory(get_engine())()
+    try:
+        if db.query(User).filter_by(email=email).first():
+            return
+        db.add(User(email=email, role=RoleEnum.admin, password_hash=hash_password(password), approuve=True))
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_approbation_notifie_le_compte_seulement_si_telegram_lie(monkeypatch):
+    import notifications
+
+    messages_envoyes = []
+    monkeypatch.setattr(notifications, "TELEGRAM_BOT_TOKEN", "jeton-bot-de-test")
+    monkeypatch.setattr(
+        notifications, "envoyer_message_telegram",
+        lambda chat_id, texte: messages_envoyes.append((chat_id, texte)) or True,
+    )
+
+    _creer_admin_de_test("admin_approb@uco.fr", "adminpw123")
+    admin_header = auth_header("admin_approb@uco.fr", "adminpw123")
+
+    # Compte SANS Telegram lié : l'approbation ne doit rien tenter d'envoyer
+    r = client.post("/auth/register", json={"email": "approb1@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    user_id_sans_lien = r.json()["user_id"]
+    messages_envoyes.clear()  # on ignore le message de notif d'inscription lui-même
+
+    r = client.post(f"/admin/comptes/{user_id_sans_lien}/approuver", headers=admin_header)
+    assert r.status_code == 200
+    assert messages_envoyes == []
+
+    # Compte AVEC Telegram lié : l'approbation doit envoyer une confirmation
+    r = client.post("/auth/register", json={"email": "approb2@uco.fr", "password": "pw123456", "role": "worker", "accepte_confidentialite": True})
+    user_id_avec_lien = r.json()["user_id"]
+
+    from models import User, get_engine, get_session_factory
+    db = get_session_factory(get_engine())()
+    try:
+        db.query(User).filter_by(id=user_id_avec_lien).update({"telegram_chat_id": "777888999"})
+        db.commit()
+    finally:
+        db.close()
+    messages_envoyes.clear()
+
+    r = client.post(f"/admin/comptes/{user_id_avec_lien}/approuver", headers=admin_header)
+    assert r.status_code == 200
+    assert len(messages_envoyes) == 1
+    assert messages_envoyes[0][0] == "777888999"

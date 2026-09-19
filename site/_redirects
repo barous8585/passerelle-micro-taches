@@ -1,6 +1,8 @@
 # Config Netlify -- fait correspondre les URLs propres aux fichiers HTML
-# statiques, pour retrouver les mêmes routes qu'avant (servies par FastAPI
-# en local : /, /worker, /admin).
-/           /client_upload.html    200
+# statiques. "/" sert directement index.html (comportement par défaut de
+# Netlify, pas besoin de règle) -- la page d'accueil, avec les liens vers
+# les deux espaces. /entreprise est un alias plus lisible que le nom du
+# fichier pour le lien "Espace entreprise".
+/entreprise /client_upload.html    200
 /worker     /worker_dashboard.html 200
 /admin      /admin.html            200

@@ -98,3 +98,38 @@ def envoyer_confirmation_liaison(chat_id: str) -> bool:
         "✅ Ton compte Telegram est maintenant lié à ton compte Passerelle. "
         "Tes prochaines connexions se feront par code envoyé ici, plus par mot de passe.",
     )
+
+
+def notifier_nouvelle_inscription(email: str, role: str, secteur_activite: str | None = None) -> None:
+    """Alerte le groupe de diffusion à chaque nouvelle inscription (client ou
+    worker), pour que l'équipe soit prévenue en temps réel au lieu de devoir
+    aller vérifier le panneau admin manuellement -- sans ça, un compte peut
+    attendre des jours avant validation."""
+    if not notifications_configurees():
+        return
+
+    if role == "client":
+        message = (
+            "🏢 Nouvelle inscription entreprise\n\n"
+            f"📧 {email}\n"
+            f"🏷️ Secteur : {secteur_activite or 'non renseigné'}\n\n"
+            f"👉 {APP_BASE_URL}/admin"
+        )
+    else:
+        message = (
+            "🎓 Nouvelle inscription étudiant(e)\n\n"
+            f"📧 {email}\n\n"
+            f"👉 {APP_BASE_URL}/admin"
+        )
+    envoyer_message_telegram(TELEGRAM_CHAT_ID, message)
+
+
+def envoyer_confirmation_approbation(chat_id: str) -> bool:
+    """Prévient un compte déjà lié à Telegram dès que son inscription est
+    validée -- évite le silence radio pendant l'attente de validation
+    manuelle pour ceux qui ont déjà lié leur compte."""
+    return envoyer_message_telegram(
+        chat_id,
+        "🎉 Ton compte Passerelle vient d'être validé par l'équipe -- tu peux "
+        "maintenant l'utiliser normalement.",
+    )

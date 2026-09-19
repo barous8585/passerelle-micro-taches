@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thaka — Nettoyage de données par des étudiants</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #FAFAFA;
+    --surface: #FFFFFF;
+    --border: #ECECF0;
+    --border-strong: #DDDCE4;
+    --text: #16161A;
+    --text-secondary: #7A7A85;
+    --text-tertiary: #A5A5B0;
+    --primary: #5B5BF0;
+    --primary-hover: #4A4AD9;
+    --primary-bg: #F0F0FE;
+    --radius: 14px;
+    --radius-sm: 9px;
+    --shadow-sm: 0 1px 2px rgba(20,20,30,.04);
+    --shadow-md: 0 2px 8px rgba(20,20,30,.05), 0 1px 2px rgba(20,20,30,.04);
+    --shadow-lg: 0 8px 24px rgba(20,20,30,.08), 0 2px 6px rgba(20,20,30,.05);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: var(--font); background: var(--bg); color: var(--text);
+    font-size: 14.5px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .topbar {
+    padding: 20px 32px; font-weight: 800; font-size: 17px; letter-spacing: -0.02em;
+  }
+  .hero { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 20px 60px; text-align: center; }
+  .hero h1 { font-size: clamp(26px, 4vw, 38px); font-weight: 800; letter-spacing: -0.03em; margin: 0 0 12px; max-width: 640px; }
+  .hero p { font-size: 15.5px; color: var(--text-secondary); max-width: 520px; margin: 0 0 40px; line-height: 1.6; }
+
+  .cartes { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 720px; width: 100%; }
+  @media (max-width: 640px) { .cartes { grid-template-columns: 1fr; } }
+
+  .carte {
+    background: var(--surface); border: 1.5px solid var(--border); border-radius: var(--radius);
+    padding: 28px 24px; text-align: left; text-decoration: none; color: var(--text);
+    box-shadow: var(--shadow-sm); transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .carte:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); border-color: var(--border-strong); }
+  .carte .icone { font-size: 26px; margin-bottom: 14px; display: block; }
+  .carte h2 { font-size: 16.5px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .carte p { font-size: 13px; color: var(--text-secondary); margin: 0 0 16px; line-height: 1.55; }
+  .carte .lien { font-size: 13px; font-weight: 700; color: var(--primary); }
+  .carte:hover .lien { color: var(--primary-hover); }
+
+  footer { text-align: center; padding: 20px; font-size: 12px; color: var(--text-tertiary); }
+</style>
+</head>
+<body>
+
+  <div class="topbar">Thaka</div>
+
+  <div class="hero">
+    <h1>Le nettoyage de données de ton projet IA, fait par des étudiants sérieux.</h1>
+    <p>Thaka met en relation des entreprises qui ont des données à nettoyer et des étudiants qui font le travail, ligne par ligne, sous contrôle qualité.</p>
+
+    <div class="cartes">
+      <a class="carte" href="/entreprise">
+        <span class="icone">🏢</span>
+        <h2>Je suis une entreprise</h2>
+        <p>Dépose un fichier à nettoyer, suis l'avancement et récupère le résultat validé.</p>
+        <span class="lien">Espace entreprise →</span>
+      </a>
+
+      <a class="carte" href="/worker">
+        <span class="icone">🎓</span>
+        <h2>Je suis étudiant(e)</h2>
+        <p>Traite des micro-tâches de nettoyage de données et sois payé(e) à la ligne validée.</p>
+        <span class="lien">Espace étudiant →</span>
+      </a>
+    </div>
+  </div>
+
+  <footer>Thaka — plateforme de micro-tâches de nettoyage de données</footer>
+
+</body>
+</html>
