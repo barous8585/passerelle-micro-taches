@@ -2166,10 +2166,33 @@
   function paneMemory() {
     const edit = tabOpts.edit || null, chapters = sortedChapters();
     let picked = null;
-    const preview = h('div', { class: 'drop', tabindex: 0 }, edit && edit.asset ? imgOf(edit.asset) : h('span', { text: '📷 Choisir une photo' }), h('span', { class: 'mini', text: 'JPG, PNG ou WebP · redimensionnée automatiquement' }));
-    const file = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'memFile' });
+    const preview = h('div', { class: 'drop', tabindex: 0 }, edit && edit.asset ? imgOf(edit.asset) : h('span', { text: edit ? '📷 Choisir une photo' : '📷 Choisir une ou plusieurs photos' }), h('span', { class: 'mini', text: 'La date et le lieu sont lus dans la photo quand elle les contient' }));
+    const file = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'memFile', multiple: !edit });
+    let batch = null;
     preview.addEventListener('click', () => file.click()); preview.addEventListener('keydown', (e) => { if (e.key === 'Enter') file.click(); });
-    file.addEventListener('change', () => { const f = file.files[0]; if (!f) return; picked = f; const u = URL.createObjectURL(f); preview.replaceChildren(h('img', { src: u, alt: '' }), h('span', { class: 'mini', text: f.name })); });
+    const infoLine = h('div', { class: 'mini', style: 'margin-top:6px;color:#a3814a' });
+    file.addEventListener('change', async () => {
+      const fs = [...file.files]; if (!fs.length) return;
+      if (fs.length === 1) {
+        const f = fs[0]; picked = f; batch = null; const u = URL.createObjectURL(f); preview.replaceChildren(h('img', { src: u, alt: '' }), h('span', { class: 'mini', text: f.name }));
+        const info = await readPhotoInfo(f); const got = [];
+        if (info.date && !date.value) { date.value = info.date; got.push((info.guess ? 'date approximative ' : 'date ') + frDate(info.date)); }
+        if (info.lat != null && !coords) { coords = { lat: info.lat, lon: info.lon }; picker.set(coords); if (info.place && !placeIn.value) placeIn.value = info.place; got.push(info.place ? '📍 ' + info.place : '📍 position GPS'); placeStatus.textContent = '📍 Lieu de la photo placé sur le globe'; }
+        if (!title.value.trim() && (info.date || info.place)) { title.value = autoTitle(info); got.push('titre proposé'); }
+        infoLine.textContent = got.length ? '✨ Trouvé dans la photo : ' + got.join(' · ') + ' (tu peux tout modifier)' : 'Cette photo ne contient pas de date ni de lieu : remplis-les à la main.';
+        btn.textContent = 'Accrocher au mur';
+        return;
+      }
+      picked = null; batch = [];
+      const grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;width:100%' });
+      preview.replaceChildren(grid, h('span', { class: 'mini', text: fs.length + ' photos choisies · lecture des dates et des lieux…' }));
+      for (const f of fs.slice(0, 40)) { const info = await readPhotoInfo(f); batch.push({ f, info }); grid.append(h('img', { src: URL.createObjectURL(f), alt: '', style: 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;margin:0' })); }
+      batch.sort((a, b) => (a.info.date || '9').localeCompare(b.info.date || '9'));
+      const withDate = batch.filter((x) => x.info.date && !x.info.guess).length, withPlace = batch.filter((x) => x.info.lat != null).length;
+      preview.lastChild.textContent = `${batch.length} photos${fs.length > 40 ? ' (40 maximum à la fois)' : ''} · ${withDate} avec leur date · ${withPlace} avec leur lieu`;
+      infoLine.textContent = '✨ Chaque photo deviendra un souvenir avec sa propre date et son lieu, rangés dans l\'ordre. Le titre est proposé automatiquement (lieu et date) ; laisse le champ « Titre » vide, ou écris un titre commun.';
+      btn.textContent = 'Accrocher les ' + batch.length + ' photos';
+    });
     const sel = h('select', { id: 'memChapter' }, chapters.map((c) => h('option', { value: c.id || '', text: c.title || 'Sans titre' })));
     sel.value = (edit ? edit.chapterId : tabOpts.chapterId) || (chapters[0].id || '');
     const title = h('input', { id: 'memTitle', type: 'text', maxlength: 80, placeholder: 'Notre premier rendez-vous', value: edit ? edit.title || '' : '' });
@@ -2188,6 +2211,21 @@
       h('label', {}, h('input', { type: 'radio', name: 'memStyle', value: v, checked: v === style }), h('span', { class: 'swatch', style: 'background:' + c }), l)));
     const btn = h('button', { class: 'gbtn', text: edit ? 'Enregistrer les changements' : 'Accrocher au mur' });
     btn.addEventListener('click', async () => {
+      if (!edit && batch && batch.length) {
+        btn.disabled = true;
+        try {
+          let chapterId = sel.value || null; if (!chapterId) chapterId = await createChapter('Le commencement', 'là où tout a commencé');
+          let k = 0;
+          for (const { f, info } of batch) {
+            k++; btn.textContent = `Accrochage ${k}/${batch.length}…`;
+            const { blob, aspect } = await prepareImage(f), asset = await storeImage(blob);
+            await S.db.collection('memories').doc().set({ chapterId, title: title.value.trim() || autoTitle(info), date: info.date || '', dateLabel: '', place: info.place || '', lat: info.lat != null ? +info.lat.toFixed(3) : null, lon: info.lon != null ? +info.lon.toFixed(3) : null,
+              story: story.value.trim(), style: (document.querySelector('input[name=memStyle]:checked') || {}).value || 'noir', sound: memSound.value || '', asset, aspect, author: S.meId, createdAt: Date.now() + k });
+          }
+          toast(batch.length + ' souvenirs accrochés ✨'); tabOpts = {}; closeAtelier();
+        } catch (e) { toast(errMsg(e)); btn.disabled = false; btn.textContent = 'Accrocher les ' + batch.length + ' photos'; }
+        return;
+      }
       if (!edit && !picked) { toast('Choisis d\'abord une photo'); return; }
       if (!title.value.trim()) { toast('Donne un titre à ce souvenir'); title.focus(); return; }
       btn.disabled = true; btn.textContent = 'Accrochage…';
@@ -2210,7 +2248,51 @@
       }
     });
     return [h('p', { class: 'lead', text: edit ? 'Modifie ce souvenir. Une nouvelle photo remplace l\'ancienne.' : 'Une photo, un titre, une date : le souvenir se range tout seul à sa place dans le chapitre.' }),
-      preview, file, field('Chapitre', sel), field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn];
+      preview, infoLine, file, field('Chapitre', sel), field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn];
+  }
+
+
+  /* ════ LES INFORMATIONS CACHÉES DANS LA PHOTO (EXIF) ════
+     Date de la prise de vue et position GPS, lues sur l'appareil, sans rien envoyer ailleurs. */
+  async function readPhotoInfo(file) {
+    const out = { date: '', time: '', lat: null, lon: null };
+    try {
+      const buf = new Uint8Array(await file.slice(0, 512 * 1024).arrayBuffer());
+      let t = -1;
+      for (let i = 0; i < buf.length - 10; i++) if (buf[i] === 0x45 && buf[i + 1] === 0x78 && buf[i + 2] === 0x69 && buf[i + 3] === 0x66 && buf[i + 4] === 0 && buf[i + 5] === 0) { t = i + 6; break; }
+      if (t >= 0) {
+        const dv = new DataView(buf.buffer, buf.byteOffset + t), le = dv.getUint16(0) === 0x4949;
+        const u16 = (o) => dv.getUint16(o, le), u32 = (o) => dv.getUint32(o, le);
+        const str = (o, n) => { let r = ''; for (let k = 0; k < n; k++) { const c = dv.getUint8(o + k); if (!c) break; r += String.fromCharCode(c); } return r; };
+        const ifd = (o) => { const n = u16(o), tags = {}; for (let k = 0; k < n; k++) { const e = o + 2 + k * 12; tags[u16(e)] = { type: u16(e + 2), count: u32(e + 4), off: e + 8 }; } return tags; };
+        const val = (tg) => { if (!tg) return null; const sz = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1 }[tg.type] || 1, o = sz * tg.count > 4 ? u32(tg.off) : tg.off;
+          if (tg.type === 2) return str(o, tg.count); if (tg.type === 5) return [...Array(tg.count)].map((_, k) => u32(o + k * 8) / (u32(o + k * 8 + 4) || 1)); if (tg.type === 3) return u16(o); if (tg.type === 4) return u32(o); return str(o, tg.count); };
+        const i0 = ifd(u32(4));
+        let dt = null;
+        if (i0[0x8769]) { const ex = ifd(val(i0[0x8769])); dt = val(ex[0x9003]) || val(ex[0x9004]); }
+        dt = dt || val(i0[0x0132]);
+        const m = dt && String(dt).match(/(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/);
+        if (m && m[1] !== '0000') { out.date = `${m[1]}-${m[2]}-${m[3]}`; out.time = `${m[4]}:${m[5]}`; }
+        if (i0[0x8825]) {
+          const g = ifd(val(i0[0x8825])), la = val(g[2]), lo = val(g[4]);
+          if (la && lo) { let lat = la[0] + la[1] / 60 + la[2] / 3600, lon = lo[0] + lo[1] / 60 + lo[2] / 3600; if (/S/.test(val(g[1]) || '')) lat = -lat; if (/W/.test(val(g[3]) || '')) lon = -lon;
+            if (isFinite(lat) && isFinite(lon) && (lat || lon)) { out.lat = lat; out.lon = lon; } }
+        }
+      }
+    } catch (e) {}
+    if (!out.date && file.lastModified && Date.now() - file.lastModified > 2 * 864e5) { const d = new Date(file.lastModified); out.date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; out.guess = true; }
+    if (out.lat != null) { const np = nearestPlace(out.lat, out.lon); if (np) out.place = np.n; }
+    return out;
+  }
+  function nearestPlace(lat, lon) {
+    let best = null, bd = 1e9; const r = Math.PI / 180;
+    for (const c of GAZ) { const dl = (c.lat - lat) * r, dn = (c.lon - lon) * r, a = Math.sin(dl / 2) ** 2 + Math.cos(lat * r) * Math.cos(c.lat * r) * Math.sin(dn / 2) ** 2, d = 12742 * Math.asin(Math.min(1, Math.sqrt(a))); if (d < bd) { bd = d; best = c; } }
+    return bd < 60 ? best : null;
+  }
+  const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+  function autoTitle(info) {
+    const d = info.date ? new Date(info.date + 'T12:00:00') : null, md = d ? `${d.getDate() === 1 ? '1er' : d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}` : '';
+    if (info.place && md) return `${info.place}, ${md}`; return info.place || md || 'Un souvenir';
   }
 
   async function createChapter(title, subtitle) {
