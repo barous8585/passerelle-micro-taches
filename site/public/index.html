@@ -919,6 +919,7 @@
      LE MONDE : décor fixe (ciel, jardin, château, hall)
      ════════════════════════════════════════════ */
   const W = { root: null, dyn: null, lanterns: null, anim: [], frames: [], spots: [], zones: [], fountainWater: null, heart: null, heartMat: null, flies: null, video: null, namePlate: null, envelopes: null };
+  if (location.hostname === 'localhost') window.__W = W;
 
   function buildSky(root) {
     W.skyCanvas = cnv(4, 512, () => {}); W.skyTex = srgb(new THREE.CanvasTexture(W.skyCanvas));
@@ -1192,24 +1193,87 @@
     W.video.poster = posterDraw; posterDraw(false);
     const hit = plane(w, hh, new THREE.MeshBasicMaterial({ visible: false })); hit.position.z = .08; g.add(hit);
     interactive(hit, {
-      range: 8, near: { type: 'hint', text: () => (W.video.el && !W.video.el.paused ? '⏸ Toucher l\'écran pour mettre en pause' : '🎬 Toucher l\'écran pour lancer la rétrospective') },
+      range: 8, near: { type: 'hint', text: () => (W.video.el && !W.video.el.paused ? '⏸ Toucher deux fois l\'écran pour mettre en pause' : '🎬 Toucher l\'écran pour lancer la rétrospective') },
       click: () => {
         const v = W.video.el;
         if (!v) { toast(S.canWrite ? 'Ajoute une vidéo dans l\'Atelier → Réglages' : 'La rétrospective arrive bientôt'); return; }
-        if (v.paused) v.play().catch(() => toast('Impossible de lire cette vidéo')); else v.pause();
+        const V = W.video;
+        if (v.paused) {
+          V.userPaused = false;
+          const go = () => v.play().catch(() => toast('Impossible de lire cette vidéo sur cet appareil'));
+          if (!v.src && isChunkedVideo(V.asset)) {
+            if (V.loading) return; V.loading = true; toast('Chargement de la vidéo…');
+            videoSrc(V.asset, (pc) => { if (pc < 100) toast('Chargement de la vidéo ' + pc + ' %'); }).then((u) => { V.loading = false; if (V.el === v) { v.src = u; go(); } }).catch(() => { V.loading = false; toast('Vidéo introuvable'); });
+          } else go();
+        } else if (Date.now() - (V.armAt || 0) < 2500) { V.userPaused = true; V.armAt = 0; v.pause(); }
+        else { V.armAt = Date.now(); toast('Touche encore l\'écran pour mettre en pause'); }
       }
     });
   }
   function setVideo(assetId) {
     const V = W.video; if (!V || V.asset === assetId) return;
     if (V.el) { V.el.pause(); V.el.removeAttribute('src'); V.el.load(); }
-    V.asset = assetId; V.el = null; V.tex = null; V.play.visible = true;
+    V.asset = assetId; V.el = null; V.tex = null; V.play.visible = true; V.userPaused = false; V.armAt = 0;
     if (!assetId) { V.poster(false); return; }
-    const v = document.createElement('video'); v.src = '/_blob/' + assetId; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'metadata';
+    const v = document.createElement('video'); v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+    if (!isChunkedVideo(assetId)) v.src = '/_blob/' + assetId;
     v.addEventListener('play', () => { V.play.visible = false; if (!V.tex) { V.tex = srgb(new THREE.VideoTexture(v)); V.mat.map = V.tex; V.mat.needsUpdate = true; } if (v.videoWidth) V.fit(v.videoWidth / v.videoHeight); Music.setDuck(true); });
-    v.addEventListener('pause', () => { V.play.visible = true; Music.setDuck(false); });
+    v.addEventListener('pause', () => {
+      if (v.ended) return;
+      // une pause qu'on n'a pas demandée (le navigateur, une coupure) : on relance
+      if (!V.userPaused && !document.hidden) { setTimeout(() => { if (V.el === v && v.paused && !V.userPaused && !v.ended) v.play().catch(() => { V.play.visible = true; Music.setDuck(false); }); }, 350); return; }
+      V.play.visible = true; Music.setDuck(false);
+    });
+    v.addEventListener('ended', () => { V.play.visible = true; V.userPaused = false; Music.setDuck(false); try { v.currentTime = 0; } catch (e) {} });
     v.addEventListener('error', () => { V.el = null; V.poster(false); });
     V.el = v; V.poster(true);
+  }
+  document.addEventListener('visibilitychange', () => { const V = W.video; if (V && V.el && !document.hidden && V.wasPlaying && !V.userPaused && !V.el.ended) V.el.play().catch(() => {}); if (V && V.el && document.hidden) V.wasPlaying = !V.el.paused; });
+
+  /* ════ VIDÉOS LOURDES ════
+     Le stockage de fichiers de la page Claude refuse les fichiers de plus de 20 Mo : au-delà, la vidéo est découpée
+     en morceaux (texte), rangés comme des fichiers normaux, et recollée sur l'appareil au moment de la lire. */
+  const VID_MAX = 500 * 1024 * 1024, VID_PART = 14 * 1024 * 1024;
+  const isChunkedVideo = (id) => typeof id === 'string' && id.startsWith('vid:');
+  const videoType = (f) => (f.type && f.type.startsWith('video/') ? f.type : /\.mov$/i.test(f.name || '') ? 'video/quicktime' : /\.webm$/i.test(f.name || '') ? 'video/webm' : 'video/mp4');
+  async function storeVideo(file, progress) {
+    if (!S.assets) throw { code: 'no_assets' };
+    if (file.size > VID_MAX) throw { code: 'too_large', message: 'Vidéo trop lourde (500 Mo max)' };
+    const type = videoType(file);
+    if (file.size <= 19.5 * 1024 * 1024 || window.__chateauNetlify) { if (progress) progress('Envoi de la vidéo…'); return (await S.assets.upload(file, { type })).id; }
+    const n = Math.ceil(file.size / VID_PART), parts = [];
+    for (let i = 0; i < n; i++) {
+      if (progress) progress(`Envoi de la vidéo ${Math.round(i / n * 100)} %…`);
+      const b64 = await blobToB64(file.slice(i * VID_PART, (i + 1) * VID_PART));
+      parts.push((await S.assets.upload(new Blob([b64], { type: 'text/plain' }), { type: 'text/plain' })).id);
+    }
+    const key = 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await S.db.doc('videos/' + key).set({ parts, type, size: file.size, author: S.meId || null, createdAt: Date.now() });
+    if (progress) progress('Vidéo envoyée');
+    return 'vid:' + key;
+  }
+  const VIDURL = new Map();
+  function videoSrc(id, progress) {
+    if (!id) return Promise.resolve('');
+    if (!isChunkedVideo(id)) return Promise.resolve('/_blob/' + id);
+    if (VIDURL.has(id)) return VIDURL.get(id);
+    const p = (async () => {
+      const d = await S.db.doc('videos/' + id.slice(4)).get(); if (!d.exists) throw new Error('vidéo introuvable');
+      const m = d.data(), bufs = [];
+      for (let i = 0; i < m.parts.length; i++) {
+        if (progress) progress(Math.round(i / m.parts.length * 100));
+        const r = await fetch('/_blob/' + m.parts[i]); if (!r.ok) throw new Error('morceau manquant');
+        bufs.push(b64ToBytes(await r.text()));
+      }
+      if (progress) progress(100);
+      return URL.createObjectURL(new Blob(bufs, { type: m.type || 'video/mp4' }));
+    })();
+    VIDURL.set(id, p); p.catch(() => VIDURL.delete(id)); return p;
+  }
+  function deleteVideo(id) {
+    if (!id) return;
+    if (isChunkedVideo(id)) { S.db.doc('videos/' + id.slice(4)).get().then((d) => { if (d.exists) (d.data().parts || []).forEach((a) => S.assets && S.assets.delete(a).catch(() => {})); S.db.doc('videos/' + id.slice(4)).delete().catch(() => {}); }).catch(() => {}); return; }
+    if (S.assets) S.assets.delete(id).catch(() => {});
   }
 
   /* Plaques de prénoms (porte + hall) */
@@ -1284,7 +1348,7 @@
     });
   }
   /* taille de la photo (sans passe-partout) : même surface pour tous, forme exacte de l'image */
-  function frameSize(aspect) { const a = Math.min(4, Math.max(.25, aspect || 1.333)); const pw = 1.05 * Math.sqrt(a), ph = 1.05 / Math.sqrt(a), k = Math.min(1, 1.25 / Math.max(pw, ph)); return [pw * k, ph * k]; }
+  function frameSize(aspect) { const a = Math.min(4, Math.max(.25, aspect || 1.333)); const pw = 1.3 * Math.sqrt(a), ph = 1.3 / Math.sqrt(a), k = Math.min(1, 1.62 / Math.max(pw, ph)); return [pw * k, ph * k]; }
 
   function makeFrame(parent, mem, x, y, z, rotY, ceilY) {
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; parent.add(g);
@@ -1292,7 +1356,8 @@
     const halo = plane(1, 1, M.halo); halo.position.set(0, .15, .006); g.add(halo);
     const art = new THREE.Group(); g.add(art);
     const fm = mem.style === 'bois' ? M.frameBois : mem.style === 'or' ? M.frameOr : M.frameNoir;
-    const photoMat = new THREE.MeshStandardMaterial({ roughness: .55, map: placeholderTexture('…', null, mem.aspect || 1.333) });
+    const ph0 = placeholderTexture('…', null, mem.aspect || 1.333);
+    const photoMat = new THREE.MeshStandardMaterial({ roughness: .5, map: ph0, emissive: '#ffffff', emissiveMap: ph0, emissiveIntensity: .5 });
     const vit = mem.style === 'vitrine' ? vitrineParts(art, mem, photoMat) : null;
     let fbox, matte, photo, glass;
     if (!vit) {
@@ -1315,7 +1380,7 @@
     };
     layout(mem.aspect);
     // la photo entière, jamais étirée ni rognée : le cadre prend sa forme réelle
-    if (mem.asset) photoTexture(mem.asset, (t, ia) => { photoMat.map = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia); });
+    if (mem.asset) photoTexture(mem.asset, (t, ia) => { photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia); });
     // luminaire au plafond
     const ly = ceilY - y - .1; const fx = box(.1, .14, .1, M.black, 0, ly, 1.3); g.add(fx);
     { const from = new THREE.Vector3(0, ly - .08, 1.3), dir = new THREE.Vector3(0, 0, .06).sub(from), len = dir.length(); const bm = beamCone(len, 1); bm.position.copy(from);
@@ -1398,7 +1463,7 @@
       else plaque.position.set(0, 4.85, z0 + .31);
       D.add(plaque);
       // cadres : alternance gauche / droite
-      const wallY = 1.75;
+      const wallY = 1.8;
       for (let k = 0; k < slots; k++) {
         const side = k % 2 === 0 ? -1 : 1, idx = Math.floor(k / 2), fz = z0 - 3 - idx * 3.4;
         const fx = side * (SPINE_W - .005), rot = side < 0 ? Math.PI / 2 : -Math.PI / 2;
@@ -2314,16 +2379,15 @@
       try { await saveSettings({ names: names.value.trim(), since: since.value, quote: quote.value.trim(), bench: bench.value.trim(), birthday: bday.value || '', favFlower: fav.value, flowerColor: cF.value, carpetColor: cC.value, lanternColor: cL.value, benchSound: bSnd.value || '' }); toast('Réglages enregistrés'); } catch (e) { toast('Enregistrement impossible'); }
       save.disabled = false;
     });
-    const vfile = h('input', { type: 'file', accept: 'video/mp4,video/webm', hidden: true, id: 'vidFile' });
-    const vbtn = h('button', { class: 'ghost', text: st.video ? 'Remplacer la vidéo' : 'Choisir une vidéo (MP4, 20 Mo max)' });
+    const vfile = h('input', { type: 'file', accept: 'video/*', hidden: true, id: 'vidFile' });
+    const vbtn = h('button', { class: 'ghost', text: st.video ? 'Remplacer la vidéo' : 'Choisir une vidéo (jusqu\'à 500 Mo)' });
     vbtn.addEventListener('click', () => vfile.click());
     vfile.addEventListener('change', async () => {
       const f = vfile.files[0]; if (!f) return;
-      if (f.size > 20 * 1024 * 1024) { toast('Vidéo trop lourde : 20 Mo maximum'); return; }
       if (!S.assets) { toast('Seuls les éditeurs peuvent ajouter une vidéo'); return; }
       vbtn.disabled = true; vbtn.textContent = 'Envoi en cours…';
-      try { const up = await S.assets.upload(f, { type: f.type === 'video/webm' ? 'video/webm' : 'video/mp4' }); const old = st.video; await saveSettings({ video: up.id }); if (old) S.assets.delete(old).catch(() => {}); toast('Rétrospective installée dans le Grand Hall'); }
-      catch (e) { toast(e && e.code === 'too_large' ? 'Vidéo trop lourde' : 'Envoi impossible'); }
+      try { const id = await storeVideo(f, (t) => (vbtn.textContent = t)); const old = st.video; await saveSettings({ video: id }); if (old) deleteVideo(old); toast('Rétrospective installée dans le Grand Hall'); }
+      catch (e) { toast(e && e.message && e.code === 'too_large' ? e.message : errMsg(e)); }
       vbtn.disabled = false; vbtn.textContent = 'Remplacer la vidéo';
     });
     const c1 = h('input', { id: 'newCode', type: 'password', maxlength: 40, placeholder: 'Nouveau code' });
@@ -2428,9 +2492,9 @@
     return s;
   }
   async function upImage(file) { const { blob, aspect } = await prepareImage(file); return { id: await storeImage(blob), aspect }; }
-  async function upVideo(file) { if (!S.assets) throw { code: 'no_assets' }; if (file.size > 20 * 1024 * 1024) throw { code: 'too_large' }; const up = await S.assets.upload(file, { type: file.type === 'video/webm' ? 'video/webm' : 'video/mp4' }); return up.id; }
+  async function upVideo(file, progress) { return storeVideo(file, progress); }
   function errMsg(e) { const c = e && e.code; return c === 'too_large' ? 'Fichier trop lourd (20 Mo max)' : c === 'unsupported_type' ? 'Format non pris en charge' : (c === 'quota_or_state' || c === 'quota_exceeded') ? 'Espace de stockage plein' : c === 'no_assets' ? 'Ce compte ne peut pas ajouter de fichiers ici' : c === 'decode' ? 'Cette photo n\'a pas pu être lue (format HEIC ?) : essaie une capture d\'écran ou une photo en JPG' : 'Enregistrement impossible : ' + ((e && (e.code || e.message)) || 'erreur inconnue'); }
-  async function removeDoc(coll, id, assets) { try { await S.db.doc(coll + '/' + id).delete(); (assets || []).filter(Boolean).forEach(deleteAsset); } catch (e) { toast('Suppression impossible'); } }
+  async function removeDoc(coll, id, assets) { try { await S.db.doc(coll + '/' + id).delete(); (assets || []).filter(Boolean).forEach((a) => (isChunkedVideo(a) ? deleteVideo(a) : deleteAsset(a))); } catch (e) { toast('Suppression impossible'); } }
   function delBtn(fn) {
     const b = h('button', { 'aria-label': 'Supprimer', text: '✕' });
     b.addEventListener('click', () => { if (b.dataset.armed !== '1') { b.dataset.armed = '1'; b.textContent = 'Sûr ?'; b.style.width = 'auto'; setTimeout(() => { b.dataset.armed = ''; b.textContent = '✕'; }, 3500); return; } fn(); });
@@ -2747,7 +2811,7 @@
     const snd = cp.sound && SND.byId(cp.sound);
     const body = [h('div', { class: 'k', text: (sealed ? 'Scellée jusqu\'au ' : 'Ouverte le ') + frDate(cp.unlock) + (sealed ? ' · toi seul la vois' : '') }), h('h2', { text: cp.title || 'Une capsule' }), h('div', { class: 'body', text: cp.message || '' })];
     (cp.photos || []).forEach((a) => body.push(imgOf(a, { style: 'margin:16px 0 0' })));
-    if (cp.video) body.push(h('video', { src: '/_blob/' + cp.video, controls: true, playsinline: true, style: 'margin:16px 0 0' }));
+    if (cp.video) { const ve = h('video', { controls: true, playsinline: true, style: 'margin:16px 0 0' }); videoSrc(cp.video).then((u) => { ve.src = u; }).catch(() => {}); body.push(ve); }
     if (snd) body.push(h('div', { class: 'list' }, soundRow(snd)));
     body.push(nameLine(cp.author, 'Enfouie par '));
     if (mine && S.canWrite) body.push(h('div', { class: 'actions' }, confirmBtn('Déterrer (supprimer)', 'Confirmer', async () => { await removeDoc('capsules', cp.id, [...(cp.photos || []), cp.video]); closeModal(); })));
@@ -3062,7 +3126,7 @@
     const d = h('input', { id: 'cDate', type: 'date', min: addDays(todayISO(), 1) });
     const m = h('textarea', { id: 'cMsg', maxlength: 4000, placeholder: 'Ce que tu veux dire à nous deux, dans le futur…' }); m.style.minHeight = '150px';
     const ph = h('input', { id: 'cPhotos', type: 'file', accept: 'image/*', multiple: true });
-    const vd = h('input', { id: 'cVideo', type: 'file', accept: 'video/mp4,video/webm' });
+    const vd = h('input', { id: 'cVideo', type: 'file', accept: 'video/*' });
     const snd = soundSelect('cSound', '');
     const b = h('button', { class: 'gbtn', text: 'Enfouir la capsule' });
     b.addEventListener('click', async () => {
@@ -3079,7 +3143,7 @@
     });
     const mine = S.capsules.filter((c) => c.author === S.meId);
     return [h('p', { class: 'lead', text: 'Un message, des photos, une vidéo, un son : la capsule reste enfouie dans le jardin jusqu\'au jour choisi.' }),
-      field('Titre', t), field('S\'ouvre le', d), field('Message', m), field('Photos (6 max)', ph), field('Vidéo (facultatif, 20 Mo max)', vd), field('Son (facultatif)', snd), b,
+      field('Titre', t), field('S\'ouvre le', d), field('Message', m), field('Photos (6 max)', ph), field('Vidéo (facultatif, jusqu\'à 500 Mo)', vd), field('Son (facultatif)', snd), b,
       mine.length ? h('div', { class: 'sep' }) : null, ...mine.map((c) => prow('⏳ ' + c.title, (sealedDate(c.unlock) ? 'S\'ouvre le ' : 'Ouverte le ') + frDate(c.unlock), delBtn(() => removeDoc('capsules', c.id, [...(c.photos || []), c.video]))))];
   }
   function paneAdvent() {
@@ -3479,7 +3543,7 @@
         const name = String(j).padStart(2, '0') + ' - ' + String(s.title || 'son').replace(/[\\/:*?"<>|]/g, '').slice(0, 60) + '.' + ext; sons.file(name, b); soundFile[s.id] = 'sons/' + name; } catch (e) {} }
       // vidéos (si elles sont dans le stockage de fichiers)
       const vids = [S.settings.video].concat((S.capsules || []).map((c) => c.video)).filter(Boolean); let vi = 0; const vidFile = {};
-      for (const v of vids) { vi++; say(`Vidéos ${vi}/${vids.length}…`); try { const r = await fetch('/_blob/' + v); if (r.ok) { const name = 'video-' + vi + '.mp4'; videos.file(name, await r.blob()); vidFile[v] = 'videos/' + name; } } catch (e) {} }
+      for (const v of vids) { vi++; say(`Vidéos ${vi}/${vids.length}…`); try { const r = await fetch(await videoSrc(v)); if (r.ok) { const name = 'video-' + vi + '.mp4'; videos.file(name, await r.blob()); vidFile[v] = 'videos/' + name; } } catch (e) {} }
       data.fichiers = { photos: fileOf, sons: soundFile, videos: vidFile };
       zip.file('donnees.json', JSON.stringify(data, null, 2));
       zip.file('album.html', albumHtml(fileOf, soundFile, vidFile));

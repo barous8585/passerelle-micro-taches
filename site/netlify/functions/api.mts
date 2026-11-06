@@ -163,14 +163,14 @@ export default async (req: Request, context: Context) => {
     /* fichiers (photos, sons, vidéos) : envoi par morceaux de 4 Mo */
     if (route === "asset/start" && m === "POST") {
       const { type, size } = await req.json();
-      if (size > (type === "application/x-chateau-import" && me.isOwner ? 60 : 20) * 1024 * 1024) return err("too_large", 413, "Fichier trop lourd (20 Mo max)");
+      if (size > 500 * 1024 * 1024) return err("too_large", 413, "Fichier trop lourd (500 Mo max)");
       const id = newId("f"); await files().setJSON("meta/" + id, { type: type || "application/octet-stream", size, partSize: PART, by: me.id, parts: 0, done: false, createdAt: Date.now() });
       return json({ id });
     }
     if (route === "asset/part" && m === "PUT") {
       const id = url.searchParams.get("id") || "", n = Number(url.searchParams.get("n") || 0);
       const meta = (await files().get("meta/" + id, { type: "json" })) as any; if (!meta || meta.by !== me.id || meta.done) return err("not_found", 404);
-      if (n < 0 || n > 15) return err("bad_request", 400);
+      if (n < 0 || n > 130) return err("bad_request", 400);
       await files().set(`part/${id}/${String(n).padStart(4, "0")}`, await req.arrayBuffer());
       return json({ ok: true });
     }
