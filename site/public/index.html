@@ -712,6 +712,7 @@
     if (stairAt(x, z, lv)) return true;
     return (lv === 0 ? WALK : lv === 1 ? WALK1 : WALK2).some(f);
   }
+  window.__free = (x, z) => free(x, z, 0);
   AFRAME.registerComponent('bounds', {
     init() { this.last = this.el.object3D.position.clone(); },
     tick(t, dt) {
@@ -1060,37 +1061,111 @@
     W.anim.push((t) => { const f = .75 + Math.sin(t * 9) * .08 + Math.sin(t * 13.3) * .06; torchL.material.opacity = f; torchR.material.opacity = 1.55 - f; gl.intensity = 9 + f * 2; });
   }
 
-  function buildHall(root) {
-    const { x, z0, z1, h: H } = HALL, L = z0 - z1;
-    // Sol + tapis
-    const carpet = W.carpet = plane(3, L - .2, new THREE.MeshStandardMaterial({ map: tex('carpet', 1, L / 4), roughness: 1 })); carpet.rotation.x = -Math.PI / 2; carpet.position.set(0, .035, (z0 + z1) / 2); root.add(carpet); W.carpetRY = L / 4;
-    // Murs latéraux
-    const hzc = (z0 + z1) / 2, doorZ = -7.2;   // portes vers les ailes
-    const lw = archWall(L, H, 2.6, 2.2, .4, undefined, hzc - doorZ); lw.rotation.y = Math.PI / 2; lw.position.set(-x - .4, 0, hzc); root.add(lw);
-    const rw = archWall(L, H, 2.6, 2.2, .4, undefined, doorZ - hzc); rw.rotation.y = -Math.PI / 2; rw.position.set(x + .4, 0, hzc); root.add(rw);
-    // Mur du fond avec arche vers la galerie
-    const back = archWall(x * 2 + .8, H, 3.6, 2.6, .4); back.position.set(0, 0, z1 - .4); root.add(back);
-    [lw, rw].forEach((g) => g.children[0].material.color.set(PALETTE.hall)); back.children[0].material.color.set('#f1e6d0');   // le mur du fond reste clair : les plaques s'y lisent
-    // Plafond + lustre
-    [[5.4, L, -7.7, (z0 + z1) / 2], [5.4, L, 5.7, (z0 + z1) / 2], [8, z0 - SKY_HOLE.z1, -1, (z0 + SKY_HOLE.z1) / 2], [8, SKY_HOLE.z0 - z1, -1, (SKY_HOLE.z0 + z1) / 2], [2, 20, 9.4, -2]].forEach(([w, d, cx, cz]) => { const c = plane(w, d, M.ceiling); c.rotation.x = Math.PI / 2; c.position.set(cx, H, cz); root.add(c); });
-    const ch = new THREE.Group(); ch.position.set(0, 6, -1.5);
-    ch.add(new THREE.Mesh(new THREE.TorusGeometry(1.3, .05, 8, 48), M.gold)); ch.children[0].rotation.x = Math.PI / 2;
-    ch.add(box(.03, 2, .03, M.gold, 0, 1, 0));
-    for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; const b = new THREE.Mesh(new THREE.SphereGeometry(.07, 10, 8), M.warm); b.position.set(Math.cos(a) * 1.3, .12, Math.sin(a) * 1.3); ch.add(b); const g = glowSprite('#ffcf8a', .7, .8); g.position.copy(b.position); ch.add(g); }
-    root.add(ch);
-    const chl = new THREE.PointLight('#ffd8a8', 14, 18, 1.1); chl.position.set(0, 5.5, -1.5); root.add(chl);
-    // Colonnes
-    const colM = new THREE.MeshStandardMaterial({ map: tex('floor', 1, 2), roughness: .4 });
-    [[-8.6, 5], [8.6, 5], [-8.6, -9.5], [8.6, -9.5]].forEach(([cx, cz]) => {
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(.42, .48, H, 24), colM); c.position.set(cx, H / 2, cz); root.add(c);
-      root.add(box(1.2, .3, 1.2, colM, cx, .15, cz));
-      OBST.push([cx - .6 - R, cx + .6 + R, cz - .6 - R, cz + .6 + R]);
+  /* ════════════════════════════════════════════
+     LA ROTONDE : le cœur du château, sous le dôme
+     ════════════════════════════════════════════ */
+  const ROT = { x: 0, z: -5, r: 9, h: 9 };
+  const ROT_E = [1.5875, 2.0128];   // ouverture vers la bibliothèque (angles : x = sin θ, z = cos θ)
+  const ROT_OPEN = [[-.2445, .2445, 5.4], [ROT_E[0], ROT_E[1], 4.6], [Math.PI - .2222, Math.PI + .2222, 5], [2 * Math.PI - ROT_E[1], 2 * Math.PI - ROT_E[0], 4.6]];
+  const rotAt = (th, rad, y) => new THREE.Vector3(ROT.x + Math.sin(th) * rad, y || 0, ROT.z + Math.cos(th) * rad);
+  const faceCenter = (th) => Math.atan2(-Math.sin(th), -Math.cos(th));
+  function domeCanvas() {
+    return cnv(1024, 512, (c, w, hh) => {
+      const g = c.createLinearGradient(0, 0, 0, hh); g.addColorStop(0, '#fff2d2'); g.addColorStop(.035, '#f0d9a8'); g.addColorStop(.07, '#2e4a7a'); g.addColorStop(1, '#1c2a4a'); c.fillStyle = g; c.fillRect(0, 0, w, hh);
+      const rows = 6, cols = 24, top = hh * .08;
+      for (let r = 0; r < rows; r++) {
+        const y0 = top + (hh - top) * r / rows, y1 = top + (hh - top) * (r + 1) / rows, m = (y1 - y0) * .14;
+        for (let k = 0; k < cols; k++) {
+          const x0 = w * k / cols, x1 = w * (k + 1) / cols, mx = (x1 - x0) * .12;
+          c.fillStyle = 'rgba(10,16,34,.55)'; c.fillRect(x0 + mx, y0 + m, x1 - x0 - 2 * mx, y1 - y0 - 2 * m);
+          c.fillStyle = 'rgba(46,74,122,.9)'; c.fillRect(x0 + mx * 1.7, y0 + m * 1.7, x1 - x0 - 3.4 * mx, y1 - y0 - 3.4 * m);
+          c.fillStyle = '#c9a25e'; c.beginPath(); c.arc((x0 + x1) / 2, (y0 + y1) / 2, Math.min(x1 - x0, y1 - y0) * .13, 0, 7); c.fill();
+        }
+        c.fillStyle = '#c9a25e'; c.fillRect(0, y0 - 1, w, 2);
+      }
     });
-    // Plaque des prénoms au-dessus de l'arche
-    W.hallPlate = new THREE.Group(); W.hallPlate.position.set(0, 6.6, z1 + .01); root.add(W.hallPlate);
+  }
+  function buildHall(root) {
+    const { r, h: H } = ROT, cz = ROT.z;
+    const inM = new THREE.MeshStandardMaterial({ map: tex('plaster', 7, 2), color: PALETTE.hall, roughness: .95, side: THREE.BackSide });
+    const outM = new THREE.MeshStandardMaterial({ map: tex('limestone', 9, 3), color: PALETTE.facade, roughness: .85 });
+    const jambM = limeMat(.2, 1);
+    const seg = (rad, y0, y1, a0, a1, mat) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, y1 - y0, Math.max(6, Math.ceil((a1 - a0) * 18)), 1, true, a0, a1 - a0), mat); m.position.set(ROT.x, (y0 + y1) / 2, cz); root.add(m); };
+    const opens = ROT_OPEN.slice().sort((a, b) => a[0] - b[0]);
+    for (let i = 0; i < opens.length; i++) {
+      const [o0, o1, oh] = opens[i], next = opens[(i + 1) % opens.length], n0 = next[0] + (i === opens.length - 1 ? 2 * Math.PI : 0);
+      seg(r, 0, H, o1, n0, inM); seg(r + .3, 0, 13, o1, n0, outM);          // mur plein
+      seg(r, oh, H, o0, o1, inM); seg(r + .3, oh, 13, o0, o1, outM);        // linteau
+      [o0, o1].forEach((th) => {                                            // tableaux de l'ouverture + filet doré
+        const p = rotAt(th, r + .15, oh / 2), j = box(.04, oh, .34, jambM, p.x, p.y, p.z); j.rotation.y = th; root.add(j);
+        const q = rotAt(th, r - .03, oh / 2), gpost = box(.1, oh, .05, M.gold, q.x, q.y, q.z); gpost.rotation.y = th; root.add(gpost);
+      });
+      const mid = (o0 + o1) / 2, chord = 2 * r * Math.sin((o1 - o0) / 2), lp = rotAt(mid, r * Math.cos((o1 - o0) / 2) - .03, oh);
+      const lin = box(chord + .1, .1, .05, M.gold, lp.x, lp.y, lp.z); lin.rotation.y = mid; root.add(lin);
+      const kp = rotAt(mid, r * Math.cos((o1 - o0) / 2) - .08, oh + .3), key = box(.45, .6, .14, limeMat(.2, .2), kp.x, kp.y, kp.z); key.rotation.y = mid; root.add(key);
+    }
+    // toit en anneau autour du tambour du dôme
+    const ring = new THREE.Mesh(new THREE.RingGeometry(6.7, r + .35, 64), limeMat(4, 4)); ring.rotation.x = -Math.PI / 2; ring.position.set(ROT.x, 13, cz); root.add(ring);
+    const corn = new THREE.Mesh(new THREE.TorusGeometry(r + .38, .16, 8, 96), limeMat(8, .2)); corn.rotation.x = Math.PI / 2; corn.position.set(ROT.x, 12.9, cz); root.add(corn);
+    // pilastres, corniche et filet doré
+    const pilM = new THREE.MeshStandardMaterial({ color: '#f3ece0', roughness: .5 }); REAL.done.add(pilM);
+    const busy = [...ROT_OPEN.map(([a, b]) => [a, b]), [-2.85, -2.05], [2.05, 2.85]];
+    const near = (th) => busy.some(([a, b]) => { const t = ((th - a) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI), span = ((b - a) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI); return t < span + .14 || t > 2 * Math.PI - .14; });
+    for (let k = 0; k < 24; k++) {
+      const th = k / 24 * Math.PI * 2; if (near(th)) continue;
+      const p = rotAt(th, r - .12, H / 2), pl = box(.55, H - .6, .22, pilM, p.x, H / 2 - .3, p.z); pl.rotation.y = th; root.add(pl);
+      const cp = rotAt(th, r - .16, H - .5), cap = box(.7, .22, .3, M.gold, cp.x, H - .5, cp.z); cap.rotation.y = th; root.add(cap);
+    }
+    const cor = new THREE.Mesh(new THREE.TorusGeometry(r - .12, .2, 8, 128), new THREE.MeshStandardMaterial({ color: '#efe6d6', roughness: .6 })); cor.rotation.x = Math.PI / 2; cor.position.set(ROT.x, H, cz); root.add(cor);
+    const gl = new THREE.Mesh(new THREE.TorusGeometry(r - .05, .03, 6, 128), M.gold); gl.rotation.x = Math.PI / 2; gl.position.set(ROT.x, H - .35, cz); root.add(gl);
+    // la coupole peinte : caissons bleus et rosaces d'or, l'oculus lumineux au sommet
+    const dt = srgb(new THREE.CanvasTexture(domeCanvas())); dt.anisotropy = 8;
+    const domeM = new THREE.MeshStandardMaterial({ map: dt, emissiveMap: dt, emissive: '#ffffff', emissiveIntensity: .22, roughness: .8, side: THREE.BackSide }); REAL.done.add(domeM);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(r - .1, 64, 24, 0, Math.PI * 2, 0, Math.PI / 2), domeM); dome.scale.y = .65; dome.position.set(ROT.x, H, cz); root.add(dome);
+    const ocY = H + (r - .1) * .65 - .08;
+    const oc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 40), new THREE.MeshBasicMaterial({ color: '#fff6dc' })); oc.rotation.x = Math.PI / 2; oc.position.set(ROT.x, ocY, cz); root.add(oc);
+    const og = glowSprite('#fff1cc', 7, .5); og.position.set(ROT.x, ocY - .6, cz); root.add(og);
+    const sun = new THREE.SpotLight('#fff1d6', 40, 22, .5, .8, 1.2); sun.position.set(ROT.x, ocY - .3, cz); sun.target.position.set(ROT.x, 0, cz); root.add(sun, sun.target);
+    const chl = new THREE.PointLight('#ffd8a8', 16, 20, 1.1); chl.position.set(ROT.x, 6.5, cz); root.add(chl);
+    // sol de marbre et rosace dorée incrustée
+    const fl = new THREE.Mesh(new THREE.CircleGeometry(r + .05, 72), new THREE.MeshStandardMaterial({ map: tex('floor', 4, 4), roughness: .18, metalness: .05 })); fl.rotation.x = -Math.PI / 2; fl.position.set(ROT.x, .02, cz); root.add(fl);
+    const rose = plane(8.6, 8.6, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: textTexture(1024, 1024, (c, s) => {
+      c.translate(s / 2, s / 2); c.strokeStyle = 'rgba(176,141,87,.85)'; c.lineWidth = 6; [.48, .45, .3].forEach((k) => { c.beginPath(); c.arc(0, 0, s * k, 0, 7); c.stroke(); });
+      c.fillStyle = 'rgba(176,141,87,.5)'; for (let i = 0; i < 16; i++) { const a = i * Math.PI / 8, l = s * (i % 2 ? .3 : .45); c.beginPath(); c.moveTo(Math.cos(a - .1) * s * .1, Math.sin(a - .1) * s * .1); c.lineTo(Math.cos(a) * l, Math.sin(a) * l); c.lineTo(Math.cos(a + .1) * s * .1, Math.sin(a + .1) * s * .1); c.closePath(); c.fill(); }
+      c.fillStyle = 'rgba(122,30,44,.35)'; c.beginPath(); c.arc(0, 0, s * .08, 0, 7); c.fill();
+    }) }));
+    rose.rotation.x = -Math.PI / 2; rose.position.set(ROT.x, .03, cz); root.add(rose);
+    // l'entrée : un court vestibule entre la porte et la rotonde, et un tapis jusqu'au cœur
+    const vz0 = cz + Math.sqrt(r * r - 4.84) - .1, vz1 = 8, vl = vz1 - vz0;
+    [-1, 1].forEach((sd) => root.add(box(.3, 5.4, vl, wallMat('plaster', vl, 5.4, PALETTE.hall), sd * 2.35, 2.7, (vz0 + vz1) / 2)));
+    const vc = plane(4.4, vl, M.ceiling); vc.rotation.x = Math.PI / 2; vc.position.set(0, 5.4, (vz0 + vz1) / 2); root.add(vc);
+    const vf = plane(4.4, vl + .2, new THREE.MeshStandardMaterial({ map: tex('floor', 1, vl / 4), roughness: .2 })); vf.rotation.x = -Math.PI / 2; vf.position.set(0, .021, (vz0 + vz1) / 2); root.add(vf);
+    const cl0 = 8.2, cl1 = cz + 1.1, cL = cl0 - cl1;
+    const carpet = W.carpet = plane(3, cL, new THREE.MeshStandardMaterial({ map: tex('carpet', 1, cL / 4), roughness: 1 })); carpet.rotation.x = -Math.PI / 2; carpet.position.set(0, .035, (cl0 + cl1) / 2); root.add(carpet); W.carpetRY = cL / 4;
+    // passages vers les deux ailes
+    [-1, 1].forEach((sd) => {
+      [-8.85, -5.15].forEach((wz) => { const x0 = Math.sqrt(r * r - (wz - cz) * (wz - cz)) - .05, x1 = 10.4, L = x1 - x0; root.add(box(L, 4.6, .3, wallMat('plaster', L, 4.6, PALETTE.hall), sd * (x0 + L / 2), 2.3, wz + (wz < -7 ? -.15 : .15))); });
+      const pc = plane(2, 3.7, M.ceiling); pc.rotation.x = Math.PI / 2; pc.position.set(sd * 9.4, 4.6, -7); root.add(pc);
+      const pf = plane(2.2, 3.7, new THREE.MeshStandardMaterial({ map: tex('floor', .5, 1), roughness: .2 })); pf.rotation.x = -Math.PI / 2; pf.position.set(sd * 9.4, .021, -7); root.add(pf);
+    });
+    // le grand lustre, suspendu sous la coupole
+    const ch = new THREE.Group(); ch.position.set(ROT.x, 7.2, cz);
+    [2.3, 1.5].forEach((rr, k) => { const t = new THREE.Mesh(new THREE.TorusGeometry(rr, .05, 8, 64), M.gold); t.rotation.x = Math.PI / 2; t.position.y = k * .5; ch.add(t);
+      const nb = k ? 12 : 20; for (let i = 0; i < nb; i++) { const a = i / nb * Math.PI * 2; const b = new THREE.Mesh(new THREE.SphereGeometry(.07, 10, 8), M.warm); b.position.set(Math.cos(a) * rr, k * .5 + .12, Math.sin(a) * rr); ch.add(b); } });
+    ch.add(box(.03, ocY - 7.2, .03, M.gold, 0, (ocY - 7.2) / 2, 0));
+    const chg = glowSprite('#ffd9a0', 6, .4); chg.position.y = .3; ch.add(chg);
+    root.add(ch);
+    // plaques : nos prénoms au-dessus de l'ouverture du jardin intérieur, les ailes au-dessus des passages
+    const hp = rotAt(Math.PI, r - .06, 6.3);
+    W.hallPlate = new THREE.Group(); W.hallPlate.position.copy(hp); W.hallPlate.rotation.y = faceCenter(Math.PI); root.add(W.hallPlate);
+    { const bk = plane(6.2, 1.25, new THREE.MeshStandardMaterial({ color: '#f4ead8', roughness: .8 })), fr = plane(6.4, 1.45, M.gold); bk.position.set(hp.x, hp.y, hp.z + .03); fr.position.set(hp.x, hp.y, hp.z + .02); root.add(fr, bk); W.hallPlate.position.z += .05; }
+    const pl = (t, s) => [{ text: t, y: .38, size: .42, italic: true, color: '#3b3226' }, { text: s, y: .8, size: .2, sans: true, spacing: 6, color: '#b08d57' }];
+    [[(ROT_E[0] + ROT_E[1]) / 2, 'La bibliothèque', 'NOS MOTS  ·  NOS PROJETS'], [-(ROT_E[0] + ROT_E[1]) / 2, 'La salle des cartes', 'NOS LIEUX']].forEach(([th, t, s]) => {
+      const p = rotAt(th, r - .3, 5.55); wallPlate(root, p.x, p.y, p.z, faceCenter(th), 3.2, pl(t, s));
+    });
 
     // ♥ Le cœur des raisons
-    const hz = -3;
+    const hz = ROT.z;
     const ped = box(.6, 1, .6, wallMat('plaster', 1, 1), 0, .5, hz); root.add(ped); root.add(box(.66, .03, .66, M.gold, 0, 1.015, hz));
     const s = new THREE.Shape();
     s.moveTo(5, 5); s.bezierCurveTo(5, 5, 4, 0, 0, 0); s.bezierCurveTo(-6, 0, -6, 7, -6, 7); s.bezierCurveTo(-6, 11, -3, 15.4, 5, 19);
@@ -1107,7 +1182,7 @@
     W.anim.push((t, dt) => { heart.rotation.y += dt * .6; const b = 1 + Math.max(0, Math.sin(t * 3.2)) * .06; heart.scale.setScalar(b); heart.position.y = 1.3 + Math.sin(t * 1.2) * .02; W.heartMat.emissiveIntensity = .35 + (Math.sin(t * 2) + 1) * .2; });
 
     // ✉ Le bureau aux lettres
-    const dx = 8.2, dz = -3, desk = new THREE.Group(); desk.position.set(dx, 0, dz); desk.rotation.y = -Math.PI / 2;
+    const dx = 18.6, dz = -4.7, desk = new THREE.Group(); desk.position.set(dx, 0, dz); desk.rotation.y = Math.PI;
     const woodM = new THREE.MeshStandardMaterial({ map: tex('wood', 2, 1), roughness: .7 });
     desk.add(box(2.2, .08, 1, woodM, 0, .82, 0));
     [[-1, -.42], [1, -.42], [-1, .42], [1, .42]].forEach(([lx, lz]) => desk.add(box(.08, .8, .08, woodM, lx, .4, lz)));
@@ -1119,14 +1194,15 @@
     root.add(desk);
     const dhit = box(2.3, 1.2, 1.1, new THREE.MeshBasicMaterial({ visible: false }), 0, .6, 0); desk.add(dhit);
     interactive(dhit, { range: 3.8, near: { type: 'hint', text: () => '✉️ Le bureau aux lettres scellées' }, click: openLetters });
-    OBST.push([dx - .5 - R, dx + .5 + R, dz - 1.1 - R, dz + 1.1 + R]);
+    OBST.push([dx - 1.1 - R, dx + 1.1 + R, dz - .5 - R, dz + .5 + R]);
 
-    // 🎬 Écran de la rétrospective
-    buildVideoScreen(root, -x + .01, 3.4, -1.3);
-    buildPhono(root, -6.8, 4.2);
+    // 🎬 Écran de la rétrospective, sur le mur courbe face au centre ; le phonographe dans la bibliothèque
+    { const vp = rotAt(-2.45, 8.3); buildVideoScreen(root, vp.x, 3.4, vp.z, faceCenter(-2.45)); }
+    buildPhono(root, 13.2, -4.7);
+    // murs extérieurs entre la façade et les ailes
+    [-1, 1].forEach((sd) => root.add(box(1.2, 12, 11.3, wallMat('stone', 11.3, 12, PALETTE.facade), sd * 14.6, 6, 4.35)));
   }
 
-  /* 🎼 Le phonographe : joue nos musiques et nos messages vocaux */
   function buildPhono(root, px, pz) {
     const g = new THREE.Group(); g.position.set(px, 0, pz); g.rotation.y = .7; root.add(g);
     const woodM = new THREE.MeshStandardMaterial({ map: tex('wood', 1, 1), roughness: .6 });
@@ -1151,8 +1227,8 @@
     OBST.push([px - .55 - R, px + .55 + R, pz - .55 - R, pz + .55 + R]);
   }
 
-  function buildVideoScreen(root, x, y, z) {
-    const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = Math.PI / 2; root.add(g);
+  function buildVideoScreen(root, x, y, z, rotY) {
+    const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY == null ? Math.PI / 2 : rotY; root.add(g);
     const w = 6.2, hh = w * 9 / 16;
     g.add(box(w + .18, hh + .18, .06, M.black, 0, 0, .03));
     const gl = plane(w + 2.4, hh + 2, M.halo.clone()); gl.position.z = .004; gl.material.opacity = .45; g.add(gl);
@@ -1262,7 +1338,7 @@
   function refreshPlates() {
     const names = S.settings.names || 'Toi & Moi';
     const since = S.settings.since ? 'depuis le ' + frDate(S.settings.since) : 'chaque souvenir est une œuvre';
-    [[W.gatePlate, 8, 1.3, '#8a6a32'], [W.hallPlate, 7, 1.1, '#b08d57']].forEach(([grp, w, hh, color]) => {
+    [[W.gatePlate, 8, 1.3, '#8a6a32'], [W.hallPlate, 6, 1.1, '#8a6a32']].forEach(([grp, w, hh, color]) => {
       if (!grp) return; grp.clear();
       grp.add(textPlane(w, hh, [{ text: names, y: .4, size: .5, color }, { text: since, y: .82, size: .2, italic: true, weight: 400, color, alpha: .85 }]));
     });
@@ -1398,129 +1474,199 @@
       .sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.createdAt || 0) - (b.createdAt || 0));
   }
 
+  /* ════════════════════════════════════════════
+     LA BOUCLE DES CHAPITRES autour du jardin intérieur
+     salle des cartes → aile ouest → galerie du fond → aile est → « Notre avenir » → bibliothèque → rotonde
+     ════════════════════════════════════════════ */
+  const LOOP = { XL: -17.2, XR: 16.3, CW: 7, CH: 6, Z0: -12, BL: 3.4 };
   function buildDynamic() {
-    const scene = document.querySelector('a-scene');
     if (W.dyn) { W.root.remove(W.dyn); W.dyn.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
     dropTag('gallery'); W.frames = []; W.zones = []; W.roomsZ = [];
     const D = W.dyn = new THREE.Group(); W.root.add(D);
-    const staticObst = OBST.filter((o) => !o.dyn);
-    OBST = staticObst;
-    const chapters = sortedChapters();
+    OBST = OBST.filter((o) => !o.dyn);
+    const dyn = (r) => OBST.push(Object.assign(r, { dyn: true }));
+    const { XL, XR, CW, CH, Z0, BL } = LOOP, hw = CW / 2;
+    const RC = ROT.z;
     WALK = [
       [-GARDEN.x + R, GARDEN.x - R, GARDEN.zMin + .45, GARDEN.zMax - R],   // jardin
       [-2.2 + R, 2.2 - R, HALL.z0 - .5, GARDEN.zMin + .7],                  // porte
-      [-HALL.x + R, HALL.x - R, HALL.z1 + R, HALL.z0 - R],                  // hall
+      [-2.2 + R, 2.2 - R, RC + 7.8, 8.2],                                   // vestibule
+      [-3.4, 3.4, RC - 8, RC + 8], [-6, 6, RC - 6, RC + 6], [-8, 8, RC - 3.3, RC + 3.3],   // rotonde
+      [-1.6, 1.6, RC - 9.8, RC - 7.8],                                      // vers le jardin intérieur
+      [7.5, 10.9, -8.85 + R, -5.15 - R], [-10.9, -7.5, -8.85 + R, -5.15 - R],   // passages vers les ailes
       ...EXTRA_WALK,
     ];
-    W.zones.push({ z: 1e9, name: 'Le Jardin des vœux', outside: true, tp: [0, 56, 0] });
-    W.zones.push({ z: HALL.z0, name: 'Le Grand Hall', tp: [0, 5.5, 0] });
+    W.zones.push({ name: 'Le Jardin des vœux', outside: true, tp: [0, 56, 0], r: [-GARDEN.x, GARDEN.x, 8.5, GARDEN.zMax] });
+    W.zones.push({ name: 'La rotonde', tp: [0, 2.6, 0], r: [-9.4, 9.4, -12, 8.5] });
 
-    let z = HALL.z1 - .4;                       // face arrière du hall
-    WALK.push([-1.8 + R, 1.8 - R, z - .5, z + .8]); // arche hall → galerie
-    const floorStart = z;
-    chapters.forEach((ch, i) => {
-      const mems = memoriesOf(ch.id, chapters);
-      const slots = mems.length + (S.canWrite ? 1 : 0);
-      const pairs = Math.max(2, Math.ceil(slots / 2)), L = 5 + pairs * 3.4, z0 = z, z1 = z - L;
-      // murs latéraux + plafond
-      const cwm = wallMat('plaster', L, SPINE_H); cwm.color.set(wallColorOf(ch));
-      D.add(box(.3, SPINE_H, L, cwm, -SPINE_W - .15, SPINE_H / 2, (z0 + z1) / 2));
-      D.add(box(.3, SPINE_H, L, cwm, SPINE_W + .15, SPINE_H / 2, (z0 + z1) / 2));
-      furnishChapter(D, z0, z1, i);
-      const ce = plane(SPINE_W * 2 + .6, L, M.ceiling); ce.rotation.x = Math.PI / 2; ce.position.set(0, SPINE_H, (z0 + z1) / 2); D.add(ce);
-      // plinthes + bandeaux LED
-      D.add(box(.02, .08, L, M.black, -SPINE_W + .01, .04, (z0 + z1) / 2)); D.add(box(.02, .08, L, M.black, SPINE_W - .01, .04, (z0 + z1) / 2));
-      D.add(box(.03, .03, L - .4, M.warm, -SPINE_W + .03, SPINE_H - .08, (z0 + z1) / 2)); D.add(box(.03, .03, L - .4, M.warm, SPINE_W - .03, SPINE_H - .08, (z0 + z1) / 2));
-      // plaque de chapitre (sur l'arche d'entrée, côté visiteur)
-      if (i > 0) {
-        const aw = archWall(SPINE_W * 2 + .6, SPINE_H, 3.6, 2.6, .3); aw.position.set(0, 0, z0); D.add(aw);
-        WALK.push([-1.8 + R, 1.8 - R, z0 - .5, z0 + .8]);
+    // ── combien de travées ? chaque travée porte deux cadres (mur extérieur + mur sur le jardin)
+    const chapters = sortedChapters();
+    const info = chapters.map((ch) => { const mems = memoriesOf(ch.id, chapters); const slots = mems.length + (S.canWrite ? 1 : 0); return { ch, mems, slots, bays: Math.max(2, Math.ceil(slots / 2)) }; });
+    const need = info.reduce((a, c) => a + c.bays, 0) + 1;
+    const n = Math.max(5, Math.ceil((need - 4) / 2)), zc = Z0 - n * BL;   // zc : bord nord du jardin intérieur
+    const topBL = ((XR - hw) - (XL + hw)) / 7;
+    const legs = [
+      { s: [XL, Z0], u: [0, -1], o: [-1, 0], n, bl: BL },
+      { s: [XL + hw, zc - hw], u: [1, 0], o: [0, -1], n: 7, bl: topBL },
+      { s: [XR, zc], u: [0, 1], o: [1, 0], n: n - 3, bl: BL },
+    ];
+    const bays = [];
+    legs.forEach((L) => { for (let k = 0; k < L.n; k++) bays.push({ L, k, u: L.u, o: L.o, bl: L.bl, c: [L.s[0] + L.u[0] * (k + .5) * L.bl, L.s[1] + L.u[1] * (k + .5) * L.bl] }); });
+    const rotOf = (u) => Math.atan2(u[0], u[1]);
+    const at = (c, u, o, du, dv) => [c[0] + u[0] * du + o[0] * dv, c[1] + u[1] * du + o[1] * dv];
+    const rectAt = (p, u, eu, eo) => { const ex = Math.abs(u[0]) * eu + Math.abs(u[1]) * eo, ez = Math.abs(u[1]) * eu + Math.abs(u[0]) * eo; return [p[0] - ex - R, p[0] + ex + R, p[1] - ez - R, p[1] + ez + R]; };
+    const facadeM = wallMat('stone', 4, 4, PALETTE.facade);
+    const floorM = new THREE.MeshStandardMaterial({ map: tex('floor', 2, 2), roughness: .18, metalness: .05 });
+    const glassM = (w, hh) => glassPane(w, hh);
+    // une travée : murs, verrière haute sur le jardin, plafond
+    const buildBay = (b, wm) => {
+      const ry = rotOf(b.u), { c, u, o, bl } = b;
+      const add = (m, p, y) => { m.position.set(p[0], y, p[1]); m.rotation.y = ry; D.add(m); return m; };
+      add(box(.3, CH, bl + .02, wm), at(c, u, o, 0, hw + .15), CH / 2);                 // mur extérieur
+      add(box(.3, 3.6, bl + .02, wm), at(c, u, o, 0, -hw - .15), 1.8);                  // mur sur le jardin
+      add(box(.3, .6, bl + .02, wm), at(c, u, o, 0, -hw - .15), CH - .3);
+      add(box(.06, 3.6, bl + .02, facadeM), at(c, u, o, 0, -hw - .33), 1.8);           // son parement côté jardin
+      add(box(.06, .6, bl + .02, facadeM), at(c, u, o, 0, -hw - .33), CH - .3);
+      const gp = glassM(bl, 1.8); const gpos = at(c, u, o, 0, -hw - .15); gp.position.set(gpos[0], 4.5, gpos[1]); gp.rotation.y = Math.atan2(o[0], o[1]); D.add(gp);
+      [-.5, .5].forEach((f) => add(box(.34, 1.8, .07, M.black), at(c, u, o, f * bl, -hw - .15), 4.5));
+      add(box(.36, .05, bl, M.gold), at(c, u, o, 0, -hw - .15), 3.62);
+      add(box(CW + .6, .05, bl + .02, M.ceiling), c, CH + .02);
+      add(box(CW, .04, bl + .02, floorM), c, 0);
+      add(box(.03, .03, bl - .2, M.warm), at(c, u, o, 0, hw - .03), CH - .08);         // bandeau lumineux
+    };
+    const frameAt = (b, side, mem, chId) => {   // side +1 : mur extérieur, -1 : mur du jardin
+      const p = at(b.c, b.u, b.o, 0, side * (hw - .005)), ry = Math.atan2(-side * b.o[0], -side * b.o[1]);
+      if (mem) makeFrame(D, mem, p[0], 1.8, p[1], ry, CH); else makeEmptyFrame(D, chId, p[0], 1.8, p[1], ry);
+    };
+    const portal = (b, wm, lines) => {   // une arche à l'entrée d'un chapitre, avec sa plaque
+      const s = at(b.c, b.u, b.o, -b.bl / 2, 0), ry = rotOf(b.u);
+      if (b.L === legs[0] && b.k === 0) {   // le premier chapitre : sa plaque au-dessus de l'arche de la salle des cartes
+        if (lines) { const pq = textPlane(5.6, 1.05, lines), bg = plane(4.9, 1.0, new THREE.MeshStandardMaterial({ color: '#f4ead8', roughness: .8 })); bg.position.set(XL, 5.3, Z0 + .03); pq.position.set(XL, 5.3, Z0 + .05); D.add(bg, pq); }
+        return;
       }
-      const plaque = textPlane(5.6, 1.05, [
+      [-1, 1].forEach((sd) => { const p = at(s, b.u, b.o, 0, sd * (hw - .45)); const m = box(.9, CH, .5, wm, p[0], CH / 2, p[1]); m.rotation.y = ry; D.add(m); dyn(rectAt(p, b.u, .25, .45));
+        const g = box(.06, CH - 1.2, .52, M.gold, 0, 0, 0); const gp = at(s, b.u, b.o, 0, sd * (hw - .92)); g.position.set(gp[0], (CH - 1.2) / 2, gp[1]); g.rotation.y = ry; D.add(g); });
+      const lt = box(CW, 1.2, .5, wm, s[0], CH - .6, s[1]); lt.rotation.y = ry; D.add(lt);
+      const gl = box(CW - 1.8, .05, .52, M.gold, s[0], CH - 1.2, s[1]); gl.rotation.y = ry; D.add(gl);
+      if (lines) { const pq = textPlane(5.6, 1.05, lines); const pp = at(s, b.u, b.o, -.27, 0); pq.position.set(pp[0], CH - .62, pp[1]); pq.rotation.y = Math.atan2(-b.u[0], -b.u[1]);
+        const bg = plane(4.9, 1.0, new THREE.MeshStandardMaterial({ color: '#f4ead8', roughness: .8 })); bg.position.set(pp[0] + b.u[0] * .01, CH - .62, pp[1] + b.u[1] * .01); bg.rotation.y = pq.rotation.y; D.add(bg, pq); }
+    };
+    const corner = (cx, cz2, wm, walls) => {
+      walls.forEach(([dx, dz]) => { const m = box(dx ? .3 : CW + .6, CH, dx ? CW + .6 : .3, wm, cx + dx * (hw + .15), CH / 2, cz2 + dz * (hw + .15)); D.add(m); });
+      D.add(box(CW + .6, .05, CW + .6, M.ceiling, cx, CH + .02, cz2)); D.add(box(CW, .04, CW, floorM, cx, 0, cz2));
+      const [dx, dz] = [walls[0][0] || walls[1][0], walls[0][1] || walls[1][1]];
+      pottedPalm(D, cx + dx * (hw - .8), cz2 + dz * (hw - .8), 1.25); dyn([cx + dx * (hw - .8) - .4 - R, cx + dx * (hw - .8) + .4 + R, cz2 + dz * (hw - .8) - .4 - R, cz2 + dz * (hw - .8) + .4 + R]);
+      const lamp = glowSprite('#ffd9a0', 2.2, .5); lamp.position.set(cx, CH - .4, cz2); D.add(lamp);
+      const wl = (dx2, dz2) => walls.some(([a, b2]) => a === dx2 && b2 === dz2) ? R : -.2;
+      WALK.push([cx - hw + wl(-1, 0), cx + hw - wl(1, 0), cz2 - hw + wl(0, -1), cz2 + hw - wl(0, 1)]);
+    };
+    // ── les chapitres, travée après travée
+    let bi = 0; const tour = [];
+    info.forEach(({ ch, mems, slots, bays: nb }, i) => {
+      const wm = wallMat('plaster', BL, CH, wallColorOf(ch)), first = bays[bi];
+      portal(first, wm, [
         { text: 'CHAPITRE ' + romanNum(i + 1), y: .2, size: .2, sans: true, spacing: 10, color: '#b08d57' },
         { text: ch.title || 'Sans titre', y: .53, size: .38, italic: true, color: '#3b3226' },
         { text: ch.subtitle || '', y: .86, size: .19, italic: true, weight: 400, color: '#8a7350' },
       ]);
-      if (i === 0) plaque.position.set(0, 4.95, HALL.z1 + .02);   // sur le mur du hall, au-dessus de l'arche
-      else plaque.position.set(0, 4.85, z0 + .31);
-      D.add(plaque);
-      // cadres : alternance gauche / droite
-      const wallY = 1.8;
-      for (let k = 0; k < slots; k++) {
-        const side = k % 2 === 0 ? -1 : 1, idx = Math.floor(k / 2), fz = z0 - 3 - idx * 3.4;
-        const fx = side * (SPINE_W - .005), rot = side < 0 ? Math.PI / 2 : -Math.PI / 2;
-        if (k < mems.length) makeFrame(D, mems[k], fx, wallY, fz, rot, SPINE_H);
-        else makeEmptyFrame(D, ch.id, fx, wallY, fz, rot);
+      for (let k = 0; k < nb; k++) {
+        const b = bays[bi + k]; buildBay(b, wm);
+        [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
       }
-      WALK.push([-SPINE_W + R, SPINE_W - R, z1 + R, z0 - R]);
-      W.zones.push({ z: z0, name: ch.title || ('Chapitre ' + romanNum(i + 1)), tp: [0, z0 - 1.8, 0], chapter: i + 1 });
-      z = z1 - .3;
+      if (nb >= 3) { const b = bays[bi + Math.floor(nb / 2)]; museumBench(D, b.c[0], b.c[1], 2.4, rotOf(b.u)); dyn(rectAt(b.c, b.u, 1.2, .31)); }
+      const tp = at(first.c, first.u, first.o, -first.bl / 2 + 1.4, 0);
+      W.zones.push({ name: ch.title || ('Chapitre ' + romanNum(i + 1)), chapter: i + 1, tp: [tp[0], tp[1], Math.atan2(-first.u[0], -first.u[1])], bays: bays.slice(bi, bi + nb) });
+      bi += nb;
     });
-
-    // ── Salle « La suite » ──
-    const n0 = z + .3, nAw = archWall(SPINE_W * 2 + .6, SPINE_H, 3.6, 2.6, .3); nAw.position.set(0, 0, n0 - .3); D.add(nAw);
-    WALK.push([-1.8 + R, 1.8 - R, n0 - .8, n0 + .5]);
-    const nz0 = n0 - .3, nz1 = nz0 - NEXT_L;
-    D.add(box(.3, SPINE_H, NEXT_L, wallMat('plaster', NEXT_L, SPINE_H), -SPINE_W - .15, SPINE_H / 2, (nz0 + nz1) / 2));
-    D.add(box(.3, SPINE_H, NEXT_L, wallMat('plaster', NEXT_L, SPINE_H), SPINE_W + .15, SPINE_H / 2, (nz0 + nz1) / 2));
-    const nce = plane(SPINE_W * 2 + .6, NEXT_L, M.ceiling); nce.rotation.x = Math.PI / 2; nce.position.set(0, SPINE_H, (nz0 + nz1) / 2); D.add(nce);
-    const np = textPlane(5.6, 1, [{ text: 'LA SUITE', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 's\'écrit ensemble', y: .7, size: .36, italic: true, color: '#3b3226' }]);
-    np.position.set(0, 4.85, n0 + .01); D.add(np);
-    // pupitre « ouvrir un chapitre »
-    const lect = new THREE.Group(); lect.position.set(0, 0, (nz0 + nz1) / 2); D.add(lect);
-    lect.add(box(.08, 1.1, .08, M.gold, 0, .55, 0)); lect.add(box(.6, .04, .4, M.gold, 0, 1.1, 0));
-    const sign = textPlane(1.1, .7, [{ text: S.canWrite ? 'Ouvrir un' : 'Le prochain', y: .36, size: .26, italic: true, color: '#2c2419' }, { text: S.canWrite ? 'nouveau chapitre' : 'chapitre arrive…', y: .7, size: .26, italic: true, color: '#2c2419' }]);
-    const signBg = box(1.2, .8, .03, new THREE.MeshStandardMaterial({ color: '#f6f1e7', roughness: .8 }), 0, 1.55, 0); lect.add(signBg);
-    sign.position.set(0, 1.55, .02); lect.add(sign);
-    if (S.canWrite) interactive(signBg, { range: 3.5, near: { type: 'hint', text: () => '📖 Ouvrir un nouveau chapitre de notre histoire' }, click: () => openAtelier('chapitres') }, 'gallery');
-    OBST.push(Object.assign([-.4 - R, .4 + R, lect.position.z - .3 - R, lect.position.z + .3 + R], { dyn: true }));
-    for (let k = 0; k < 4; k++) { // cadres fantômes, en attente
-      const side = k % 2 ? 1 : -1, fz = nz0 - 2.5 - Math.floor(k / 2) * 3.6;
-      const ghost = plane(1, 1.3, new THREE.MeshBasicMaterial({ color: '#c9b48a', transparent: true, opacity: .14 })); ghost.position.set(side * (SPINE_W - .01), 1.75, fz); ghost.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2; D.add(ghost);
+    // ── « La suite » : les travées encore vides, qui attendent les prochains chapitres
+    const suite = bays.slice(bi); const swm = wallMat('plaster', BL, CH, '#efe6d6');
+    portal(suite[0], swm, [{ text: 'LA SUITE', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 's\'écrit ensemble', y: .7, size: .36, italic: true, color: '#3b3226' }]);
+    suite.forEach((b, k) => {
+      buildBay(b, swm);
+      [1, -1].forEach((side) => { const p = at(b.c, b.u, b.o, 0, side * (hw - .01)); const gh = plane(1, 1.3, new THREE.MeshBasicMaterial({ color: '#c9b48a', transparent: true, opacity: .14 })); gh.position.set(p[0], 1.75, p[1]); gh.rotation.y = Math.atan2(-side * b.o[0], -side * b.o[1]); D.add(gh); });
+    });
+    { const b = suite[0], lect = new THREE.Group(); lect.position.set(b.c[0], 0, b.c[1]); lect.rotation.y = Math.atan2(-b.u[0], -b.u[1]); D.add(lect);
+      lect.add(box(.08, 1.1, .08, M.gold, 0, .55, 0)); lect.add(box(.6, .04, .4, M.gold, 0, 1.1, 0));
+      const sign = textPlane(1.1, .7, [{ text: S.canWrite ? 'Ouvrir un' : 'Le prochain', y: .36, size: .26, italic: true, color: '#2c2419' }, { text: S.canWrite ? 'nouveau chapitre' : 'chapitre arrive…', y: .7, size: .26, italic: true, color: '#2c2419' }]);
+      const signBg = box(1.2, .8, .03, new THREE.MeshStandardMaterial({ color: '#f6f1e7', roughness: .8 }), 0, 1.55, 0); lect.add(signBg); sign.position.set(0, 1.55, .02); lect.add(sign);
+      if (S.canWrite) interactive(signBg, { range: 3.5, near: { type: 'hint', text: () => '📖 Ouvrir un nouveau chapitre de notre histoire' }, click: () => openAtelier('chapitres') }, 'gallery');
+      dyn([b.c[0] - .45 - R, b.c[0] + .45 + R, b.c[1] - .45 - R, b.c[1] + .45 + R]);
+      W.zones.push({ name: 'La suite', tp: [...at(b.c, b.u, b.o, -1.4, 0), Math.atan2(-b.u[0], -b.u[1])], bays: suite });
+      W.nextRoom = { lect: b.c };
     }
-    WALK.push([-SPINE_W + R, SPINE_W - R, nz1 + R, nz0 - R]);
-    W.zones.push({ z: n0, name: 'La suite', tp: [0, nz0 - 1.5, 0] });
-    W.nextRoom = { z0: n0, z1: nz1, lectZ: (nz0 + nz1) / 2 };
+    // ── les deux angles du fond
+    const cw = wallMat('plaster', CW, CH, '#efe6d6');
+    corner(XL, zc - hw, cw, [[-1, 0], [0, -1]]); corner(XR, zc - hw, cw, [[1, 0], [0, -1]]);
+    // les galeries elles-mêmes sont praticables
+    legs.forEach((L) => { const len = L.n * L.bl, e = [L.s[0] + L.u[0] * len, L.s[1] + L.u[1] * len];
+      WALK.push([Math.min(L.s[0], e[0]) - (L.u[0] ? 0 : hw - R), Math.max(L.s[0], e[0]) + (L.u[0] ? 0 : hw - R), Math.min(L.s[1], e[1]) - (L.u[1] ? 0 : hw - R), Math.max(L.s[1], e[1]) + (L.u[1] ? 0 : hw - R)]); });
 
-    // ── Le Belvédère ──
-    const bAw = archWall(BELV_W * 2 + .6, BELV_H, 3.6, 2.6, .3); bAw.position.set(0, 0, nz1 - .3); D.add(bAw);
-    WALK.push([-1.8 + R, 1.8 - R, nz1 - .8, nz1 + .5]);
-    const bz0 = nz1 - .3, bz1 = bz0 - BELV_L;
-    D.add(box(.3, BELV_H, BELV_L, wallMat('plaster', BELV_L, BELV_H), -BELV_W - .15, BELV_H / 2, (bz0 + bz1) / 2));
-    D.add(box(.3, BELV_H, BELV_L, wallMat('plaster', BELV_L, BELV_H), BELV_W + .15, BELV_H / 2, (bz0 + bz1) / 2));
-    const bce = plane(BELV_W * 2 + .6, BELV_L, M.ceiling); bce.rotation.x = Math.PI / 2; bce.position.set(0, BELV_H, (bz0 + bz1) / 2); D.add(bce);
-    // baie vitrée panoramique
-    const ww = 15, wy0 = .7, wy1 = 6.1, wm = wallMat('plaster', 4, 4);
-    D.add(box((BELV_W * 2 - ww) / 2 + .3, BELV_H, .3, wm, -(ww / 2 + (BELV_W * 2 - ww) / 4 + .075), BELV_H / 2, bz1 - .15));
-    D.add(box((BELV_W * 2 - ww) / 2 + .3, BELV_H, .3, wm, (ww / 2 + (BELV_W * 2 - ww) / 4 + .075), BELV_H / 2, bz1 - .15));
-    D.add(box(ww, wy0, .3, wm, 0, wy0 / 2, bz1 - .15)); D.add(box(ww, BELV_H - wy1, .3, wm, 0, (BELV_H + wy1) / 2, bz1 - .15));
-    for (let k = 0; k <= 5; k++) D.add(box(.06, wy1 - wy0, .08, M.black, -ww / 2 + k * ww / 5, (wy0 + wy1) / 2, bz1 - .15));
-    D.add(box(ww, .06, .08, M.black, 0, wy0 + (wy1 - wy0) * .72, bz1 - .15));
-    const q = textPlane(9, .5, [{ text: S.settings.quote || '« Si c\'était à refaire, je te choisirais encore. »', y: .5, size: .62, italic: true, color: '#8a7350' }]);
-    q.position.set(0, 6.55, bz1 + .01); D.add(q);
-    // le banc
-    const benchZ = bz1 + 4.5, bench = new THREE.Group(); bench.position.set(0, 0, benchZ); D.add(bench);
+    // ── « Notre avenir » : la dernière salle, grande baie sur le jardin intérieur, le banc
+    const az0 = zc + (n - 3) * BL, az1 = Z0, aL = az1 - az0, azc = (az0 + az1) / 2, ax0 = XR - hw, ax1 = XR + hw;
+    const awm = wallMat('plaster', aL, CH, '#2c4775');
+    portal({ c: [XR, az0 + 1.7], u: [0, 1], o: [1, 0], bl: 3.4 }, awm, [{ text: 'NOTRE AVENIR', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 'tout ce qu\'il nous reste à vivre', y: .7, size: .32, italic: true, color: '#3b3226' }]);
+    D.add(box(.3, CH, aL, awm, ax1 + .15, CH / 2, azc));
+    const wy0 = .7, wy1 = 5.2;
+    D.add(box(.3, wy0, aL, awm, ax0 - .15, wy0 / 2, azc)); D.add(box(.3, CH - wy1, aL, awm, ax0 - .15, (CH + wy1) / 2, azc));
+    D.add(box(.06, wy0, aL, facadeM, ax0 - .33, wy0 / 2, azc)); D.add(box(.06, CH - wy1, aL, facadeM, ax0 - .33, (CH + wy1) / 2, azc));
+    { const gp = glassPane(aL, wy1 - wy0); gp.position.set(ax0 - .15, (wy0 + wy1) / 2, azc); gp.rotation.y = -Math.PI / 2; D.add(gp); }
+    for (let k = 0; k <= 4; k++) D.add(box(.12, wy1 - wy0, .08, M.black, ax0 - .15, (wy0 + wy1) / 2, az0 + k * aL / 4));
+    D.add(box(.34, .06, aL, M.black, ax0 - .15, wy0 + (wy1 - wy0) * .72, azc));
+    D.add(box(CW + .6, .05, aL, M.ceiling, XR, CH + .02, azc)); D.add(box(CW, .04, aL, floorM, XR, 0, azc));
+    const q = textPlane(9, .5, [{ text: S.settings.quote || '« Si c\'était à refaire, je te choisirais encore. »', y: .5, size: .62, italic: true, color: '#e8d6ad' }]);
+    q.position.set(ax0 + .02, 5.6, azc); q.rotation.y = Math.PI / 2; D.add(q);
+    const ap = textPlane(5.4, 1.1, [{ text: 'NOTRE AVENIR', y: .28, size: .26, sans: true, spacing: 14, color: '#d6ad62' }, { text: 'nos projets, nos rêves, nos promesses', y: .68, size: .3, italic: true, color: '#efe2c4' }]);
+    ap.position.set(ax1 - .02, 3.2, azc); ap.rotation.y = -Math.PI / 2; D.add(ap);
+    for (let k = 0; k < 40; k++) { const st = glowSprite('#ffe9b8', .18 + Math.random() * .2, .7); st.position.set(ax1 - .05, 1 + Math.random() * 4.6, az0 + .5 + Math.random() * (aL - 1)); D.add(st); }
+    // le banc, face au jardin intérieur
+    const benchX = ax0 + 2.3, bench = new THREE.Group(); bench.position.set(benchX, 0, azc); bench.rotation.y = Math.PI / 2; D.add(bench);
     bench.add(box(2.6, .07, .58, new THREE.MeshStandardMaterial({ color: '#c9a27a', roughness: .6 }), 0, .44, 0));
     bench.add(box(2.5, .05, .52, new THREE.MeshStandardMaterial({ color: '#ece6dc', roughness: 1 }), 0, .5, 0));
     bench.add(box(.05, .4, .52, M.black, -1.1, .2, 0)); bench.add(box(.05, .4, .52, M.black, 1.1, .2, 0));
     const bHit = box(2.7, .8, .7, new THREE.MeshBasicMaterial({ visible: false }), 0, .4, 0); bench.add(bHit);
-    interactive(bHit, { range: 4.5, near: { type: 'hint', text: () => '🪑 Toucher le banc pour t\'asseoir face au ciel' }, click: () => { if (!S.seated) sitDown(); } }, 'gallery');
-    OBST.push(Object.assign([-1.35 - R, 1.35 + R, benchZ - .3 - R, benchZ + .3 + R], { dyn: true }));
-    W.bench = { z: benchZ };
-    WALK.push([-BELV_W + R, BELV_W - R, bz1 + R, bz0 - R]);
-    W.zones.push({ z: nz1, name: 'Le Belvédère', tp: [0, benchZ + 3, 0] });
+    interactive(bHit, { range: 4.5, near: { type: 'hint', text: () => '🪑 Toucher le banc pour t\'asseoir face au jardin' }, click: () => { if (!S.seated) sitDown(); } }, 'gallery');
+    dyn([benchX - .3 - R, benchX + .3 + R, azc - 1.35 - R, azc + 1.35 + R]);
+    W.bench = { x: benchX, z: azc, yaw: Math.PI / 2 };
+    WALK.push([ax0 + R, ax1 - R, az0 - .2, az1 + .2]);
+    WALK.push([XR - 2 + R, XR + 2 - R, az1 - .5, az1 + .8]);       // arche vers la bibliothèque
+    WALK.push([XL - 2 + R, XL + 2 - R, Z0 - .5, Z0 + .8]);         // arche depuis la salle des cartes
+    W.zones.push({ name: 'Notre avenir', tp: [benchX + 1.4, azc + 2.2, Math.PI / 2], r: [ax0, ax1, az0, az1] });
 
-    // Sol intérieur (hall → belvédère)
-    const fl = HALL.z0 - (bz1 - .3), floor = plane(BELV_W * 2 + 2.4, fl, new THREE.MeshStandardMaterial({ map: tex('floor', 5, fl / 4), roughness: .18, metalness: .05 }));
-    floor.rotation.x = -Math.PI / 2; floor.position.set(0, .02, (HALL.z0 + bz1 - .3) / 2); D.add(floor);
-    // Le château grandit : murs extérieurs en pierre qui suivent la longueur
-    const castleLen = 10 - (bz1 - .5), cz = (10 + bz1 - .5) / 2;
-    const backLen = -12.7 - (bz1 - .5); void castleLen; void cz;
-    [-1, 1].forEach((sd) => { D.add(box(1.2, 12, 11.3, wallMat('stone', 11.3, 12), sd * 14.6, 6, 4.35)); D.add(box(1.2, 12, backLen, wallMat('stone', backLen, 12), sd * 14.6, 6, -12.7 - backLen / 2)); });
+    // ── le jardin intérieur, à ciel ouvert
+    const gx0 = XL + hw + .36, gx1 = XR - hw - .36, gz0 = zc + .36, gz1 = Z0, gcx = (gx0 + gx1) / 2, gcz = (gz0 + RC - 9.3) / 2;
+    const lawn = plane(gx1 - gx0, gz1 - gz0, new THREE.MeshStandardMaterial({ map: realTex('grassG', grassGroundCanvas, (gx1 - gx0) / 4, (gz1 - gz0) / 4, true), roughness: 1 }));
+    lawn.rotation.x = -Math.PI / 2; lawn.position.set(gcx, -.005, (gz0 + gz1) / 2); D.add(lawn);
+    const grav = (w, l, x, z) => { const p = plane(w, l, new THREE.MeshStandardMaterial({ map: tex('gravel', w / 2.2, l / 2.2), roughness: .95 })); p.rotation.x = -Math.PI / 2; p.position.set(x, .02, z); D.add(p); };
+    grav(2.4, (RC - 9.3) - gz0, 0, ((RC - 9.3) + gz0) / 2); grav(gx1 - gx0, 2.4, gcx, gcz);
+    const ring = new THREE.Mesh(new THREE.CircleGeometry(3.6, 40), new THREE.MeshStandardMaterial({ map: tex('gravel', 3, 3), roughness: .95 })); ring.rotation.x = -Math.PI / 2; ring.position.set(0, .025, gcz); D.add(ring);
+    // un bassin et son jet d'eau
+    const stoneM = limeMat(2, .3);
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2, .55, 40, 1, true), stoneM); basin.position.set(0, .27, gcz); D.add(basin);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.9, .12, 8, 40), stoneM); rim.rotation.x = Math.PI / 2; rim.position.set(0, .55, gcz); D.add(rim);
+    const water = new THREE.Mesh(new THREE.CircleGeometry(1.88, 40), new THREE.MeshStandardMaterial({ color: '#2a5a86', emissive: '#16305a', emissiveIntensity: .5, roughness: .06, metalness: .3 })); water.rotation.x = -Math.PI / 2; water.position.set(0, .45, gcz); D.add(water);
+    const jet = new THREE.Mesh(new THREE.CylinderGeometry(.03, .07, 1.4, 10, 1, true), new THREE.MeshBasicMaterial({ color: '#cfe6ff', transparent: true, opacity: .55 })); jet.position.set(0, 1.15, gcz); D.add(jet);
+    const spray = glowSprite('#dff0ff', 1.4, .6); spray.position.set(0, 1.85, gcz); D.add(spray);
+    dyn([-2.1 - R, 2.1 + R, gcz - 2.1 - R, gcz + 2.1 + R]);
+    // quatre cerisiers, des bancs, des massifs de fleurs
+    const tq = [[gx0 + 3.2, gz0 + 3.2], [gx1 - 3.2, gz0 + 3.2], [gx0 + 3.2, gcz + 4], [gx1 - 3.2, gcz + 4]].filter(([, z2]) => z2 < Z0 - 1.5);
+    buildTrees(D, tq.map(([x, z2], k) => [x, z2, .62 + k * .05]));
+    tq.forEach(([x, z2]) => dyn([x - .45 - R, x + .45 + R, z2 - .45 - R, z2 + .45 + R]));
+    [[-1, 0], [1, 0], [0, -1]].forEach(([dx, dz]) => { const bx = dx * 4.6, bz = gcz + dz * 4.6; museumBench(D, bx, bz, 2.2, dx ? 0 : Math.PI / 2); dyn(dx ? [bx - .31 - R, bx + .31 + R, bz - 1.1 - R, bz + 1.1 + R] : [bx - 1.1 - R, bx + 1.1 + R, bz - .31 - R, bz + .31 + R]); });
+    const flowers = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.13, 0), new THREE.MeshStandardMaterial({ roughness: .7 }), 240); let nf = 0;
+    const fcol = ['#e2486a', '#f2a7c3', '#fff3f0', '#f6c445', '#c46ad6', '#ff8a5c'].map((c2) => new THREE.Color(c2));
+    const bed = (x0, x1, z0, z1) => { for (let i = 0; i < 60 && nf < 240; i++) { _m4.makeTranslation(x0 + Math.random() * (x1 - x0), .12 + Math.random() * .25, z0 + Math.random() * (z1 - z0)); flowers.setMatrixAt(nf, _m4); flowers.setColorAt(nf, fcol[nf % fcol.length]); nf++; } };
+    bed(gx0 + .3, gx0 + 1.3, gz0 + .5, gz1 - .5); bed(gx1 - 1.3, gx1 - .3, gz0 + .5, gz1 - .5); bed(gx0 + 1.5, gx1 - 1.5, gz0 + .3, gz0 + 1.1);
+    flowers.count = nf; flowers.instanceMatrix.needsUpdate = true; if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true; D.add(flowers);
+    // murets qui ferment le jardin entre la rotonde et les ailes
+    [-1, 1].forEach((sd) => { const x0 = 5.66, x1 = 10.4, L = x1 - x0; D.add(box(L, 9, .3, facadeM, sd * (x0 + L / 2), 4.5, Z0 - .15)); });
+    WALK.push([gx0 + R, gx1 - R, gz0 + R, RC - 9.6], [gx0 + R, -5.9, RC - 9.6, Z0 - .3 - R], [5.9, gx1 - R, RC - 9.6, Z0 - .3 - R]);
+    W.zones.push({ name: 'Le jardin intérieur', tp: [0, RC - 11.2, 0], r: [gx0, gx1, gz0, Z0] });
 
-    W.endZ = bz1; W.chapters = chapters;
+    // ── trajet de la visite guidée le long de la boucle (décalé de 1,6 m vers le jardin pour éviter les bancs)
+    const off = 1.6;
+    W.loopPath = [[-15, -9.6], [XL, Z0 + .6], [XL + off, Z0 - 1.4], [XL + off, zc - hw + off], [XR - off, zc - hw + off], [XR - off, az0 - .6]];
+    W.chapters = chapters; W.endZ = zc;
     refreshLanterns(); refreshEnvelopes(); if (W.root) realify(W.root);
-    const p = $('#player'); if (p && p.components.bounds) { const pos = p.object3D.position; if (!free(pos.x, pos.z) && !S.seated) { /* garde la position, le joueur glissera */ } }
   }
 
   /* Lanternes des vœux, au-dessus du jardin */
@@ -2433,7 +2579,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       const wg = glowSprite('#ffc27a', 3.6, .4); wg.position.set(x, y0 + hh / 2 + .3, 10.15); root.add(wg);
     }
     // ── le dôme au-dessus du Grand Hall
-    const dx = -1, dz = -2, dy = 14.6;
+    const dx = ROT.x, dz = ROT.z, dy = 14.6;
     const drum = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 2.6, 48, 1, true), limeMat(6, .7)); drum.position.set(dx, dy + 1.3, dz); root.add(drum);
     { const base = new THREE.Mesh(new THREE.CylinderGeometry(6.9, 6.9, 2.6, 48), limeMat(6, .7)); base.position.set(dx, 13.3, dz); root.add(base); const cor = new THREE.Mesh(new THREE.CylinderGeometry(7.15, 7.15, .25, 48), limeMat(6, .1)); cor.position.set(dx, 14.6, dz); root.add(cor); }
     for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; const pil = box(.35, 2.6, .3, limeMat(.1, .7), dx + Math.cos(a) * 6.25, dy + 1.3, dz + Math.sin(a) * 6.25); pil.rotation.y = -a; root.add(pil);
@@ -2500,7 +2646,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       this.amb = new THREE.AmbientLight('#fff4e6', .2); this.hemi = new THREE.HemisphereLight('#5a6bb0', '#141826', .5);
       this.moon = new THREE.DirectionalLight('#b9c8ff', .7); this.moon.position.set(-30, 60, -60);
       root.add(this.amb, this.hemi, this.moon);
-      buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildFauna(root); buildHall(root); buildSkylight(root); buildStairs(root); buildUpperWindows(root); buildWings(root); buildSerre(root); buildCapsuleField(root); buildAdvent(root); initSpotPool(root); initFX(root);
+      buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildFauna(root); buildHall(root); buildUpperWindows(root); buildWings(root); buildSerre(root); buildCapsuleField(root); buildAdvent(root); initSpotPool(root); initFX(root);
       W.peerGroup = new THREE.Group(); root.add(W.peerGroup);
       buildDust(root);
       buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(S.settings.video || null);
@@ -2679,10 +2825,9 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const go = (name, sub, tp) => h('button', { class: 'item', style: 'text-align:left;cursor:pointer;width:100%', onclick: () => { closeModal(); teleport(tp[0], tp[1], tp[2], tp[3]); } }, h('div', { class: 't', text: name }), h('div', { class: 's', text: sub || '' }));
     const z = W.zones, items = [go(z[0].name, 'Dehors, sous les étoiles', z[0].tp)];
     AREAS.filter((a) => a.out).forEach((a) => items.push(go(a.name, 'Dans le jardin', a.tp)));
-    items.push(go(z[1].name, 'Le cœur, les lettres, le phonographe, le calendrier', z[1].tp));
-    AREAS.filter((a) => !a.out && !a.lv).forEach((a) => items.push(go(a.name, 'Une aile du château', a.tp)));
-    AREAS.filter((a) => a.lv).forEach((a) => items.push(go(a.name, a.lv === 1 ? 'Au-dessus du Grand Hall' : '22 jeux à l\'étage, avec nos photos', a.tp)));
-    z.slice(2).forEach((zn) => items.push(go(zn.name, zn.chapter ? 'Chapitre ' + romanNum(zn.chapter) : '', zn.tp)));
+    items.push(go(z[1].name, 'Le cœur sous la coupole, notre vidéo, le calendrier', z[1].tp));
+    AREAS.filter((a) => !a.out && !a.lv).forEach((a) => items.push(go(a.name, a.sub || 'Une aile du château', a.tp)));
+    z.slice(2).forEach((zn) => items.push(go(zn.name, zn.chapter ? 'Chapitre ' + romanNum(zn.chapter) : zn.name === 'Notre avenir' ? 'Le banc face au jardin' : zn.name === 'Le jardin intérieur' ? 'À ciel ouvert, au milieu du château' : '', zn.tp)));
     const body = [h('div', { class: 'k', text: 'Plan du château' }), h('h2', { text: 'Où veux-tu aller ?' })];
     const peers = livePeers();
     if (peers.length) body.push(h('div', { class: 'list' }, peers.map((a) => h('button', { class: 'item', style: 'text-align:left;cursor:pointer;width:100%;border-color:#e6a3b3', onclick: () => { closeModal(); joinPeer(a); } }, h('div', { class: 't', text: '💞 Rejoindre ' + (a.name || 'ton amour') }), h('div', { class: 's', text: zoneAt(a.target.x, a.target.z, a.target.y + .25) })))));
@@ -2703,14 +2848,16 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const other = livePeers().find((a) => a.p && a.p.presence && a.p.presence.seated);
     S.seat = other && other.p.presence.seat === 'L' ? 'R' : 'L';
     const bs = S.settings.benchSound && SND.byId(S.settings.benchSound); if (bs && !SND.isPlaying(bs)) SND.toggle(bs);
-    glide(new THREE.Vector3(S.seat === 'L' ? -.5 : .5, SEAT, W.bench.z), 0, .16, 1800, () => {
+    const by = W.bench.yaw || 0, sd = S.seat === 'L' ? -.5 : .5;
+    glide(new THREE.Vector3(W.bench.x + Math.cos(by) * sd, SEAT, W.bench.z - Math.sin(by) * sd), by, .16, 1800, () => {
       const m = $('#benchMsg'); m.textContent = (S.settings.bench || 'Reste un peu ici avec moi.\nRegarde tout le chemin parcouru…\net tout ce qu\'il nous reste à vivre.') + (other ? '\n\n' + (other.name || 'Ton amour') + ' est assis(e) à côté de toi 💞' : '');
       setTimeout(() => m.classList.add('show'), 500);
     });
   }
   function standUp() {
     $('#benchMsg').classList.remove('show');
-    glide(new THREE.Vector3(0, EYE, W.bench.z + 1.3), null, 0, 1100, () => { S.seated = false; S.seat = null; document.body.classList.remove('seated'); controls(true); });
+    const by = W.bench.yaw || 0;
+    glide(new THREE.Vector3(W.bench.x + Math.sin(by) * 1.3, EYE, W.bench.z + Math.cos(by) * 1.3), null, 0, 1100, () => { S.seated = false; S.seat = null; document.body.classList.remove('seated'); controls(true); });
   }
   $('#standBtn').addEventListener('click', standUp);
 
@@ -3182,11 +3329,9 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   const WING_H = 6;
   const EXTRA_WALK = [
     [-24 + R, -10.4 - R, -12 + R, -2 - R],              // salle des cartes
-    [-10.9, -9.5, -7.2 - 1.3 + R, -7.2 + 1.3 - R],       // porte ouest
     [10.4 + R, 22 - R, -12 + R, -2 - R],                // bibliothèque
-    [9.5, 10.9, -7.2 - 1.3 + R, -7.2 + 1.3 - R],         // porte est
     [22.4 + R, 34 - R, -12 + R, -2 - R],                // salle des projets
-    [21.6, 22.8, -7 - 1.2 + R, -7 + 1.2 - R],            // porte bibliothèque → projets
+    [21.6, 22.8, -7 - 2.2 + R, -7 + 2.2 - R],            // porte bibliothèque → projets
   ];
   function wingRoom(root, x0, x1, z0, z1, walls) {
     const H = WING_H, w = x1 - x0, d = z1 - z0, xc = (x0 + x1) / 2, zc = (z0 + z1) / 2;
@@ -3194,7 +3339,18 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const ce = plane(w, d, M.ceiling); ce.rotation.x = Math.PI / 2; ce.position.set(xc, H, zc); root.add(ce);
     root.add(box(w + .6, H, .3, wallMat('plaster', w, H, walls.color), xc, H / 2, z1 + .15));
     const [na, nb] = walls.nx; root.add(box(nb - na, 12, .4, wallMat('stone', nb - na, 12, PALETTE.facade), (na + nb) / 2, 6, z1 + .5));
-    root.add(box(w + .6, H, .3, wallMat('plaster', w, H, walls.color), xc, H / 2, z0 - .15));
+    if (walls.gapN != null) {   // ouverture vers la boucle des chapitres
+      const g0 = walls.gapN - 2, g1 = walls.gapN + 2;
+      [[x0 - .3, g0], [g1, x1 + .3]].forEach(([a, b]) => root.add(box(b - a, H, .3, wallMat('plaster', b - a, H, walls.color), (a + b) / 2, H / 2, z0 - .15)));
+      root.add(box(4, H - 4.6, .3, wallMat('plaster', 4, H - 4.6, walls.color), walls.gapN, (H + 4.6) / 2, z0 - .15));
+      [-1, 1].forEach((sd) => root.add(box(.08, 4.6, .32, M.gold, walls.gapN + sd * 2, 2.3, z0 - .15))); root.add(box(4.1, .08, .32, M.gold, walls.gapN, 4.6, z0 - .15));
+    } else root.add(box(w + .6, H, .3, wallMat('plaster', w, H, walls.color), xc, H / 2, z0 - .15));
+    if (walls.door) {           // grande arche vers la rotonde
+      const xw = walls.door < 0 ? x0 - .15 : x1 + .15;
+      [[z0, -8.7], [-5.3, z1]].forEach(([a, b]) => root.add(box(.3, H, b - a, wallMat('plaster', b - a, H, walls.color), xw, H / 2, (a + b) / 2)));
+      root.add(box(.3, H - 4.6, 3.4, wallMat('plaster', 3.4, H - 4.6, walls.color), xw, (H + 4.6) / 2, -7));
+      [-8.7, -5.3].forEach((zz) => root.add(box(.32, 4.6, .08, M.gold, xw, 2.3, zz))); root.add(box(.32, .08, 3.5, M.gold, xw, 4.6, -7));
+    }
     if (walls.w) { root.add(box(.3, H, d, wallMat('plaster', d, H, walls.color), x0 - .15, H / 2, zc)); root.add(box(.4, 12, d + 1.4, wallMat('stone', d, 12, PALETTE.facade), x0 - .5, 6, zc)); }
     if (walls.e) { root.add(box(.3, H, d, wallMat('plaster', d, H, walls.color), x1 + .15, H / 2, zc)); root.add(box(.4, 12, d + 1.4, wallMat('stone', d, 12, PALETTE.facade), x1 + .5, 6, zc)); }
     root.add(box(w, .03, .03, M.warm, xc, H - .06, z1 - .03)); root.add(box(w, .03, .03, M.warm, xc, H - .06, z0 + .03));
@@ -3208,16 +3364,15 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     return p;
   }
   function buildWings(root) {
-    wingRoom(root, -24, -10.4, -12, -2, { nx: [-24.7, -10.4], w: true, color: '#9a4a3e' });
-    wingRoom(root, 10.4, 22, -12, -2, { nx: [10.4, 22.4], color: '#3f6a52' });
+    wingRoom(root, -24, -10.4, -12, -2, { nx: [-24.7, -10.4], w: true, color: '#9a4a3e', gapN: LOOP.XL, door: 1 });
+    wingRoom(root, 10.4, 22, -12, -2, { nx: [10.4, 22.4], color: '#3f6a52', gapN: LOOP.XR, door: -1 });
     wingRoom(root, 22.4, 34, -12, -2, { nx: [22.4, 34.7], e: true, color: '#c99a4e' });
-    const aw = archWall(10.6, WING_H, 2.4, 2, .4, undefined, 0); aw.children[0].material.color.set('#3f6a52'); aw.rotation.y = -Math.PI / 2; aw.position.set(22.4, 0, -7); root.add(aw);
+    const aw = archWall(10.6, WING_H, 4.4, 2.6, .4, undefined, 0); aw.children[0].material.color.set('#3f6a52'); aw.rotation.y = -Math.PI / 2; aw.position.set(22.4, 0, -7); root.add(aw);
     // plaques au-dessus des portes
     const pl = (t, s) => [{ text: t, y: .38, size: .42, italic: true, color: '#3b3226' }, { text: s, y: .8, size: .2, sans: true, spacing: 6, color: '#b08d57' }];
-    wallPlate(root, -9.98, 4.25, -7.2, Math.PI / 2, 3.2, pl('La salle des cartes', 'NOS LIEUX'));
-    wallPlate(root, 21.98, 3.9, -7, -Math.PI / 2, 3.2, pl('La salle des projets', 'NOS PLANS'));
-    wallPlate(root, -10.42, 4.25, -7.2, -Math.PI / 2, 2.6, pl('Le Grand Hall', '←'));
-    wallPlate(root, 10.42, 4.25, -7.2, Math.PI / 2, 2.6, pl('Le Grand Hall', '→'));
+    wallPlate(root, 21.98, 5.3, -7, -Math.PI / 2, 3.2, pl('La salle des projets', 'NOS PLANS'));
+    wallPlate(root, -10.42, 5.3, -7, -Math.PI / 2, 2.6, pl('La rotonde', '←'));
+    wallPlate(root, 10.42, 5.3, -7, Math.PI / 2, 2.6, pl('La rotonde', '→'));
     buildMapRoom(root); buildLibrary(root); buildProjectsRoom(root);
   }
 
@@ -3281,15 +3436,15 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   const BOOKKIND = { livre: ['Livre', '📖'], film: ['Film', '🎬'], serie: ['Série', '📺'], chanson: ['Chanson', '🎵'] };
   function buildLibrary(root) {
     const woodM = new THREE.MeshStandardMaterial({ map: tex('wood', 3, 1), roughness: .65 });
-    const units = [[-2.2, -1], [-11.8, 1]], x0 = 11.4, x1 = 21.2, wdt = x1 - x0, xc = (x0 + x1) / 2;
-    units.forEach(([zc, face]) => {
+    const units = [[-2.2, -1, 11.4, 21.2], [-11.8, 1, 11.4, LOOP.XR - 2.15], [-11.8, 1, LOOP.XR + 2.15, 21.2]];
+    units.forEach(([zc, face, x0, x1]) => { const wdt = x1 - x0, xc = (x0 + x1) / 2;
       root.add(box(wdt, 2.62, .04, woodM, xc, 1.31, zc - face * .17));
       [x0, x1].forEach((xx) => root.add(box(.05, 2.62, .36, woodM, xx, 1.31, zc)));
       [.05, .5, .95, 1.4, 1.85, 2.3, 2.6].forEach((y) => root.add(box(wdt, .035, .36, woodM, xc, y, zc)));
       OBST.push([x0 - R, x1 + R, zc - .2 - R, zc + .2 + R]);
     });
     W.shelves = [];
-    [1.4, .95, 1.85, .5, 2.3, .05].forEach((y) => units.forEach(([zc, face]) => W.shelves.push({ y: y + .0175, zFront: zc + face * .18, face, x0: x0 + .06, x1: x1 - .06 })));
+    [1.4, .95, 1.85, .5, 2.3, .05].forEach((y) => units.forEach(([zc, face, x0, x1]) => W.shelves.push({ y: y + .0175, zFront: zc + face * .18, face, x0: x0 + .06, x1: x1 - .06 })));
     // coin lecture
     const velvet = new THREE.MeshStandardMaterial({ color: '#7a2a3a', roughness: .9 });
     const ch = new THREE.Group(); ch.position.set(13.2, 0, -9.7); ch.rotation.y = .5; root.add(ch);
@@ -3495,7 +3650,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   }
 
   /* ── 🎁 Le calendrier de l'Avent (Grand Hall, mur droit) ── */
-  function buildAdvent(root) { const g = new THREE.Group(); g.position.set(9.97, 0, 3.4); g.rotation.y = -Math.PI / 2; root.add(g); W.advent = g; }
+  function buildAdvent(root) { const g = new THREE.Group(); g.position.copy(rotAt(2.45, 8.75)); g.rotation.y = faceCenter(2.45); root.add(g); W.advent = g; }
   function activeAdvent() { const t = todayISO(); return S.advent.filter((a) => a.end && addDays(a.end, 3) >= t && (a.days || []).length).sort((a, b) => a.end.localeCompare(b.end))[0] || null; }
   function refreshAdvent() {
     if (!W.advent) return; W.advent.clear(); dropTag('advent');
@@ -3862,16 +4017,18 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   const AREAS = [
     { name: 'La serre des premières fois', r: [-24, -14, 37, 47], tp: [-15.2, 42, Math.PI / 2], out: true },
     { name: 'Le jardin des capsules', r: [11, 25, 38.5, 62], tp: [17.8, 39.4, Math.PI], out: true },
-    { name: 'La salle des cartes', r: [-24, -10.4, -12, -2], tp: [-12, -7.2, Math.PI / 2] },
-    { name: 'La bibliothèque', r: [10.4, 22, -12, -2], tp: [12, -7.2, -Math.PI / 2] },
-    { name: 'La salle des projets', r: [22.4, 34, -12, -2], tp: [24, -7, -Math.PI / 2] },
-    { name: 'La mezzanine', r: [6.4, 10, -11.6, 7.6], lv: 1, tp: [7.6, 6.6, 0, 1] },
+    { name: 'La salle des cartes', sub: 'Nos lieux, sur le globe', r: [-24, -10.4, -12, -2], tp: [-12.6, -7, Math.PI / 2] },
+    { name: 'La bibliothèque', sub: 'Nos mots : lettres, livres, phonographe', r: [10.4, 22, -12, -2], tp: [12.6, -7, -Math.PI / 2] },
+    { name: 'La salle des projets', sub: 'Nos plans', r: [22.4, 34, -12, -2], tp: [24, -7, -Math.PI / 2] },
   ];
   function zoneAt(x, z, y) {
     const lv = y == null ? (S.level || 0) : levelOfY(y);
     for (const a of AREAS) if ((a.lv || 0) === lv && x >= a.r[0] && x <= a.r[1] && z >= a.r[2] && z <= a.r[3]) return a.name;
-    if (lv === 1) return 'La mezzanine';
-    let zone = W.zones[0]; for (const zn of W.zones) if (z <= zn.z) zone = zn; return zone ? zone.name : '';
+    for (const zn of W.zones) {
+      if (zn.r && x >= zn.r[0] && x <= zn.r[1] && z >= zn.r[2] && z <= zn.r[3]) return zn.name;
+      if (zn.bays && zn.bays.some((b) => { const ex = b.u[0] ? b.bl / 2 : LOOP.CW / 2, ez = b.u[1] ? b.bl / 2 : LOOP.CW / 2; return Math.abs(x - b.c[0]) <= ex && Math.abs(z - b.c[1]) <= ez; })) return zn.name;
+    }
+    return z > 8.5 ? 'Le Jardin des vœux' : 'Notre château';
   }
   function refreshExtras() { if (!W.root) return; refreshGlobe(); refreshBooks(); refreshProjects(); refreshSerre(); refreshCapsules(); refreshAdvent(); refreshTreasures(); if (W.root) realify(W.root); }
 
@@ -3996,12 +4153,13 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     { key: 'serre', name: 'La serre des premières fois', at: [-9.5, 42], look: [-19, 42], def: 'Chacune de nos premières fois fait pousser une fleur ici.' },
     { key: 'capsules', name: 'Le jardin des capsules', at: [9.5, 39.5], look: [17, 47], pitch: -.2, def: 'Ici dorment des messages pour notre futur. Ils ne s\'ouvriront qu\'au jour choisi.' },
     { key: 'chateau', name: 'Notre château', at: [0, 17], look: [0, 0], pitch: .28, def: 'Et voici notre château.' },
-    { key: 'hall', name: 'Le Grand Hall', via: [[0, 9]], at: [0, 4.5], look: [0, -3], pitch: -.08, def: 'Le cœur qui murmure nos raisons de s\'aimer, les lettres scellées, le phonographe, notre calendrier…' },
-    { key: 'cartes', name: 'La salle des cartes', via: [[-7, -7.2]], at: [-13.2, -7.2], look: [-17.2, -7], def: 'Chaque endroit où on a vécu quelque chose ensemble brille sur ce globe.' },
-    { key: 'bibliotheque', name: 'La bibliothèque', via: [[-7, -7.2], [8, -7.2]], at: [13, -7.2], look: [21, -7.2], def: 'Nos films, nos livres, nos séries, nos chansons.' },
+    { key: 'hall', name: 'La rotonde', via: [[0, 9]], at: [0, 2.6], look: [0, -5], pitch: .06, def: 'Sous la coupole, le cœur qui murmure nos raisons de s\'aimer. Notre vidéo, notre calendrier… tout part d\'ici.' },
+    { key: 'cour', name: 'Le jardin intérieur', via: [[0, -9]], at: [0, -13.8], look: [0, -24], pitch: -.05, def: 'Au milieu du château, notre jardin secret. Toutes nos salles ont une fenêtre sur lui.' },
+    { key: 'bibliotheque', name: 'La bibliothèque', via: [[0, -9], [6, -7]], at: [12.6, -7], look: [21, -7], def: 'Nos mots : les lettres scellées, nos livres, nos films, nos chansons, le phonographe.' },
     { key: 'projets', name: 'La salle des projets', via: [[20.8, -7]], at: [24.2, -7], look: [28.2, -7], pitch: -.32, def: 'Et ici, tout ce qu\'on va construire ensemble.' },
-    { key: 'chapitres', name: 'Nos chapitres', via: [[13, -7.2], [8, -7.2], [0, -7.2], [0, -11.5]], at: [0, -14.6], look: [0, -40], def: 'Chaque salle est un chapitre de notre histoire. Le château s\'allonge à chaque souvenir.' },
-    { key: 'belvedere', name: 'Le Belvédère', belv: true, def: 'Et pour finir, viens t\'asseoir avec moi. Regarde le ciel… c\'est le nôtre.' },
+    { key: 'cartes', name: 'La salle des cartes', via: [[12.6, -7], [0, -8]], at: [-12.8, -7], look: [-17.2, -7], def: 'Chaque endroit où on a vécu quelque chose ensemble brille sur ce globe.' },
+    { key: 'chapitres', name: 'Nos chapitres', loop: true, def: 'Chaque salle est un chapitre de notre histoire. La boucle s\'agrandit à chaque souvenir, tout autour de notre jardin.' },
+    { key: 'belvedere', name: 'Notre avenir', belv: true, def: 'Et pour finir, viens t\'asseoir avec moi. Regarde tout le chemin parcouru… et tout ce qu\'il nous reste à vivre.' },
   ];
   const yawTo = (fx, fz, tx, tz) => Math.atan2(-(tx - fx), -(tz - fz));
   const glideP = (x, z, yaw, pitch, ms) => new Promise((r) => glide(new THREE.Vector3(x, EYE, z), yaw, pitch, ms, r));
@@ -4023,10 +4181,10 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       if (S.tourAbort) break;
       cap.classList.remove('show');
       let path = (stop.via || []).slice(), at = stop.at, look = stop.look;
-      if (stop.belv && W.nextRoom) {
-        path = [[0, -14.6]]; (W.roomsZ || []).forEach((r) => { if (r.len > 1.2) path.push([2.2, Math.min(-14.6, r.zc + r.len / 2 + .7)], [2.2, r.zc - r.len / 2 - .7]); path.push([0, r.z1 + .6]); });
-        path.push([0, W.nextRoom.z0 + .5], [2.6, W.nextRoom.lectZ], [0, W.nextRoom.z1 + .2]);
-        at = [0, W.bench.z + 2.4]; look = [0, W.endZ - 10];
+      const LP = W.loopPath || [];
+      if (stop.loop && LP.length) { path = LP.slice(0, 3); at = [LP[2][0], LP[2][1] - 1]; look = [LP[2][0], LP[2][1] - 20]; }
+      if (stop.belv && W.bench && LP.length) {
+        path = LP.slice(3); at = [W.bench.x + 2.2, W.bench.z]; look = [W.bench.x - 10, W.bench.z];
       }
       for (const [x, z] of path) { if (S.tourAbort) break; await move(x, z); }
       if (S.tourAbort) break;
@@ -4371,9 +4529,8 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
      ════════════════════════════════════════════ */
   const LEVEL_Y = [0, 3.8, 8.2];
   const F1 = { x0: 1.8, x1: 6.4, z0: -11.6, z1: -9.6 };   // grand escalier (hall → mezzanine)
-  const STAIRS = [
-    { r: [F1.x0, F1.x1 + .4, F1.z0, F1.z1], from: 0, to: 1, lo: 0, hi: LEVEL_Y[1], h: (x) => Math.max(0, Math.min(1, (x - F1.x0) / (F1.x1 - F1.x0))) * LEVEL_Y[1] },
-  ];
+  const STAIRS = [];
+
   const WALK1 = [[6.4 + R, 10 - R, -11.6 + R, 7.6 - R]];
   const WALK2 = [];
   function stairAt(x, z, lv) { for (const s of STAIRS) if (x >= s.r[0] && x <= s.r[1] && z >= s.r[2] && z <= s.r[3] && (s.from === lv || s.to === lv)) return s; return null; }
