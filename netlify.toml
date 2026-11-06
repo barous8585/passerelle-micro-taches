@@ -1,4 +1,6 @@
+# Le musée vit dans le dossier « site » (même organisation que la branche main)
 [build]
+  base = "site"
   publish = "public"
   command = "echo 'Notre château'"
 

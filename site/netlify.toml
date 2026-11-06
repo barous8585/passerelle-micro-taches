@@ -1,0 +1,7 @@
+[build]
+  publish = "public"
+  command = "echo 'Notre château'"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
