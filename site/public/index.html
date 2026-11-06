@@ -503,6 +503,17 @@
   }
   let CARPET = '#6a1222';
   const MAKERS = {
+    limestone: () => cnv(512, 512, (c, s) => {
+      c.fillStyle = '#d9cfbd'; c.fillRect(0, 0, s, s);
+      const rows = 6, rh = s / rows;
+      for (let r = 0; r < rows; r++) { const off = (r % 2) * 64; for (let x = -off; x < s; x += 128) { const v = 226 + Math.random() * 16; c.fillStyle = `rgb(${v},${v - 6},${v - 18})`; c.fillRect(x + 2, r * rh + 2, 124, rh - 4);
+        for (let k = 0; k < 120; k++) { c.fillStyle = `rgba(${150 + Math.random() * 60},${140 + Math.random() * 50},${120 + Math.random() * 40},${Math.random() * .12})`; c.fillRect(x + 2 + Math.random() * 124, r * rh + 2 + Math.random() * (rh - 4), 1 + Math.random() * 3, 1 + Math.random() * 3); } } }
+    }),
+    gravel: () => cnv(512, 512, (c, s) => {
+      c.fillStyle = '#d8ccb4'; c.fillRect(0, 0, s, s);
+      for (let i = 0; i < 9000; i++) { const v = 170 + Math.random() * 70; c.fillStyle = `rgb(${v},${v - 8},${v - 24})`; c.beginPath(); c.arc(Math.random() * s, Math.random() * s, .8 + Math.random() * 2.2, 0, 7); c.fill(); }
+      for (let i = 0; i < 1500; i++) { c.fillStyle = `rgba(80,70,55,${Math.random() * .35})`; c.fillRect(Math.random() * s, Math.random() * s, 1.5, 1.5); }
+    }),
     plaster: () => cnv(512, 512, (c, s) => { c.fillStyle = '#f7f5f0'; c.fillRect(0, 0, s, s); blobs(c, s, 40, '120,110,95', .028, 40, 140); noise(c, s, s, 6); }),
     floor: () => cnv(512, 512, (c, s) => {
       c.fillStyle = '#dcd8d0'; c.fillRect(0, 0, s, s); blobs(c, s, 50, '150,145,135', .05, 30, 120); blobs(c, s, 30, '255,255,255', .08, 30, 100);
@@ -510,22 +521,7 @@
       for (let i = 0; i < 6; i++) { c.beginPath(); let x = Math.random() * s, y = 0; c.moveTo(x, y); while (y < s) { x += (Math.random() - .5) * 40; y += 20 + Math.random() * 30; c.lineTo(x, y); } c.stroke(); }
       c.strokeStyle = 'rgba(120,110,95,.25)'; c.lineWidth = 2; c.strokeRect(1, 1, s - 2, s - 2); noise(c, s, s, 5);
     }),
-    stone: () => cnv(512, 512, (c, s) => {
-      c.fillStyle = '#3e3a35'; c.fillRect(0, 0, s, s);
-      const rows = 8, rh = s / rows;
-      for (let r = 0; r < rows; r++) {
-        let x = -(Math.random() * 80), widths = [];
-        let sum = 0; while (sum < s) { const w = 70 + Math.random() * 80; widths.push(w); sum += w; }
-        widths[widths.length - 1] -= sum - s;
-        for (const w of widths) {
-          const v = 118 + Math.random() * 42;
-          c.fillStyle = `rgb(${v},${v - 5},${v - 14})`;
-          for (const dx of [0, s, -s]) c.fillRect(x + dx + 2, r * rh + 2, w - 4, rh - 4);
-          x += w;
-        }
-      }
-      blobs(c, s, 40, '40,45,30', .12, 20, 90); noise(c, s, s, 18);
-    }),
+    stone: () => MAKERS.limestone(),
     grass: () => cnv(512, 512, (c, s) => {
       c.fillStyle = '#1d3524'; c.fillRect(0, 0, s, s); blobs(c, s, 60, '60,95,55', .18, 20, 90); blobs(c, s, 40, '10,25,15', .25, 20, 80);
       for (let i = 0; i < 5000; i++) { const x = Math.random() * s, y = Math.random() * s; c.strokeStyle = `rgba(${70 + Math.random() * 60},${110 + Math.random() * 70},${60 + Math.random() * 40},.35)`; c.beginPath(); c.moveTo(x, y); c.lineTo(x + (Math.random() - .5) * 3, y - 3 - Math.random() * 5); c.stroke(); }
@@ -951,7 +947,7 @@
     grass.rotation.x = -Math.PI / 2; grass.position.set(0, -.04, 40); root.add(grass);
     buildGrassField(root, { mesh: grass, r: 58, cz: 40, skip: (x, z) => z < 10.5 || (Math.abs(x) < 2.1 && z < 69) || Math.hypot(x, z - 34) < 7.9 || (Math.abs(x) < 15.2 && z < 16.2) || (x > -27 && x < -11 && z > 34 && z < 50) || (x > 9 && x < 27 && z > 37 && z < 64) || Math.abs(x) > GARDEN.x + 30 });
     W.anim.push((t) => { EXT.time.value = t; });
-    const cobbleM = (w, l) => new THREE.MeshStandardMaterial({ map: tex('cobble', w / 1.6, l / 1.6), roughness: .85 });
+    const cobbleM = (w, l) => new THREE.MeshStandardMaterial({ map: tex('gravel', w / 2.2, l / 2.2), roughness: .95 });
     const path = plane(3.4, 58, cobbleM(3.4, 58)); path.rotation.x = -Math.PI / 2; path.position.set(0, .012, 39); root.add(path);
     const plaza = new THREE.Mesh(new THREE.CircleGeometry(7.5, 48), cobbleM(15, 15)); plaza.rotation.x = -Math.PI / 2; plaza.position.set(0, .015, 34); root.add(plaza);
     const court = plane(30, 6, cobbleM(30, 6)); court.rotation.x = -Math.PI / 2; court.position.set(0, .014, 13); root.add(court);
@@ -980,6 +976,7 @@
     for (let i = 0; i < 150; i++) {
       const x = (rand() * 2 - 1) * 70, z = 8 + rand() * 82;
       if (Math.abs(x) < 6) continue;
+      if (Math.abs(x) < 12.5 && z > 15 && z < 59.5) continue;   // parterres à la française
       if (Math.hypot(x, z - 34) < 11) continue;
       if (z < 22 && Math.abs(x) < 20) continue;
       if (x > -27 && x < -11 && z > 34 && z < 50) continue;   // serre
@@ -1264,7 +1261,7 @@
   function refreshPlates() {
     const names = S.settings.names || 'Toi & Moi';
     const since = S.settings.since ? 'depuis le ' + frDate(S.settings.since) : 'chaque souvenir est une œuvre';
-    [[W.gatePlate, 8, 1.3, '#e8c98a'], [W.hallPlate, 7, 1.1, '#b08d57']].forEach(([grp, w, hh, color]) => {
+    [[W.gatePlate, 8, 1.3, '#8a6a32'], [W.hallPlate, 7, 1.1, '#b08d57']].forEach(([grp, w, hh, color]) => {
       if (!grp) return; grp.clear();
       grp.add(textPlane(w, hh, [{ text: names, y: .4, size: .5, color }, { text: since, y: .82, size: .2, italic: true, weight: 400, color, alpha: .85 }]));
     });
@@ -1669,8 +1666,8 @@
       m.map = realTex('marble', marbleCanvas, rx, ry, true); m.roughness = .16; m.metalness = 0; if ('envMapIntensity' in m) m.envMapIntensity = 1.4;
       m.bumpMap = realTex('marbleB', marbleBump, rx, ry); m.bumpScale = flat ? .6 : 0; m.needsUpdate = true; return;
     }
-    if (img && (img === CANVAS.plaster || img === CANVAS.stone)) {
-      m.bumpMap = realTex('plasterB', plasterBump, rep.x * 2, rep.y * 2); m.bumpScale = img === CANVAS.stone ? 2.6 : .9; m.roughness = .9; if ('envMapIntensity' in m) m.envMapIntensity = .5; addWallAO(m, img === CANVAS.stone); m.needsUpdate = true; return;
+    if (img && (img === CANVAS.plaster || img === CANVAS.stone || img === CANVAS.limestone)) {
+      m.bumpMap = realTex('plasterB', plasterBump, rep.x * 2, rep.y * 2); m.bumpScale = img === CANVAS.stone || img === CANVAS.limestone ? 1.4 : .9; m.roughness = .9; if ('envMapIntensity' in m) m.envMapIntensity = .5; addWallAO(m, img === CANVAS.stone || img === CANVAS.limestone); m.needsUpdate = true; return;
     }
     if (img && img === CANVAS.wood) {
       m.map = realTex('wood', woodCanvas, rep.x, rep.y * .5, true); m.roughness = .38; if ('envMapIntensity' in m) m.envMapIntensity = .9; m.needsUpdate = true; return;
@@ -2091,6 +2088,156 @@
   }
 
   /* ════════════════════════════════════════════
+     LE PAVILLON-MUSÉE : façade néoclassique, portique à colonnes, fronton, dôme
+     ════════════════════════════════════════════ */
+  let LIME_M = null;
+  function limeMat(rx, ry) {
+    const m = new THREE.MeshStandardMaterial({ map: tex('limestone', rx || 1, ry || 1), roughness: .82, envMapIntensity: .55 });
+    return m;
+  }
+  function flutedTex() {
+    return realTex('flutes', () => pixelCanvas(256, 8, (x) => { const v = 128 + Math.cos((x / 256) * Math.PI * 2 * 20) * 110; return [v, v, v]; }), 1, 1);
+  }
+  function classicalColumn(root, x, z, y0, hgt, r) {
+    const stoneM = LIME_M || (LIME_M = new THREE.MeshStandardMaterial({ color: '#efe6d6', roughness: .7, envMapIntensity: .6 }));
+    REAL.done.add(stoneM);
+    const g = new THREE.Group(); g.position.set(x, y0, z); root.add(g);
+    // base (plinthe + tores)
+    g.add(box(r * 2.6, .22, r * 2.6, stoneM, 0, .11, 0));
+    const t1 = new THREE.Mesh(new THREE.TorusGeometry(r * 1.08, r * .16, 10, 32), stoneM); t1.rotation.x = Math.PI / 2; t1.position.y = .3; g.add(t1);
+    const t2 = new THREE.Mesh(new THREE.TorusGeometry(r * 1.0, r * .1, 10, 32), stoneM); t2.rotation.x = Math.PI / 2; t2.position.y = .44; g.add(t2);
+    // fût cannelé, légèrement galbé
+    const shM = new THREE.MeshStandardMaterial({ color: '#f1e9da', roughness: .62, envMapIntensity: .6 }); shM.bumpMap = flutedTex(); shM.bumpScale = 3; REAL.done.add(shM);
+    const sh = new THREE.Mesh(new THREE.CylinderGeometry(r * .86, r, hgt - 1.2, 40, 6, true), shM); sh.position.y = .5 + (hgt - 1.2) / 2; g.add(sh);
+    // chapiteau (échine + abaque + volutes simplifiées)
+    const top = .5 + hgt - 1.2;
+    const ech = new THREE.Mesh(new THREE.CylinderGeometry(r * 1.15, r * .88, .28, 32), stoneM); ech.position.y = top + .14; g.add(ech);
+    g.add(box(r * 2.7, .16, r * 2.7, stoneM, 0, top + .36, 0));
+    [-1, 1].forEach((sd) => { const v = new THREE.Mesh(new THREE.TorusGeometry(r * .3, r * .1, 8, 20), stoneM); v.position.set(sd * r * 1.05, top + .18, r * 1.0); g.add(v); const v2 = v.clone(); v2.position.z = -r; g.add(v2); });
+    g.add(box(r * 2.4, .04, r * 2.4, M.gold, 0, top + .46, 0));
+    OBST.push([x - r * 1.3 - R, x + r * 1.3 + R, z - r * 1.3 - R, z + r * 1.3 + R]);
+  }
+  function buildPavilion(root) {
+    const lm = (w, hh) => limeMat(w / 4, hh / 4);
+    // ── la façade (même porte, mêmes fenêtres de l'étage) en pierre claire
+    const facade = archWall(28, 12, 4.4, 3.2, 2, 'limestone', 0, UP_WINDOWS); facade.position.set(0, 0, 8); root.add(facade);
+    { const lining = archWall(20.8, 8, 4.4, 3.2, .02, 'plaster', 0); lining.position.set(0, 0, 7.97); root.add(lining); }
+    // encadrement de la porte : chambranle doré et clef de voûte
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(2.32, .09, 10, 48, Math.PI), M.gold); arc.position.set(0, 3.2, 10.03); root.add(arc);
+    [-1, 1].forEach((sd) => root.add(box(.14, 3.2, .1, M.gold, sd * 2.32, 1.6, 10.03)));
+    root.add(box(.6, .7, .3, limeMat(.3, .3), 0, 5.6, 10.1));
+    // soubassement + chaîne d'angle + bandeau
+    root.add(box(28.2, .9, .25, limeMat(7, .3), 0, .45, 10.12));
+    root.add(box(28.4, .28, .45, limeMat(7, .1), 0, 6.9, 10.2));
+    [-1, 1].forEach((sd) => root.add(box(1.1, 12, .3, limeMat(.4, 3), sd * 13.45, 6, 10.15)));
+    // ── le perron : trois marches et une terrasse dallée
+    const stepM = new THREE.MeshStandardMaterial({ map: realTex('marble', marbleCanvas, 6, .5, true), color: '#efe7da', roughness: .45 }); REAL.done.add(stepM);
+    root.add(box(28, .3, 3.4, stepM, 0, .15, 11.7));
+    [[.2, 13.55], [.1, 13.95]].forEach(([hh, z]) => root.add(box(28.6 - (13.95 - z) * 2, hh, .4, stepM, 0, hh / 2, z)));
+    // ── le portique : six colonnes
+    const colX = [-10.2, -6.4, -3, 3, 6.4, 10.2], colZ = 12.6, colH = 9.6;
+    colX.forEach((x) => classicalColumn(root, x, colZ, .3, colH, .42));
+    // plafond du portique
+    const pc = plane(28, 3.2, new THREE.MeshStandardMaterial({ color: '#e9dfcc', roughness: .9 })); pc.rotation.x = Math.PI / 2; pc.position.set(0, 9.9, 11.6); root.add(pc);
+    // entablement : architrave, frise avec les prénoms, corniche
+    const ent = .3 + colH;
+    root.add(box(22.2, .55, 1.3, limeMat(5.5, .2), 0, ent + .275, colZ));
+    root.add(box(22.4, .85, 1.25, limeMat(5.5, .25), 0, ent + .55 + .425, colZ));
+    root.add(box(23.2, .26, 1.6, limeMat(6, .1), 0, ent + 1.53, colZ + .1));
+    root.add(box(22.5, .04, .04, M.gold, 0, ent + .56, colZ + .66));
+    for (let x = -10.8; x <= 10.81; x += .45) root.add(box(.14, .12, .1, limeMat(.1, .1), x, ent + 1.36, colZ + .76));   // denticules
+    W.gatePlate = new THREE.Group(); W.gatePlate.position.set(0, ent + .98, colZ + .64); W.gatePlate.scale.setScalar(.62); root.add(W.gatePlate);
+    // fronton triangulaire et son tympan, avec un cœur doré
+    const fy = ent + 1.66, fw = 23.2, fh = 3.3;
+    const tri = new THREE.Shape(); tri.moveTo(-fw / 2, 0); tri.lineTo(fw / 2, 0); tri.lineTo(0, fh); tri.lineTo(-fw / 2, 0);
+    const fr = new THREE.Mesh(new THREE.ExtrudeGeometry(tri, { depth: 1.5, bevelEnabled: false }), limeMat(.15, .15)); fr.position.set(0, fy, colZ - .6); root.add(fr);
+    const tym = new THREE.Shape(); tym.moveTo(-fw / 2 + 1.1, .35); tym.lineTo(fw / 2 - 1.1, .35); tym.lineTo(0, fh - .55); tym.lineTo(-fw / 2 + 1.1, .35);
+    const ty = new THREE.Mesh(new THREE.ShapeGeometry(tym), new THREE.MeshStandardMaterial({ color: '#e2d6c0', roughness: .9 })); ty.position.set(0, fy, colZ + .905); root.add(ty);
+    const hs = new THREE.Shape(); hs.moveTo(0, -.55); hs.bezierCurveTo(-1.2, .25, -.55, 1, 0, .45); hs.bezierCurveTo(.55, 1, 1.2, .25, 0, -.55);
+    const heartRelief = new THREE.Mesh(new THREE.ExtrudeGeometry(hs, { depth: .12, bevelEnabled: true, bevelSize: .04, bevelThickness: .04, bevelSegments: 3 }), M.gold); heartRelief.position.set(0, fy + 1.25, colZ + .92); root.add(heartRelief);
+    const hg = glowSprite('#ffd98e', 3, .35); hg.position.set(0, fy + 1.35, colZ + 1.1); root.add(hg);
+    // corniches rampantes
+    const rk = Math.atan2(fh, fw / 2), rl = Math.hypot(fw / 2, fh) + .4;
+    [-1, 1].forEach((sd) => { const g = new THREE.Group(); g.position.set(sd * fw / 4, fy + fh / 2 + .1, colZ + .2); g.rotation.z = -sd * rk; g.add(box(rl, .26, 1.7, limeMat(3, .1), 0, 0, 0)); root.add(g); });
+    // acrotères : vase au sommet et aux angles
+    const urnGeo = new THREE.LatheGeometry([[0, 0], [.22, 0], [.22, .06], [.1, .12], [.1, .2], [.3, .45], [.32, .7], [.2, .9], [.13, .95], [.16, 1.02], [0, 1.05]].map(([r, y]) => new THREE.Vector2(r, y)), 18);
+    const urnM = new THREE.MeshStandardMaterial({ color: '#eee4d2', roughness: .6 }); REAL.done.add(urnM);
+    [[0, fy + fh - .05], [-fw / 2 + .3, fy + .1], [fw / 2 - .3, fy + .1]].forEach(([x, y]) => { const u = new THREE.Mesh(urnGeo, urnM); u.scale.setScalar(1.2); u.position.set(x, y, colZ + .2); root.add(u); });
+    // balustrade sur le toit de la façade
+    const bal = new THREE.LatheGeometry([[0, 0], [.07, 0], [.07, .05], [.045, .1], [.04, .16], [.075, .32], [.08, .4], [.055, .5], [.035, .58], [.05, .62], [0, .62]].map(([r, y]) => new THREE.Vector2(r, y)), 10);
+    const bp = []; for (let x = -13.6; x <= 13.61; x += .32) if (Math.abs(x) > 11.4) bp.push(x);
+    const bi = new THREE.InstancedMesh(bal, urnM, bp.length * 1); bp.forEach((x, i) => { _m4.makeTranslation(x, 12.1, 9.6); bi.setMatrixAt(i, _m4); }); root.add(bi);
+    [-1, 1].forEach((sd) => { root.add(box(2.6, .12, .3, limeMat(.6, .1), sd * 12.65, 12.06, 9.6)); root.add(box(2.6, .1, .3, limeMat(.6, .1), sd * 12.65, 12.76, 9.6)); });
+    // ── fenêtres hautes et cintrées entre les colonnes
+    for (const x of [-8.3, -4.7, 4.7, 8.3, -12, 12]) {
+      const w = Math.abs(x) === 12 ? .9 : 1.25, y0 = 2.2, hh = 3.2;
+      const win = plane(w, hh, M.window); win.position.set(x, y0 + hh / 2, 10.01); root.add(win);
+      const topW = new THREE.Mesh(new THREE.CircleGeometry(w / 2, 20, 0, Math.PI), M.window); topW.position.set(x, y0 + hh, 10.01); root.add(topW);
+      for (let k = 1; k < 4; k++) root.add(box(w, .03, .03, M.black, x, y0 + k * hh / 4, 10.03));
+      root.add(box(.03, hh, .03, M.black, x, y0 + hh / 2, 10.03));
+      root.add(box(w + .3, .12, .3, limeMat(.2, .1), x, y0 - .06, 10.12));
+      const ar = new THREE.Mesh(new THREE.TorusGeometry(w / 2 + .1, .07, 8, 24, Math.PI), limeMat(.2, .2)); ar.position.set(x, y0 + hh, 10.05); root.add(ar);
+      const wg = glowSprite('#ffc27a', 3.6, .4); wg.position.set(x, y0 + hh / 2 + .3, 10.15); root.add(wg);
+    }
+    // ── le dôme au-dessus du Grand Hall
+    const dx = -1, dz = -2, dy = 14.6;
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(6.2, 6.2, 2.6, 48, 1, true), limeMat(6, .7)); drum.position.set(dx, dy + 1.3, dz); root.add(drum);
+    { const base = new THREE.Mesh(new THREE.CylinderGeometry(6.9, 6.9, 2.6, 48), limeMat(6, .7)); base.position.set(dx, 13.3, dz); root.add(base); const cor = new THREE.Mesh(new THREE.CylinderGeometry(7.15, 7.15, .25, 48), limeMat(6, .1)); cor.position.set(dx, 14.6, dz); root.add(cor); }
+    for (let k = 0; k < 16; k++) { const a = k / 16 * Math.PI * 2; const pil = box(.35, 2.6, .3, limeMat(.1, .7), dx + Math.cos(a) * 6.25, dy + 1.3, dz + Math.sin(a) * 6.25); pil.rotation.y = -a; root.add(pil);
+      if (k % 2) { const ow = new THREE.Mesh(new THREE.CircleGeometry(.45, 20), M.window); ow.position.set(dx + Math.cos(a + Math.PI / 16) * 6.22, dy + 1.4, dz + Math.sin(a + Math.PI / 16) * 6.22); ow.lookAt(dx + Math.cos(a + Math.PI / 16) * 20, dy + 1.4, dz + Math.sin(a + Math.PI / 16) * 20); root.add(ow); } }
+    { const ring = new THREE.Mesh(new THREE.CylinderGeometry(6.6, 6.6, .3, 48), limeMat(4, .1)); ring.position.set(dx, dy + 2.75, dz); root.add(ring); }
+    const domeM = new THREE.MeshStandardMaterial({ color: '#7fa596', roughness: .45, metalness: .35, envMapIntensity: 1.1 }); REAL.done.add(domeM);
+    const dome = new THREE.Mesh(new THREE.SphereGeometry(6.1, 48, 20, 0, Math.PI * 2, 0, Math.PI / 2), domeM); dome.scale.y = .92; dome.position.set(dx, dy + 2.9, dz); root.add(dome);
+    for (let k = 0; k < 12; k++) { const holder = new THREE.Group(); holder.position.set(dx, dy + 2.9, dz); holder.rotation.y = k / 12 * Math.PI * 2; holder.scale.y = .92; holder.add(new THREE.Mesh(new THREE.TorusGeometry(6.13, .06, 6, 30, Math.PI / 2), M.gold)); root.add(holder); }
+    // lanterne au sommet du dôme
+    const ly = dy + 2.9 + 6.1 * .92;
+    const lan = new THREE.Mesh(new THREE.CylinderGeometry(.9, .9, 1.5, 16, 1, true), new THREE.MeshBasicMaterial({ color: '#ffd9a0', side: THREE.DoubleSide })); lan.position.set(dx, ly + .75, dz); root.add(lan);
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; root.add(box(.14, 1.5, .14, limeMat(.1, .3), dx + Math.cos(a) * .92, ly + .75, dz + Math.sin(a) * .92)); }
+    const lcap = new THREE.Mesh(new THREE.SphereGeometry(1.05, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), domeM); lcap.position.set(dx, ly + 1.5, dz); root.add(lcap);
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(.12, 1.2, 10), M.gold); spire.position.set(dx, ly + 3, dz); root.add(spire);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(.2, 14, 10), M.gold); ball.position.set(dx, ly + 2.45, dz); root.add(ball);
+    const lg = glowSprite('#ffcf8a', 6, .5); lg.position.set(dx, ly + .8, dz); root.add(lg); W.domeGlow = lg;
+    // ── lumières : projecteurs de façade et deux lanternes de bronze à la porte
+    [-8, 8].forEach((x) => { const sp = new THREE.SpotLight('#ffe2b8', 26, 34, .6, .7, 1.1); sp.position.set(x, .4, 22); sp.target.position.set(x * .7, 9, 11); root.add(sp, sp.target); });
+    const gl = new THREE.PointLight('#ffc890', 10, 11, 1.4); gl.position.set(0, 3.5, 11.5); root.add(gl);
+    [-1, 1].forEach((sd) => { const lp = lampPost(root, sd * 3.3, 15); const g2 = glowSprite('#ffc27a', 2.4, .75); g2.position.set(sd * 3.3, lp.y, 15); root.add(g2); OBST.push([sd * 3.3 - .2 - R, sd * 3.3 + .2 + R, 15 - .2 - R, 15 + .2 + R]); });
+  }
+
+  /* ── jardin à la française : allée de gravier clair, parterres de buis, topiaires, vases ── */
+  function buildFrenchGarden(root) {
+    const buis = new THREE.MeshStandardMaterial({ map: realTex('grassG', grassGroundCanvas, 3, 1, true), color: '#4f7a45', roughness: 1 }); buis.bumpMap = realTex('fiber', fiberBump, 6, 2); buis.bumpScale = 4; REAL.done.add(buis);
+    const curbM = new THREE.MeshStandardMaterial({ color: '#e6dccb', roughness: .7 }); REAL.done.add(curbM);
+    // bordures de pierre le long de l'allée
+    [-1, 1].forEach((sd) => root.add(box(.16, .08, 54, curbM, sd * 1.78, .04, 41.5)));
+    // parterres : deux de chaque côté, bordés de buis avec un motif en croix et des roses
+    const beds = [[4, 10.4, 17, 29], [4, 10.4, 41, 57]];
+    const roseM = new THREE.MeshStandardMaterial({ color: '#c2284a', roughness: .6 }), leafM = new THREE.MeshStandardMaterial({ color: '#2d4a26', roughness: .9 });
+    const roses = [], bushes = [];
+    [-1, 1].forEach((sd) => beds.forEach(([x0, x1, z0, z1]) => {
+      const a0 = sd * x0, a1 = sd * x1, cx = (a0 + a1) / 2, cz = (z0 + z1) / 2, w = Math.abs(a1 - a0), d = z1 - z0, hh = .45;
+      root.add(box(w, hh, .4, buis, cx, hh / 2, z0)); root.add(box(w, hh, .4, buis, cx, hh / 2, z1));
+      root.add(box(.4, hh, d, buis, a0, hh / 2, cz)); root.add(box(.4, hh, d, buis, a1, hh / 2, cz));
+      const diag = Math.hypot(w, d), ang = Math.atan2(d, w);
+      [-1, 1].forEach((k) => { const b2 = box(diag - .6, .32, .3, buis, cx, .16, cz); b2.rotation.y = k * ang; root.add(b2); });
+      const rnd = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, .34, 28), buis); rnd.position.set(cx, .17, cz); root.add(rnd);
+      for (let i = 0; i < 26; i++) { const x = cx + (Math.random() - .5) * (w - 1), z = cz + (Math.random() - .5) * (d - 1); if (Math.hypot(x - cx, z - cz) < 1.4) continue; bushes.push([x, z]); roses.push([x + (Math.random() - .5) * .2, z + (Math.random() - .5) * .2]); }
+      // topiaires en cône aux quatre coins
+      [[a0, z0], [a1, z0], [a0, z1], [a1, z1]].forEach(([x, z]) => { const t = new THREE.Mesh(new THREE.ConeGeometry(.45, 1.8, 20), buis); t.position.set(x, 1.15, z); root.add(t); const pot = new THREE.Mesh(new THREE.CylinderGeometry(.34, .26, .3, 18), curbM); pot.position.set(x, .2, z); root.add(pot); });
+      OBST.push([Math.min(a0, a1) - .3 - R, Math.max(a0, a1) + .3 + R, z0 - .3 - R, z1 + .3 + R]);
+    }));
+    const bg = new THREE.SphereGeometry(.22, 10, 8), rg = new THREE.SphereGeometry(.09, 8, 6);
+    const bi = new THREE.InstancedMesh(bg, leafM, bushes.length), ri = new THREE.InstancedMesh(rg, roseM, roses.length * 3), col = new THREE.Color(); let r3 = 0;
+    bushes.forEach(([x, z], i) => { _m4.makeScale(1, .8, 1).setPosition(x, .2, z); bi.setMatrixAt(i, _m4); });
+    roses.forEach(([x, z]) => { for (let k = 0; k < 3; k++) { _m4.makeTranslation(x + (Math.random() - .5) * .28, .3 + Math.random() * .12, z + (Math.random() - .5) * .28); ri.setMatrixAt(r3, _m4); ri.setColorAt(r3, col.set(['#c2284a', '#e86a8a', '#f4f0ea', '#e0a33a'][Math.floor(Math.random() * 4)])); r3++; } });
+    root.add(bi, ri);
+    // vases sur piédestal le long de l'allée
+    const urnGeo = new THREE.LatheGeometry([[0, 0], [.22, 0], [.22, .06], [.1, .12], [.1, .2], [.3, .45], [.32, .7], [.2, .9], [.13, .95], [.16, 1.02], [0, 1.05]].map(([r, y]) => new THREE.Vector2(r, y)), 18);
+    for (const z of [21.5, 42.6, 56.5]) [-1, 1].forEach((sd) => { const x = sd * 3.3; root.add(box(.6, 1, .6, curbM, x, .5, z)); root.add(box(.7, .08, .7, curbM, x, 1.04, z)); const u = new THREE.Mesh(urnGeo, curbM); u.position.set(x, 1.08, z); u.scale.setScalar(.85); root.add(u);
+      const fl = new THREE.Mesh(new THREE.SphereGeometry(.3, 12, 8), new THREE.MeshStandardMaterial({ color: '#5d8a4a', roughness: .9 })); fl.scale.y = .6; fl.position.set(x, 1.95, z); root.add(fl);
+      OBST.push([x - .35 - R, x + .35 + R, z - .35 - R, z + .35 + R]); });
+  }
+
+  /* ════════════════════════════════════════════
      COMPOSANT PRINCIPAL
      ════════════════════════════════════════════ */
   AFRAME.registerComponent('chateau', {
@@ -2100,7 +2247,7 @@
       this.amb = new THREE.AmbientLight('#fff4e6', .2); this.hemi = new THREE.HemisphereLight('#5a6bb0', '#141826', .5);
       this.moon = new THREE.DirectionalLight('#b9c8ff', .7); this.moon.position.set(-30, 60, -60);
       root.add(this.amb, this.hemi, this.moon);
-      buildSky(root); buildGarden(root); buildCastleFront(root); buildHall(root); buildSkylight(root); buildStairs(root); buildUpper(root); buildWings(root); buildSerre(root); buildCapsuleField(root); buildAdvent(root); initSpotPool(root); initFX(root);
+      buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildHall(root); buildSkylight(root); buildStairs(root); buildUpper(root); buildWings(root); buildSerre(root); buildCapsuleField(root); buildAdvent(root); initSpotPool(root); initFX(root);
       W.peerGroup = new THREE.Group(); root.add(W.peerGroup);
       buildDust(root);
       buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(S.settings.video || null);
