@@ -1043,6 +1043,7 @@
     const stone = (w, hh) => wallMat('stone', w, hh);
     // Façade percée de la grande porte
     const facade = archWall(28, 12, 4.4, 3.2, 2, 'stone', 0, UP_WINDOWS); facade.position.set(0, 0, 8); root.add(facade);
+    { const lining = archWall(20.8, 8, 4.4, 3.2, .02, 'plaster', 0); lining.position.set(0, 0, 7.97); root.add(lining); }
     // Créneaux
     for (let x = -13.5; x <= 13.5; x += 1.5) root.add(box(.8, .9, 2.1, stone(.8, .9), x, 12.45, 9));
     // Tours
@@ -1672,8 +1673,12 @@
     const m = mesh.material; if (!m || Array.isArray(m) || REAL.done.has(m)) return; REAL.done.add(m);
     const img = m.map && m.map.image, rep = m.map ? m.map.repeat : null;
     if (img && img === CANVAS.floor) {
-      m.map = realTex('marble', marbleCanvas, rep.x, rep.y, true); m.roughness = .16; m.metalness = 0; if ('envMapIntensity' in m) m.envMapIntensity = 1.4;
-      m.bumpMap = realTex('marbleB', marbleBump, rep.x, rep.y); m.bumpScale = .6; m.needsUpdate = true; return;
+      // sur une colonne ou un bloc, des veines plus fines (sinon le marbre ressemble à une carte)
+      const flat = mesh.geometry && mesh.geometry.type === 'PlaneGeometry';
+      const g = mesh.geometry && mesh.geometry.parameters, big = g ? Math.max(g.width || 0, g.height || 0, g.depth || 0, (g.radiusTop || 0) * 6) : 1;
+      const rx = flat ? rep.x : Math.max(rep.x, big / 1.4), ry = flat ? rep.y : Math.max(rep.y, big / 1.4);
+      m.map = realTex('marble', marbleCanvas, rx, ry, true); m.roughness = .16; m.metalness = 0; if ('envMapIntensity' in m) m.envMapIntensity = 1.4;
+      m.bumpMap = realTex('marbleB', marbleBump, rx, ry); m.bumpScale = flat ? .6 : 0; m.needsUpdate = true; return;
     }
     if (img && (img === CANVAS.plaster || img === CANVAS.stone)) {
       m.bumpMap = realTex('plasterB', plasterBump, rep.x * 2, rep.y * 2); m.bumpScale = img === CANVAS.stone ? 2 : .9; m.roughness = .9; if ('envMapIntensity' in m) m.envMapIntensity = .5; addWallAO(m); m.needsUpdate = true; return;
@@ -2621,7 +2626,6 @@
     // plaques au-dessus des portes
     const pl = (t, s) => [{ text: t, y: .38, size: .42, italic: true, color: '#3b3226' }, { text: s, y: .8, size: .2, sans: true, spacing: 6, color: '#b08d57' }];
     wallPlate(root, -9.98, 4.25, -7.2, Math.PI / 2, 3.2, pl('La salle des cartes', 'NOS LIEUX'));
-    wallPlate(root, 9.98, 4.25, -7.2, -Math.PI / 2, 3.6, pl('La bibliothèque', 'ET LES PROJETS'));
     wallPlate(root, 21.98, 3.9, -7, -Math.PI / 2, 3.2, pl('La salle des projets', 'NOS PLANS'));
     wallPlate(root, -10.42, 4.25, -7.2, -Math.PI / 2, 2.6, pl('Le Grand Hall', '←'));
     wallPlate(root, 10.42, 4.25, -7.2, Math.PI / 2, 2.6, pl('Le Grand Hall', '→'));
@@ -3801,44 +3805,80 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
   function lvObst(lv, r) { r.lv = lv; OBST.push(r); }
 
   function buildStairs(root) {
-    const stoneM = new THREE.MeshStandardMaterial({ map: tex('floor', 1, 1), roughness: .3 });
-    const carpetM = new THREE.MeshStandardMaterial({ map: tex('carpet', 1, 1), roughness: 1 });
-    W.stairCarpet = carpetM;
+    /* Un escalier d'honneur classique : marches de pierre claire, tapis rouge continu tenu par des tringles dorées,
+       limon mouluré, balustres tournés en pierre, main courante en noyer, pilastres coiffés d'une lanterne. */
+    const stoneM = new THREE.MeshStandardMaterial({ color: '#eee6d8', roughness: .55, envMapIntensity: .6 }); stoneM.bumpMap = realTex('plasterB', plasterBump, 2, 2); stoneM.bumpScale = .5; REAL.done.add(stoneM);
+    const treadM = new THREE.MeshStandardMaterial({ map: realTex('marble', marbleCanvas, .5, .25, true), roughness: .2, envMapIntensity: 1.1 }); REAL.done.add(treadM);
+    const carpetM = new THREE.MeshStandardMaterial({ map: tex('carpet', 1, 1), roughness: 1 }); W.stairCarpet = carpetM;
+    const walnut = new THREE.MeshStandardMaterial({ map: realTex('wood', woodCanvas, 1, 4, true), color: '#8a5a3a', roughness: .35, envMapIntensity: 1 }); REAL.done.add(walnut);
+    const balM = new THREE.MeshStandardMaterial({ color: '#f3ede2', roughness: .45, envMapIntensity: .7 }); REAL.done.add(balM);
+    const rodM = M.gold;
+    const balGeo = new THREE.LatheGeometry([[.0, 0], [.055, 0], [.055, .06], [.035, .09], [.03, .16], [.055, .3], [.06, .38], [.045, .46], [.028, .56], [.028, .66], [.042, .7], [.042, .74], [.032, .76], [.0, .76]].map(([r, y]) => new THREE.Vector2(r, y)), 14);
+    const bals = [];
+    const addRail = (pts, railY) => {   // pts : suite de [x, y du sol, z] le long de la rampe
+      pts.forEach(([x, y, z]) => bals.push([x, y, z]));
+      for (let i = 0; i < pts.length - 1; i++) {
+        const [x0, y0, z0] = pts[i], [x1, y1, z1] = pts[i + 1], len = Math.hypot(x1 - x0, y1 - y0, z1 - z0);
+        const g = new THREE.Group(); g.position.set((x0 + x1) / 2, (y0 + y1) / 2 + railY, (z0 + z1) / 2);
+        const dir = new THREE.Vector3(x1 - x0, y1 - y0, z1 - z0).normalize(); g.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir);
+        g.add(box(len + .02, .07, .11, walnut, 0, .02, 0)); g.add(box(len + .02, .012, .12, M.gold, 0, -.02, 0));
+        g.add(box(len + .02, .05, .09, balM, 0, -railY + .78, 0));   // lisse basse
+        root.add(g);
+      }
+    };
+    const newel = (x, y, z) => {
+      root.add(box(.3, 1.05, .3, balM, x, y + .525, z)); root.add(box(.36, .06, .36, balM, x, y + .06, z)); root.add(box(.36, .05, .36, M.gold, x, y + 1.06, z));
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(.11, 20, 14), new THREE.MeshBasicMaterial({ color: '#fff0d4' })); globe.position.set(x, y + 1.3, z); root.add(globe);
+      root.add(box(.04, .14, .04, M.gold, x, y + 1.15, z));
+      const gl = glowSprite('#ffd9a0', 1.3, .55); gl.position.copy(globe.position); root.add(gl);
+    };
     // ── Grand escalier : monte vers +x le long du mur du fond
-    const n1 = 22, tread1 = (F1.x1 - F1.x0) / n1, zc1 = (F1.z0 + F1.z1) / 2, w1 = F1.z1 - F1.z0;
+    const n1 = 22, tread1 = (F1.x1 - F1.x0) / n1, rise1 = LEVEL_Y[1] / n1, zc1 = (F1.z0 + F1.z1) / 2, w1 = F1.z1 - F1.z0, cw1 = w1 * .66;
     for (let i = 0; i < n1; i++) {
-      const top = (i + 1) * LEVEL_Y[1] / n1, x = F1.x0 + (i + .5) * tread1;
+      const top = (i + 1) * rise1, x = F1.x0 + (i + .5) * tread1;
       root.add(box(tread1 + .002, top, w1, stoneM, x, top / 2, zc1));
-      root.add(box(tread1 + .004, .02, w1 * .6, carpetM, x, top + .01, zc1));
-      if (i % 2 === 0) root.add(box(tread1, .03, w1 + .02, M.gold, x + tread1 / 2 - .01, top - .015, zc1));
+      root.add(box(tread1 + .03, .035, w1 + .03, treadM, x + .012, top - .0175, zc1));           // nez de marche en marbre
+      root.add(box(tread1 + .006, .012, cw1, carpetM, x, top + .006, zc1));                       // tapis : giron
+      root.add(box(.012, rise1, cw1, carpetM, x - tread1 / 2 - .004, top - rise1 / 2, zc1));     // tapis : contremarche
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(.009, .009, cw1 + .1, 8), rodM); rod.rotation.x = Math.PI / 2; rod.position.set(x - tread1 / 2 + .01, top - rise1 + .015, zc1); root.add(rod);
     }
-    // ── Mezzanine
-    const mz0 = -11.6, mz1 = 7.6, mw = 10 - 6.4;
-    root.add(box(mw, .22, mz1 - mz0, stoneM, 6.4 + mw / 2, LEVEL_Y[1] - .11, (mz0 + mz1) / 2));
-    root.add(box(.05, .08, mz1 - mz0, M.gold, 6.4, LEVEL_Y[1] - .2, (mz0 + mz1) / 2));
-    const runner = plane(1.1, mz1 - mz0, carpetM.clone()); runner.material.map = tex('carpet', 1, (mz1 - mz0) / 4); runner.rotation.x = -Math.PI / 2; runner.position.set(7.4, LEVEL_Y[1] + .012, (mz0 + mz1) / 2); root.add(runner); W.mezzRunner = runner;
+    // limon mouluré côté hall, avec son filet doré qui suit la pente
+    { const len = Math.hypot(F1.x1 - F1.x0, LEVEL_Y[1]), ang = Math.atan2(LEVEL_Y[1], F1.x1 - F1.x0);
+      const g = new THREE.Group(); g.position.set((F1.x0 + F1.x1) / 2, LEVEL_Y[1] / 2 + .05, F1.z1 + .03); g.rotation.z = ang;
+      g.add(box(len, .32, .1, balM, 0, 0, 0)); g.add(box(len, .02, .11, M.gold, 0, -.12, 0)); g.add(box(len, .02, .11, M.gold, 0, .14, 0)); root.add(g); }
+    const p1 = []; for (let x = F1.x0 + .35; x <= F1.x1 - .05; x += .26) p1.push([x, STAIRS[0].h(x), F1.z1]);
+    newel(F1.x0 + .1, 0, F1.z1); addRail([[F1.x0 + .1, .25, F1.z1], ...p1, [F1.x1 + .15, LEVEL_Y[1], F1.z1]], .92);
+    // ── Mezzanine : plancher, bandeau mouluré, tapis, balustrade
+    const mz0 = -11.6, mz1 = 7.6, mw = 10 - 6.4, mzc = (mz0 + mz1) / 2;
+    root.add(box(mw, .22, mz1 - mz0, stoneM, 6.4 + mw / 2, LEVEL_Y[1] - .11, mzc));
+    const deck = plane(mw, mz1 - mz0, new THREE.MeshStandardMaterial({ map: realTex('marble', marbleCanvas, 1.2, 6, true), roughness: .18, envMapIntensity: 1.2 })); REAL.done.add(deck.material);
+    deck.rotation.x = -Math.PI / 2; deck.position.set(6.4 + mw / 2, LEVEL_Y[1] + .002, mzc); root.add(deck);
+    root.add(box(.12, .62, mz1 - mz0, balM, 6.38, LEVEL_Y[1] - .31, mzc));          // bandeau (le « tablier » du balcon)
+    [LEVEL_Y[1] - .06, LEVEL_Y[1] - .58].forEach((y) => root.add(box(.14, .025, mz1 - mz0 + .02, M.gold, 6.37, y, mzc)));
+    const runner = plane(1.1, mz1 - mz0, carpetM.clone()); runner.material.map = tex('carpet', 1, (mz1 - mz0) / 4); runner.rotation.x = -Math.PI / 2; runner.position.set(7.4, LEVEL_Y[1] + .012, mzc); root.add(runner); W.mezzRunner = runner;
+    const pm = []; for (let z = F1.z1 + .45; z <= mz1 - .2; z += .26) pm.push([6.4, LEVEL_Y[1], z]);
+    newel(6.4, LEVEL_Y[1], F1.z1 + .2); newel(6.4, LEVEL_Y[1], mz1 - .1); addRail([[6.4, LEVEL_Y[1], F1.z1 + .2], ...pm, [6.4, LEVEL_Y[1], mz1 - .1]], .92);
+    // l'enseigne de la bibliothèque, sur le bandeau, face au hall
+    { const tp = textPlane(3, .5, [{ text: 'La bibliothèque', y: .42, size: .5, italic: true, color: '#3b3226' }, { text: 'ET LES PROJETS  →', y: .84, size: .24, sans: true, spacing: 6, color: '#b08d57' }]);
+      tp.position.set(6.31, LEVEL_Y[1] - .32, -7.2); tp.rotation.y = -Math.PI / 2; root.add(tp); }
     // ── Seconde volée : monte vers -z sur la mezzanine, traverse le plafond
-    const n2 = 26, tread2 = (F2.zb - F2.zt) / n2, xc2 = (F2.x0 + F2.x1) / 2, w2 = F2.x1 - F2.x0;
+    const n2 = 26, tread2 = (F2.zb - F2.zt) / n2, rise2 = (LEVEL_Y[2] - LEVEL_Y[1]) / n2, xc2 = (F2.x0 + F2.x1) / 2, w2 = F2.x1 - F2.x0, cw2 = w2 * .66;
     for (let i = 0; i < n2; i++) {
-      const top = LEVEL_Y[1] + (i + 1) * (LEVEL_Y[2] - LEVEL_Y[1]) / n2, z = F2.zb - (i + .5) * tread2, base = LEVEL_Y[1];
+      const top = LEVEL_Y[1] + (i + 1) * rise2, z = F2.zb - (i + .5) * tread2, base = LEVEL_Y[1];
       root.add(box(w2, top - base, tread2 + .002, stoneM, xc2, base + (top - base) / 2, z));
-      root.add(box(w2 * .6, .02, tread2 + .004, carpetM, xc2, top + .01, z));
+      root.add(box(w2 + .03, .035, tread2 + .03, treadM, xc2, top - .0175, z - .012));
+      root.add(box(cw2, .012, tread2 + .006, carpetM, xc2, top + .006, z));
+      root.add(box(cw2, rise2, .012, carpetM, xc2, top - rise2 / 2, z + tread2 / 2 + .004));
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(.009, .009, cw2 + .1, 8), rodM); rod.rotation.z = Math.PI / 2; rod.position.set(xc2, top - rise2 + .015, z + tread2 / 2 - .01); root.add(rod);
     }
-    // ── Balustrades dorées (barreaux instanciés)
-    const pos = [];
-    for (let z = F1.z1 + .3; z <= mz1 - .1; z += .32) pos.push([6.4, LEVEL_Y[1], z]);                         // bord de la mezzanine
-    for (let x = F1.x0 + .25; x <= F1.x1; x += .3) pos.push([x, STAIRS[0].h(x), F1.z1]);                     // grand escalier
-    for (let z = F2.zb - .2; z >= F2.zt; z -= .32) pos.push([F2.x0, STAIRS[1].h(0, z), z]);                 // seconde volée
-    const inst = new THREE.InstancedMesh(new THREE.CylinderGeometry(.018, .018, .95, 6), M.gold, pos.length);
-    pos.forEach(([x, y, z], i) => { _m4.makeTranslation(x, y + .475, z); inst.setMatrixAt(i, _m4); });
-    root.add(inst);
-    root.add(box(.06, .06, mz1 - (F1.z1 + .3), M.gold, 6.4, LEVEL_Y[1] + .97, (F1.z1 + .3 + mz1) / 2));
-    const rail1 = new THREE.Group(); rail1.position.set((F1.x0 + F1.x1) / 2, LEVEL_Y[1] / 2 + .97, F1.z1); rail1.rotation.z = Math.atan2(LEVEL_Y[1], F1.x1 - F1.x0);
-    rail1.add(box(Math.hypot(F1.x1 - F1.x0, LEVEL_Y[1]), .06, .06, M.gold, 0, 0, 0)); root.add(rail1);
-    const rail2 = new THREE.Group(); rail2.position.set(F2.x0, (LEVEL_Y[1] + LEVEL_Y[2]) / 2 + .97, (F2.zb + F2.zt) / 2); rail2.rotation.x = Math.atan2(LEVEL_Y[2] - LEVEL_Y[1], F2.zb - F2.zt);
-    rail2.add(box(.06, .06, Math.hypot(F2.zb - F2.zt, LEVEL_Y[2] - LEVEL_Y[1]), M.gold, 0, 0, 0)); root.add(rail2);
-    // pommeaux
-    [[F1.x0, .05, F1.z1], [6.4, LEVEL_Y[1], mz1 - .1]].forEach(([x, y, z]) => { const k = new THREE.Mesh(new THREE.SphereGeometry(.07, 12, 8), M.gold); k.position.set(x, y + 1.02, z); root.add(k); });
+    { const len = Math.hypot(F2.zb - F2.zt, LEVEL_Y[2] - LEVEL_Y[1]), ang = Math.atan2(LEVEL_Y[2] - LEVEL_Y[1], F2.zb - F2.zt);
+      const g = new THREE.Group(); g.position.set(F2.x0 - .03, (LEVEL_Y[1] + LEVEL_Y[2]) / 2 + .05, (F2.zb + F2.zt) / 2); g.rotation.x = ang;
+      g.add(box(.1, .32, len, balM, 0, 0, 0)); g.add(box(.11, .02, len, M.gold, 0, -.12, 0)); g.add(box(.11, .02, len, M.gold, 0, .14, 0)); root.add(g); }
+    const p2 = []; for (let z = F2.zb - .35; z >= F2.zt + .3; z -= .26) p2.push([F2.x0, STAIRS[1].h(0, z), z]);
+    newel(F2.x0, LEVEL_Y[1], F2.zb + .1); addRail([[F2.x0, LEVEL_Y[1] + .2, F2.zb + .1], ...p2, [F2.x0, LEVEL_Y[2] - .3, F2.zt + .1]], .92);
+    // balustres (une seule géométrie, instanciée)
+    const inst = new THREE.InstancedMesh(balGeo, balM, bals.length);
+    bals.forEach(([x, y, z], i) => { _m4.makeTranslation(x, y + .02, z); inst.setMatrixAt(i, _m4); }); root.add(inst);
     // indication au pied de l'escalier
     const hit = box(1.2, 2, 2, invisible, F1.x0 - .2, 1, (F1.z0 + F1.z1) / 2); root.add(hit);
     interactive(hit, { range: 3.2, near: { type: 'hint', text: () => '↑ Monter à la salle des jeux' } });
