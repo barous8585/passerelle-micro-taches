@@ -3504,10 +3504,14 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const fav = h('select', { id: 'setFav' }, FLOWERS.map(([v, l]) => h('option', { value: v, text: l }))); fav.value = st.favFlower || 'rose';
     const cF = h('input', { id: 'setCF', type: 'color', value: st.flowerColor || '#e7a6bd' }), cC = h('input', { id: 'setCC', type: 'color', value: st.carpetColor || '#6a1222' }), cL = h('input', { id: 'setCL', type: 'color', value: st.lanternColor || '#ffb466' });
     const bSnd = soundSelect('setBenchSnd', st.benchSound || '');
+    const wl = h('textarea', { id: 'setWelcome', maxlength: 3000, rows: 9, placeholder: 'La lettre qu\'elle lira en entrant pour la première fois' }); wl.value = st.welcome || WELCOME_DEF;
+    const ws = h('input', { id: 'setWelcomeSign', type: 'text', maxlength: 40, value: st.welcomeSign || 'Ousmane', placeholder: 'Ta signature' });
+    const wPrev = h('button', { class: 'ghost', text: 'Voir son accueil (aperçu)' });
+    wPrev.addEventListener('click', async () => { const keep = { welcome: st.welcome, welcomeSign: st.welcomeSign }; st.welcome = wl.value; st.welcomeSign = ws.value; closeModal(); await showWelcome(); Object.assign(st, keep); });
     const save = h('button', { class: 'gbtn', text: 'Enregistrer' });
     save.addEventListener('click', async () => {
       save.disabled = true;
-      try { await saveSettings({ names: names.value.trim(), since: since.value, quote: quote.value.trim(), bench: bench.value.trim(), birthday: bday.value || '', favFlower: fav.value, flowerColor: cF.value, carpetColor: cC.value, lanternColor: cL.value, benchSound: bSnd.value || '' }); toast('Réglages enregistrés'); } catch (e) { toast('Enregistrement impossible'); }
+      try { await saveSettings({ names: names.value.trim(), since: since.value, quote: quote.value.trim(), bench: bench.value.trim(), birthday: bday.value || '', favFlower: fav.value, flowerColor: cF.value, carpetColor: cC.value, lanternColor: cL.value, benchSound: bSnd.value || '', welcome: wl.value.trim(), welcomeSign: ws.value.trim() }); toast('Réglages enregistrés'); } catch (e) { toast('Enregistrement impossible'); }
       save.disabled = false;
     });
     const vfile = h('input', { type: 'file', accept: 'video/*', hidden: true, id: 'vidFile' });
@@ -3543,7 +3547,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         try { await NF.password(cur, nx); toast('Mot de passe changé'); } catch (er) { toast(er.message || 'Changement impossible'); } } }),
       h('button', { class: 'ghost', text: 'Se déconnecter', style: 'margin-top:8px', onclick: () => NF.logout() })) : null;
     const backup = h('div', { class: 'field' }, h('div', { text: 'Sauvegarde complète', style: 'margin-bottom:6px' }), h('div', { class: 'mini', text: 'Un fichier .zip avec toutes vos photos, sons, vidéos, lettres et un album qui s\'ouvre sur n\'importe quel ordinateur, même dans 40 ans. À refaire de temps en temps et à garder précieusement.' }), h('button', { class: 'ghost', text: '💾 Télécharger la sauvegarde', style: 'margin-top:8px', onclick: (e) => exportArchive(e.currentTarget) }));
-    return [field('Vos prénoms', names), field('Ensemble depuis le', since), field('Son anniversaire (feu d\'artifice ce jour-là)', bday), field('Citation du Belvédère', quote), field('Message du banc', bench), field('Notre chanson, jouée sur le banc', bSnd),
+    return [h('p', { class: 'lead', text: '💌 La surprise : la lettre qu\'elle découvre à sa toute première entrée, sous un feu d\'artifice.' }), field('Sa lettre d\'accueil', wl), field('Ta signature', ws), wPrev, h('div', { class: 'sep' }),
+      field('Vos prénoms', names), field('Ensemble depuis le', since), field('Son anniversaire (feu d\'artifice ce jour-là)', bday), field('Citation du Belvédère', quote), field('Message du banc', bench), field('Notre chanson, jouée sur le banc', bSnd),
       h('div', { class: 'row2' }, field('Sa fleur préférée', fav), field('Couleur des fleurs', cF)), h('div', { class: 'row2' }, field('Couleur du tapis', cC), field('Couleur des lanternes', cL)), save,
       h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'La rétrospective vidéo du Grand Hall.' }), vbtn, vfile,
       h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'Le code secret demandé à l\'entrée.' }), c1, cbtn,
@@ -4524,10 +4529,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     if (!S.db || !S.meId) return false;
     try { const d = await S.db.doc('data/users/' + S.meId + '/state').get(); return !!(d.exists && d.data().tourSeen); } catch (e) { return false; }
   }
-  function markTourSeen() {
-    ls.set('chateau-tour-seen', '1');
-    if (S.db && S.meId) S.db.doc('data/users/' + S.meId + '/state').set({ tourSeen: true, at: Date.now() }).catch(() => {});
-  }
+  function markTourSeen() { loadUserState().then(() => saveUserState({ tourSeen: true, at: Date.now() })).catch(() => {}); try { ls.set('chateau-tour-seen', '1'); } catch (e) {} }
+
 
   /* ════════════════════════════════════════════
      LE MOT DU JOUR
@@ -4963,7 +4966,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     const st = S.settings, btn = $('#enterBtn');
     if (!st.codeHash && S.isOwner && S.db && !ls.get('chateau-setup-skip')) { $('#gate').hidden = true; $('#setup').classList.add('on'); return; }
     btn.disabled = false; btn.textContent = 'Entrer dans notre histoire ✨';
-    if (st.codeHash && ls.get('chateau-code') !== st.codeHash) { $('#codeInput').hidden = false; $('#rememberWrap').hidden = false; }
+    if (st.codeHash && !window.__chateauNetlify && ls.get('chateau-code') !== st.codeHash) { $('#codeInput').hidden = false; $('#rememberWrap').hidden = false; }
     else { $('#codeInput').hidden = true; $('#rememberWrap').hidden = true; }
   }
 
@@ -4979,7 +4982,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
 
   async function tryEnter() {
     const st = S.settings, inp = $('#codeInput');
-    if (st.codeHash && ls.get('chateau-code') !== st.codeHash) {
+    if (st.codeHash && !window.__chateauNetlify && ls.get('chateau-code') !== st.codeHash) {
       const hs = await sha(inp.value || '');
       if (hs !== st.codeHash) { inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake'); inp.value = ''; inp.placeholder = 'Ce n\'est pas notre code…'; return; }
       if ($('#rememberCode').checked) ls.set('chateau-code', hs);
@@ -4999,6 +5002,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     setTimeout(() => hint.classList.add('fade'), 12000);
     glide(new THREE.Vector3(0, EYE, 57), 0, .05, 3200, async () => {
       S.entered = true; controls(true);
+      if (await welcomeDue().catch(() => false)) { saveUserState({ welcomeSeen: Date.now() }); await showWelcome(); }
       const auto = S.settings.tourAuto !== false && !S.isOwner && !!S.db;
       if (auto && !(await tourSeen())) { markTourSeen(); showNews(true); setTimeout(() => runTour().catch((e) => { console.error('visite', e); S.tour = false; document.body.classList.remove('touring'); controls(true); }), 700); }
       else { setTimeout(() => showNews().catch(() => {}), 900); if (S.isOwner && !ls.get('chateau-owner-tour-hint')) { ls.set('chateau-owner-tour-hint', '1'); setTimeout(() => toast('Astuce : Plan ✦ → ▶ Visite guidée, pour voir ce qu\'elle verra'), 6500); } }
@@ -5007,6 +5011,56 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     const myClues = S.treasures.filter((t) => !t.found && t.author !== S.meId);
     if (myClues.length) setTimeout(() => toast('🗝️ Un trésor est caché pour toi. L\'indice est dans le Plan ✦'), 8000);
     if (FX.cel.fireworks) setTimeout(() => toast('✨ Regarde le ciel du jardin…'), 3800);
+  }
+
+  /* ════════════════════════════════════════════
+     LA SURPRISE : sa toute première entrée — feu d'artifice, une lettre scellée, puis la visite guidée
+     ════════════════════════════════════════════ */
+  const WELCOME_DEF = `Hadiatou,
+
+Il est minuit, et ce château t'attendait.
+
+Je l'ai construit pierre après pierre, pour qu'on ait un endroit rien qu'à nous : un lieu où nos souvenirs ne s'effacent jamais, où chaque photo, chaque date, chaque mot trouve sa place.
+
+Ici, il y a notre histoire. Et il reste tellement de salles vides… pour tout ce qu'on va encore vivre ensemble.
+
+Ce château est aussi le tien. Ajoute tes photos, écris-moi des mots, cache-moi des trésors. Il grandira avec nous.
+
+Promène-toi, prends ton temps.
+Je t'aime.`;
+  const welcomeCss = `#welcome{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at center,rgba(20,10,24,.55),rgba(8,5,12,.88));opacity:0;transition:opacity 1.2s ease;font-family:var(--display,Georgia,serif)}
+#welcome.on{opacity:1}
+#welcome .env{position:relative;width:min(84vw,380px);aspect-ratio:1.55;background:linear-gradient(160deg,#f6ecd9,#e8d6b6);border-radius:6px;box-shadow:0 30px 80px rgba(0,0,0,.6);cursor:pointer;transition:transform .6s ease,opacity .6s ease}
+#welcome .env::before{content:'';position:absolute;inset:0;background:linear-gradient(to bottom right,transparent 49.5%,rgba(150,110,70,.25) 50%,transparent 50.5%),linear-gradient(to bottom left,transparent 49.5%,rgba(150,110,70,.25) 50%,transparent 50.5%)}
+#welcome .flap{position:absolute;left:0;right:0;top:0;height:58%;background:linear-gradient(180deg,#efe0c4,#e3cfac);clip-path:polygon(0 0,100% 0,50% 100%);transform-origin:top;transition:transform .9s ease;box-shadow:0 2px 0 rgba(0,0,0,.05)}
+#welcome .seal{position:absolute;left:50%;top:58%;width:64px;height:64px;margin:-32px 0 0 -32px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#c4344a,#7a1022 70%);box-shadow:0 4px 12px rgba(0,0,0,.35),inset 0 0 0 4px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;color:#f3d79a;font-size:22px;font-style:italic;transition:transform .5s ease,opacity .5s ease}
+#welcome .to{position:absolute;left:0;right:0;bottom:12%;text-align:center;color:#6a4a2a;font-style:italic;font-size:19px}
+#welcome .tap{position:absolute;left:0;right:0;bottom:-46px;text-align:center;color:rgba(246,239,226,.75);font-family:var(--sans,system-ui);font-size:12px;letter-spacing:.3em;text-transform:uppercase}
+#welcome.open .flap{transform:rotateX(180deg)} #welcome.open .seal{transform:scale(.4);opacity:0} #welcome.open .env{transform:translateY(40px) scale(.94);opacity:0}
+#welcome .letter{position:absolute;width:min(90vw,520px);max-height:84vh;overflow:auto;padding:34px 30px 26px;background:linear-gradient(180deg,#fbf6ec,#f2e7d3);color:#3b2a1c;border-radius:4px;box-shadow:0 30px 90px rgba(0,0,0,.65);opacity:0;transform:translateY(30px);transition:opacity 1s ease .5s,transform 1s ease .5s;pointer-events:none}
+#welcome.open .letter{opacity:1;transform:none;pointer-events:auto}
+#welcome .letter p{white-space:pre-line;font-size:19px;line-height:1.6;font-style:italic;margin:0}
+#welcome .letter .sign{text-align:right;margin-top:18px;font-size:24px;font-style:italic;color:#7a1022}
+#welcome .letter button{display:block;margin:24px auto 0;padding:13px 26px;border:0;border-radius:999px;background:#7a1022;color:#f6ecd9;font-family:var(--sans,system-ui);font-size:12px;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}`;
+  function showWelcome() {
+    return new Promise((done) => {
+      const st = S.settings;
+      if (!document.getElementById('welcomeCss')) { const c = document.createElement('style'); c.id = 'welcomeCss'; c.textContent = welcomeCss; document.head.appendChild(c); }
+      // le ciel s'illumine au-dessus du château pendant la lecture
+      const was = FX.cel.fireworks; FX.cel.fireworks = true; FX.next = 0;
+      setTimeout(() => { FX.cel.fireworks = was || celebrationsToday().fireworks; }, 70000);
+      const el = document.createElement('div'); el.id = 'welcome';
+      const sign = esc(st.welcomeSign || 'Ousmane');
+      el.innerHTML = `<div class="env"><div class="flap"></div><div class="seal">${esc((sign[0] || '♥'))}</div><div class="to">Pour Hadiatou</div><div class="tap">Touche l'enveloppe</div></div>
+        <div class="letter"><p>${esc(st.welcome || WELCOME_DEF)}</p><div class="sign">${sign} ♥</div><button type="button">Entrer dans notre château</button></div>`;
+      setTimeout(() => { document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('on')); }, 4200);
+      el.querySelector('.env').addEventListener('click', () => { el.classList.add('open'); try { SND && SND.click && SND.click(); } catch (e) {} });
+      el.querySelector('.letter button').addEventListener('click', () => { el.classList.remove('on'); setTimeout(() => { el.remove(); done(); }, 1200); });
+    });
+  }
+  async function welcomeDue() {
+    if (S.isOwner || !S.db) return false;
+    const d = await loadUserState(); return !d.welcomeSeen;
   }
 
   initData();
