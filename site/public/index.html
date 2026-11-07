@@ -229,6 +229,17 @@
   #album .lbb .t { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 21px; margin-top: 3px; }
   #album .lbb .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   #album .lbb .ghost { background: rgba(255,255,255,.08); color: #f6efe2; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 9px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+  /* ── le mode visite : elle regarde, elle ne manipule rien ── */
+  #visitShield { position: fixed; inset: 0; z-index: 25; display: none; }
+  body.visit #visitShield { display: block; }
+  body.visit #toolbar, body.visit #joy, body.visit #joyOpts, body.visit #standBtn, body.visit #hintBox, body.visit #tooltip, body.visit #pill, body.visit #rotateHint, body.visit #motDuJour, body.visit #benchMsg, body.visit #tourCap { display: none !important; }
+  #visitShield .vb { position: absolute; bottom: calc(18px + env(safe-area-inset-bottom)); display: flex; gap: 8px; right: 14px; opacity: .55; transition: opacity .4s; }
+  #visitShield .vb:hover, #visitShield .vb:active { opacity: 1; }
+  #visitShield button { background: rgba(14,10,20,.55); color: #f3e3c4; border: 1px solid rgba(214,178,110,.35); border-radius: 999px; padding: 8px 14px; font: 400 12.5px "Jost", sans-serif; cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+  #visitShield .cap { position: absolute; left: 50%; top: calc(64px + env(safe-area-inset-top)); transform: translateX(-50%); text-align: center; color: #f6efe2; text-shadow: 0 2px 10px rgba(0,0,0,.7); opacity: 0; transition: opacity 1.2s; pointer-events: none; width: 90%; }
+  #visitShield .cap.v { opacity: 1; }
+  #visitShield .cap .k { font: 500 10.5px "Jost", sans-serif; letter-spacing: .36em; text-transform: uppercase; color: #e2bf7c; }
+  #visitShield .cap .t { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 24px; margin-top: 4px; }
   #fade { position: fixed; inset: 0; z-index: 30; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
   #fade.on { opacity: 1; }
 
@@ -449,6 +460,7 @@
   <button id="atelierBtn" class="tool" aria-label="Atelier" hidden>✎ <span class="lbl">Atelier</span></button>
 </nav>
 <button id="standBtn" class="hud">Se lever</button>
+<div id="visitShield"><div class="cap"><div class="k"></div><div class="t"></div></div><div class="vb"><button type="button" class="vmus" aria-label="Son">♪</button><button type="button" class="vre">↻ Revoir le conte</button><button type="button" class="vout" hidden>✕ Quitter l'aperçu</button></div></div>
 <div id="joy" class="hud" aria-label="Joystick pour marcher"><div id="joyKnob"></div></div>
 <div id="joyOpts"><button id="oneHandBtn" aria-pressed="true">🤚 Une main</button><button id="joySideBtn" aria-label="Changer le joystick de côté">⇄</button></div>
 <div id="tooltip" role="status" aria-live="polite"><div id="tipDate"></div><div id="tipTitle"></div><div id="tipStory"></div></div>
@@ -808,7 +820,7 @@
     }
   });
   const MOVE = { ax: 0, ay: 0 };
-  function controls(on) { $('#player').setAttribute('wasd-controls', 'enabled', !!on && S.entered && !S.seated && !S.modal && !S.panel && !S.tour && !S.album); }
+  function controls(on) { $('#player').setAttribute('wasd-controls', 'enabled', !!on && S.entered && !S.seated && !S.modal && !S.panel && !S.tour && !S.album && !S.visit); }
   function look() { return $('#player').components['look-controls']; }
   function glide(to, yaw, pitch, ms, done) {
     const p = $('#player'), pos = p.object3D.position, from = pos.clone(), lc = look();
@@ -1690,7 +1702,7 @@
     const nC = 1 + Math.max(0, Math.ceil((need - (NB + 2)) / NB)), xOf = (i) => i * SP;
     const legs = [];
     for (let i = 0; i < nC; i++) legs.push(i === 0 ? { s: [0, zE], u: [0, -1], o: [-1, 0], n: NB + 2, bl: BL } : i % 2 ? { s: [xOf(i), zT], u: [0, 1], o: [1, 0], n: NB, bl: BL } : { s: [xOf(i), zS], u: [0, -1], o: [-1, 0], n: NB, bl: BL });
-    const zc = zT;
+    const zc = zT; W.visitBays = []; W.turns = []; W.entryZ = zE;
     const bays = [];
     legs.forEach((L) => { for (let k = 0; k < L.n; k++) bays.push({ L, k, u: L.u, o: L.o, bl: L.bl, c: [L.s[0] + L.u[0] * (k + .5) * L.bl, L.s[1] + L.u[1] * (k + .5) * L.bl] }); });
     const rotOf = (u) => Math.atan2(u[0], u[1]);
@@ -1758,7 +1770,7 @@
         { text: ch.subtitle || '', y: .86, size: .19, italic: true, weight: 400, color: '#8a7350' },
       ]);
       for (let k = 0; k < nb; k++) {
-        const b = bays[bi + k]; buildBay(b, wm, true);
+        const b = bays[bi + k]; buildBay(b, wm, true); W.visitBays.push({ b, leg: legs.indexOf(b.L), dense, n: Math.min(dense ? 4 : 2, Math.max(0, slots - k * (dense ? 4 : 2))) });
         if (!dense) [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
         else [[1, 0], [-1, 0], [1, 1], [-1, 1]].forEach(([side, row], j) => { const s = k * 4 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id, row); });
       }
@@ -1792,6 +1804,7 @@
     const cw = wallMat('plaster', CW, CH, '#efe6d6');
     for (let i = 0; i < nC - 1; i++) {
       const top = i % 2 === 0, cz = top ? zT - hw : zS + hw, dz = top ? -1 : 1, xa = xOf(i), xb = xOf(i + 1);
+      W.turns[i] = [[xa, cz], [xb, cz]];
       corner(xa, cz, cw, [[-1, 0], [0, dz]]); corner(xb, cz, cw, [[1, 0], [0, dz]]);
       const gx = (xa + xb) / 2, gw = xb - xa - CW;
       D.add(box(gw + .02, .04, CW, floorM, gx, 0, cz)); D.add(box(gw + .6, .05, CW + .6, M.ceiling, gx, CH + .02, cz)); D.add(box(gw + .02, CH, .3, cw, gx, CH / 2, cz + dz * (hw + .15)));
@@ -5253,11 +5266,59 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const line = total ? h('div', { class: 'by', style: 'margin-top:12px' }, `Ce château a été bâti à deux : ${plural(total, 'trace')} en tout, dont ${mine} de toi.`) : null;
     return [box, line];
   }
+  /* LA VISITE : la caméra la promène seule devant chaque mur de tableaux, chapitre après chapitre, puis le banc, et on recommence */
+  const VS = { token: 0 };
+  function setVisit(on, preview) {
+    S.visit = !!on; document.body.classList.toggle('visit', !!on); $('#visitShield .vout').hidden = !preview;
+    if (on) { stopGo(); controls(false); }
+    else { VS.token++; S.visiting = false; S.tour = false; controls(true); }
+  }
+  function visitCap(k, t) { const c = $('#visitShield .cap'); if (!k && !t) { c.classList.remove('v'); return; } c.querySelector('.k').textContent = k || ''; c.querySelector('.t').textContent = t || ''; c.classList.add('v'); }
+  async function autoVisit() {
+    const my = ++VS.token; S.visiting = true; S.tour = true; controls(false);
+    const alive = () => my === VS.token && S.visiting;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const pos = () => $('#player').object3D.position;
+    const fadeTo = async (x, z, yaw) => { $('#fade').classList.add('on'); await wait(650); const pl = $('#player'); pl.object3D.position.set(x, EYE, z); if (pl.components.bounds) pl.components.bounds.last.set(x, EYE, z); look().yawObject.rotation.y = yaw; look().pitchObject.rotation.x = 0; await wait(250); $('#fade').classList.remove('on'); await wait(500); };
+    const move = (x, z, yaw, pitch, speed) => { const p = pos(), d = Math.hypot(x - p.x, z - p.z); return glideP(x, z, yaw == null ? yawTo(p.x, p.z, x, z) : yaw, pitch || 0, Math.max(1500, d / (speed || 1.25) * 1000)); };
+    if (S.seated) { S.seated = false; S.seat = null; document.body.classList.remove('seated'); $('#benchMsg').classList.remove('show'); }
+    const chs = sortedChapters();
+    while (alive()) {
+      await fadeTo(0, 3.5, 0); if (!alive()) break;
+      visitCap('La rotonde', 'Le cœur du château'); await wait(3500);
+      await move(0, (W.entryZ || -14.3) - 1.2); visitCap('', '');
+      let leg = 0, lastCh = null;
+      for (const vb of W.visitBays || []) {
+        if (!alive()) break;
+        while (leg < vb.leg && alive()) { for (const [x, z] of W.turns[leg] || []) { if (!alive()) break; await move(x, z, null, 0, 1.6); } leg++; }
+        const b = vb.b, z = W.zones.find((zn) => zn.chapter && zn.bays && zn.bays.includes(b));
+        if (z && z !== lastCh) { lastCh = z; visitCap('Chapitre ' + romanNum(z.chapter), z.name); setTimeout(() => { if (lastCh === z) visitCap('', ''); }, 4200); }
+        if (!vb.n) continue;
+        for (const sd of [1, -1]) {
+          if (!alive()) break;
+          const px = b.c[0] - b.o[0] * sd * 1.3, pz = b.c[1] - b.o[1] * sd * 1.3, yaw = Math.atan2(-b.o[0] * sd, -b.o[1] * sd);
+          await move(px, pz, yaw, vb.dense ? .1 : .02);
+          await wait(vb.dense ? 3600 : 3000);
+        }
+      }
+      if (!alive()) break;
+      // la dernière salle : s'asseoir un moment sur le banc
+      visitCap('Toujours ici', 'un lieu à toi, intemporel et secret');
+      if (W.bench) { const yaw = W.bench.yaw; await fadeTo(W.bench.x + Math.sin(yaw) * 2.4, W.bench.z + Math.cos(yaw) * 2.4, yaw); visitCap('', ''); sitDown(); await wait(26000); }
+      if (S.seated) { S.seated = false; S.seat = null; document.body.classList.remove('seated'); $('#benchMsg').classList.remove('show'); }
+    }
+    if (my === VS.token) { S.visiting = false; }
+  }
+  $('#visitShield .vre').addEventListener('click', async () => { VS.token++; S.visiting = false; visitCap('', ''); await sleep(400); S.tour = false; await runStory().catch(() => {}); if (S.visit) autoVisit(); });
+  $('#visitShield .vout').addEventListener('click', () => { setVisit(false); });
+  $('#visitShield .vmus').addEventListener('click', () => Music.toggle());
   async function playArrival() {
     if (S.tour) return;
+    setVisit(true, S.isOwner);
     await showWelcome();
     await sleep(600);
-    await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); });
+    await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); });
+    if (S.visit) autoVisit();
   }
   async function showNews(quiet) {
     const st = await loadUserState(), now = Date.now(), last = st.lastSeen || 0;
@@ -5650,12 +5711,15 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     glide(new THREE.Vector3(0, EYE, 57), 0, .05, 3200, async () => {
       S.entered = true; controls(true);
       // à sa première venue : l'histoire commence tout de suite (ta voix, puis le conte), et sa lettre l'attend à la fin
+      // elle : uniquement le mode visite (rien à manipuler)
+      if (!S.isOwner && S.db) setVisit(true, false);
       // à sa première venue : ta lettre d'abord, puis l'histoire
       if (await welcomeDue().catch(() => false)) { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
       const storyAuto = storyCfg().auto !== false && !S.isOwner && !!S.db;
       if (storyAuto && !(await storySeen().catch(() => true))) { markTourSeen(); await sleep(600); await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }); }
       // aperçu du gardien : ?scenario=1 rejoue exactement son arrivée (lettre, puis conte), sans rien marquer comme vu
       if (/[?&]scenario=1/.test(location.search)) { await sleep(500); await playArrival(); }
+      else if (S.visit) { await sleep(400); if (!S.tour) autoVisit(); }
     });
     if (S.canWrite && !S.memories.length) setTimeout(() => toast('Ouvre l\'Atelier ✎ pour accrocher votre premier souvenir'), 4500);
     setTimeout(() => backfillThumbs().catch(() => {}), 15000);
