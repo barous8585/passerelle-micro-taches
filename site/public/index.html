@@ -190,6 +190,28 @@
   body.story #tourCap, body.story #benchMsg, body.story #motDuJour, body.story #hintBox { display: none !important; }
   /* les photos restent dans le château : pas d'appui long « Enregistrer l'image », pas de glisser-déposer */
   #modal img, #modal video, #pane img, .drop img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
+  /* ── l'album ── */
+  #album { position: fixed; inset: 0; z-index: 48; background: rgba(12,9,16,.97); color: #f6efe2; display: flex; flex-direction: column; opacity: 0; transition: opacity .35s; font-family: "Jost", sans-serif; }
+  #album.on { opacity: 1; }
+  #album .ah { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: max(18px, env(safe-area-inset-top)) 18px 12px; border-bottom: 1px solid rgba(214,178,110,.2); }
+  #album .k { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; color: #d6b26e; }
+  #album h2 { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-weight: 500; font-size: 30px; margin: 4px 0 0; }
+  #album .x { background: rgba(255,255,255,.08); border: 0; color: #f6efe2; width: 42px; height: 42px; border-radius: 50%; font-size: 24px; cursor: pointer; flex: none; }
+  #album .ag { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 4px; padding: 6px 6px max(20px, env(safe-area-inset-bottom)); align-content: start; }
+  #album .cell { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: #241b16; cursor: pointer; overflow: hidden; }
+  #album .cell img { width: 100%; height: 100%; object-fit: cover; display: block; -webkit-touch-callout: none; user-select: none; }
+  #album .cell.vid::after { content: '▶'; position: absolute; right: 6px; bottom: 5px; font-size: 13px; color: #fff; text-shadow: 0 1px 4px #000; }
+  #album .cell.fav::before { content: '★'; position: absolute; left: 6px; top: 4px; font-size: 14px; color: #f3d79a; text-shadow: 0 1px 4px #000; z-index: 1; }
+  #album .lb { position: absolute; inset: 0; background: #0b080e; display: none; flex-direction: column; }
+  #album .lb.on { display: flex; }
+  #album .stage { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; padding: max(14px, env(safe-area-inset-top)) 8px 0; }
+  #album .stage img, #album .stage video { max-width: 100%; max-height: 100%; object-fit: contain; -webkit-touch-callout: none; user-select: none; }
+  #album .nav { position: absolute; top: 45%; transform: translateY(-50%); z-index: 2; background: rgba(0,0,0,.35); color: #fff; border: 0; width: 44px; height: 64px; font-size: 30px; cursor: pointer; }
+  #album .nav.prev { left: 0; border-radius: 0 10px 10px 0; } #album .nav.next { right: 0; border-radius: 10px 0 0 10px; }
+  #album .lbb { padding: 12px 16px max(16px, env(safe-area-inset-bottom)); }
+  #album .lbb .t { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: 21px; margin-top: 3px; }
+  #album .lbb .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #album .lbb .ghost { background: rgba(255,255,255,.08); color: #f6efe2; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 9px 14px; font: inherit; font-size: 13px; cursor: pointer; }
   #fade { position: fixed; inset: 0; z-index: 30; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
   #fade.on { opacity: 1; }
 
@@ -769,7 +791,7 @@
     }
   });
   const MOVE = { ax: 0, ay: 0 };
-  function controls(on) { $('#player').setAttribute('wasd-controls', 'enabled', !!on && S.entered && !S.seated && !S.modal && !S.panel && !S.tour); }
+  function controls(on) { $('#player').setAttribute('wasd-controls', 'enabled', !!on && S.entered && !S.seated && !S.modal && !S.panel && !S.tour && !S.album); }
   function look() { return $('#player').components['look-controls']; }
   function glide(to, yaw, pitch, ms, done) {
     const p = $('#player'), pos = p.object3D.position, from = pos.clone(), lc = look();
@@ -963,6 +985,7 @@
      ════════════════════════════════════════════ */
   const W = { root: null, dyn: null, lanterns: null, anim: [], frames: [], spots: [], zones: [], fountainWater: null, heart: null, heartMat: null, flies: null, video: null, namePlate: null, envelopes: null };
   if (location.hostname === 'localhost') window.__W = W;
+  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); }, 0);
 
   function buildSky(root) {
     W.skyCanvas = cnv(4, 512, () => {}); W.skyTex = srgb(new THREE.CanvasTexture(W.skyCanvas));
@@ -1546,6 +1569,17 @@
     const list = S.chapters.slice().sort((a, b) => (a.order || 0) - (b.order || 0) || (a.createdAt || 0) - (b.createdAt || 0));
     return list.length ? list : [{ id: null, title: 'Le commencement', subtitle: 'là où tout a commencé', virtual: true }];
   }
+  /* au mur : jusqu'à 6 grands tableaux par chapitre (ceux marqués ⭐ d'abord, puis répartis dans le temps) ;
+     tous les autres se feuillettent dans l'album du chapitre */
+  const WALL_MAX = 6;
+  function wallOf(mems) {
+    if (mems.length <= WALL_MAX) return mems.slice();
+    const fav = mems.filter((m) => m.wall === true).slice(0, WALL_MAX), rest = mems.filter((m) => m.wall !== true && m.wall !== false), pick = new Set(fav);
+    const need = WALL_MAX - pick.size;
+    for (let i = 0; i < need && rest.length; i++) pick.add(rest[Math.round(i * (rest.length - 1) / Math.max(1, need - 1))]);
+    if (pick.size < WALL_MAX) mems.forEach((m) => { if (pick.size < WALL_MAX && m.wall !== false) pick.add(m); });
+    return mems.filter((m) => pick.has(m));
+  }
   function memoriesOf(chId, chapters) {
     const firstId = chapters[0] && chapters[0].id;
     return S.memories.filter((m) => m.chapterId === chId || (!chapters.some((c) => c.id === m.chapterId) && chId === firstId))
@@ -1556,6 +1590,55 @@
      LA BOUCLE DES CHAPITRES autour du jardin intérieur
      salle des cartes → aile ouest → galerie du fond → aile est → « Notre avenir » → bibliothèque → rotonde
      ════════════════════════════════════════════ */
+  /* le pupitre de l'album, au milieu du chapitre */
+  function albumLectern(D, b, ch, count, dyn, rotOf) {
+    const g = new THREE.Group(); g.position.set(b.c[0], 0, b.c[1]); g.rotation.y = rotOf(b.u); D.add(g);
+    g.add(box(.1, 1.0, .1, M.gold, 0, .5, 0)); g.add(box(.5, .05, .4, M.gold, 0, .03, 0));
+    const top = new THREE.Group(); top.position.set(0, 1.08, 0); top.rotation.x = -.5; g.add(top);
+    top.add(box(.8, .04, .56, M.frameBois || M.gold, 0, 0, 0));
+    const pages = box(.7, .05, .48, new THREE.MeshStandardMaterial({ color: '#f7f0e2', roughness: .9 }), 0, .04, 0); top.add(pages);
+    const sign = textPlane(1.5, .5, [{ text: 'L\'ALBUM', y: .28, size: .22, sans: true, spacing: 10, color: '#b08d57' }, { text: count + ' souvenirs à feuilleter', y: .7, size: .3, italic: true, color: '#2c2419' }]);
+    const bg = box(1.6, .58, .03, new THREE.MeshStandardMaterial({ color: '#f6f1e7', roughness: .8 }), 0, 1.75, 0); g.add(bg); sign.position.set(0, 1.75, .02); g.add(sign);
+    const sign2 = textPlane(1.5, .5, [{ text: 'L\'ALBUM', y: .28, size: .22, sans: true, spacing: 10, color: '#b08d57' }, { text: count + ' souvenirs à feuilleter', y: .7, size: .3, italic: true, color: '#2c2419' }]); sign2.position.set(0, 1.75, -.02); sign2.rotation.y = Math.PI; g.add(sign2);
+    const glow = glowSprite('#ffd9a0', 1.6, .35); glow.position.set(0, 1.25, 0); g.add(glow);
+    [bg, pages].forEach((o) => interactive(o, { range: 3.8, near: { type: 'hint', text: () => '📖 Feuilleter l\'album : ' + count + ' souvenirs' }, click: () => openAlbum(ch.id) }, 'gallery'));
+    dyn([b.c[0] - .5 - R, b.c[0] + .5 + R, b.c[1] - .5 - R, b.c[1] + .5 + R]);
+  }
+  /* l'album : toutes les photos et vidéos du chapitre, en grille, puis en grand */
+  function openAlbum(chId) {
+    const chapters = sortedChapters(), ch = chapters.find((c) => c.id === chId) || chapters[0], idx = chapters.indexOf(ch);
+    const mems = memoriesOf(ch.id, chapters); if (!mems.length) return;
+    S.album = true; controls(false);
+    const el = h('div', { id: 'album' });
+    const close = () => { io.disconnect(); el.classList.remove('on'); setTimeout(() => el.remove(), 350); S.album = false; controls(true); };
+    const head = h('div', { class: 'ah' }, h('div', {}, h('div', { class: 'k', text: 'Chapitre ' + romanNum(idx + 1) + ' · ' + mems.length + ' souvenirs' }), h('h2', { text: ch.title || 'Sans titre' })), h('button', { class: 'x', 'aria-label': 'Fermer', text: '×', onclick: close }));
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { const im = e.target; io.unobserve(im); mediaSrc(im.dataset.src).then((u) => { if (u) im.src = u; }).catch(() => {}); } }), { root: null, rootMargin: '400px' });
+    const grid = h('div', { class: 'ag' }, mems.map((m, i) => {
+      const im = h('img', { alt: '', draggable: 'false' }); im.dataset.src = m.thumb || m.asset || ''; if (m.thumb || m.asset) io.observe(im);
+      return h('button', { class: 'cell' + (m.video ? ' vid' : '') + (m.wall === true ? ' fav' : ''), 'aria-label': m.title || 'Souvenir', onclick: () => show(i) }, im);
+    }));
+    const lbImg = h('img', { alt: '', draggable: 'false' }), lbVid = h('video', { controls: true, playsinline: true, controlsList: 'nodownload noremoteplayback', disablePictureInPicture: true });
+    lbVid.setAttribute('playsinline', ''); lbVid.setAttribute('controlslist', 'nodownload noremoteplayback');
+    const cap = h('div', { class: 'cap' }), favB = h('button', { class: 'ghost' }), ficheB = h('button', { class: 'ghost', text: 'Ouvrir la fiche' });
+    const lb = h('div', { class: 'lb' }, h('button', { class: 'nav prev', 'aria-label': 'Précédent', text: '‹', onclick: () => show(cur - 1) }), h('div', { class: 'stage' }, lbImg, lbVid), h('button', { class: 'nav next', 'aria-label': 'Suivant', text: '›', onclick: () => show(cur + 1) }),
+      h('div', { class: 'lbb' }, cap, h('div', { class: 'row' }, S.canWrite ? favB : null, ficheB, h('button', { class: 'ghost', text: 'Retour à l\'album', onclick: () => { lbVid.pause(); lb.classList.remove('on'); } }))));
+    let cur = 0, tok = 0;
+    function show(i) {
+      cur = (i + mems.length) % mems.length; const m = mems[cur], my = ++tok; lb.classList.add('on'); lbVid.pause();
+      cap.replaceChildren(h('div', { class: 'k', text: [dateText(m), m.place].filter(Boolean).join(' · ') + '  ·  ' + (cur + 1) + '/' + mems.length }), h('div', { class: 't', text: m.title || '' }));
+      if (m.video) { lbImg.style.display = 'none'; lbVid.style.display = ''; lbVid.removeAttribute('src'); if (m.asset) mediaSrc(m.asset).then((u) => { if (my === tok && u) lbVid.poster = u; }).catch(() => {});
+        videoSrc(m.video).then((u) => { if (my === tok) { lbVid.src = u; lbVid.play().catch(() => {}); } }).catch(() => {}); }
+      else { lbVid.style.display = 'none'; lbImg.style.display = ''; lbImg.removeAttribute('src'); if (m.thumb) mediaSrc(m.thumb).then((u) => { if (my === tok && !lbImg.dataset.full) lbImg.src = u; }).catch(() => {}); lbImg.dataset.full = '';
+        mediaSrc(m.asset).then((u) => { if (my === tok && u) { const pre = new Image(); pre.onload = () => { if (my === tok) { lbImg.src = u; lbImg.dataset.full = '1'; } }; pre.src = u; } }).catch(() => {}); }
+      favB.textContent = m.wall === true ? '★ Au mur (retirer)' : '☆ Mettre au mur';
+      favB.onclick = async () => { const v = m.wall === true ? null : true; try { await S.db.doc('memories/' + m.id).update({ wall: v }); m.wall = v; favB.textContent = v ? '★ Au mur (retirer)' : '☆ Mettre au mur'; grid.children[cur].classList.toggle('fav', !!v); toast(v ? 'Ce souvenir rejoint les tableaux du mur' : 'Retiré du mur (il reste dans l\'album)'); } catch (e) { toast('Impossible'); } };
+      ficheB.onclick = () => { lbVid.pause(); openMemory(m); };
+    }
+    // glisser du doigt pour passer d'une photo à l'autre
+    let sx = null; lb.addEventListener('pointerdown', (e) => { sx = e.clientX; }); lb.addEventListener('pointerup', (e) => { if (sx == null) return; const dx = e.clientX - sx; sx = null; if (Math.abs(dx) > 50 && !e.target.closest('video')) show(cur + (dx < 0 ? 1 : -1)); });
+    document.addEventListener('keydown', function kd(e) { if (!document.body.contains(el)) { document.removeEventListener('keydown', kd); return; } if (S.modal) return; if (e.key === 'Escape') { if (lb.classList.contains('on')) { lbVid.pause(); lb.classList.remove('on'); } else close(); } if (lb.classList.contains('on') && e.key === 'ArrowRight') show(cur + 1); if (lb.classList.contains('on') && e.key === 'ArrowLeft') show(cur - 1); });
+    el.append(head, grid, lb); document.body.append(el); requestAnimationFrame(() => el.classList.add('on'));
+  }
   const LOOP = { XL: -17.2, XR: 16.3, CW: 7, CH: 6, Z0: -12, BL: 4.2 };
   function buildDynamic() {
     W.frames.forEach((f) => f.unload && f.unload());
@@ -1580,7 +1663,7 @@
 
     // ── combien de travées ? chaque travée porte deux cadres (mur extérieur + mur sur le jardin)
     const chapters = sortedChapters();
-    const info = chapters.map((ch) => { const mems = memoriesOf(ch.id, chapters); const slots = mems.length + (S.canWrite ? 1 : 0); return { ch, mems, slots, bays: Math.max(2, Math.ceil(slots / 2)) }; });
+    const info = chapters.map((ch) => { const all = memoriesOf(ch.id, chapters), mems = wallOf(all), album = all.length > mems.length; const slots = mems.length + (S.canWrite && !album ? 1 : 0); return { ch, mems, all, album, slots, bays: Math.max(2, Math.ceil(slots / 2)) }; });
     const need = info.reduce((a, c) => a + c.bays, 0) + 1;
     const n = Math.max(5, Math.ceil((need - 4) / 2)), zc = Z0 - n * BL;   // zc : bord nord du jardin intérieur
     const topBL = ((XR - hw) - (XL + hw)) / 7;
@@ -1641,7 +1724,7 @@
     };
     // ── les chapitres, travée après travée
     let bi = 0; const tour = [];
-    info.forEach(({ ch, mems, slots, bays: nb }, i) => {
+    info.forEach(({ ch, mems, all, album, slots, bays: nb }, i) => {
       const wm = wallMat('plaster', BL, CH, wallColorOf(ch)), first = bays[bi];
       portal(first, wm, [
         { text: 'CHAPITRE ' + romanNum(i + 1), y: .2, size: .2, sans: true, spacing: 10, color: '#b08d57' },
@@ -1652,7 +1735,8 @@
         const b = bays[bi + k]; buildBay(b, wm);
         [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
       }
-      if (nb >= 3) { const b = bays[bi + Math.floor(nb / 2)]; museumBench(D, b.c[0], b.c[1], 2.4, rotOf(b.u)); dyn(rectAt(b.c, b.u, 1.2, .31)); }
+      if (album) albumLectern(D, bays[bi + Math.floor(nb / 2)], ch, all.length, dyn, rotOf);
+      else if (nb >= 3) { const b = bays[bi + Math.floor(nb / 2)]; museumBench(D, b.c[0], b.c[1], 2.4, rotOf(b.u)); dyn(rectAt(b.c, b.u, 1.2, .31)); }
       const tp = at(first.c, first.u, first.o, -first.bl / 2 + 1.4, 0);
       W.zones.push({ name: ch.title || ('Chapitre ' + romanNum(i + 1)), chapter: i + 1, tp: [tp[0], tp[1], Math.atan2(-first.u[0], -first.u[1])], bays: bays.slice(bi, bi + nb) });
       bi += nb;
