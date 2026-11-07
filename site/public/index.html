@@ -5285,22 +5285,25 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const move = (x, z, yaw, pitch, speed) => { const p = pos(), d = Math.hypot(x - p.x, z - p.z); return glideP(x, z, yaw == null ? yawTo(p.x, p.z, x, z) : yaw, pitch || 0, Math.max(1500, d / (speed || 1.25) * 1000)); };
     if (S.seated) { S.seated = false; S.seat = null; document.body.classList.remove('seated'); $('#benchMsg').classList.remove('show'); }
     const chs = sortedChapters();
+    /* durée totale visée : 8 minutes, quel que soit le nombre de photos (arrêts plus courts et pas plus rapide s'il y en a beaucoup) */
+    const views = (W.visitBays || []).filter((v) => v.n).length * 2, per = Math.max(1.6, Math.min(6.5, (480 - 40) / Math.max(1, views)));
+    const moveMs = per * 420, holdMs = per * 580, transit = per < 3 ? 3.2 : 1.6;
     while (alive()) {
       await fadeTo(0, 3.5, 0); if (!alive()) break;
       visitCap(storyFill(cfg.title || 'Le royaume de {elle}'), 'une balade dans vos souvenirs'); await wait(4000);
-      await move(0, (W.entryZ || -14.3) - 1.2); visitCap('', '');
+      await move(0, (W.entryZ || -14.3) - 1.2, null, 0, transit); visitCap('', '');
       let leg = 0, lastCh = null;
       for (const vb of W.visitBays || []) {
         if (!alive()) break;
-        while (leg < vb.leg && alive()) { for (const [x, z] of W.turns[leg] || []) { if (!alive()) break; await move(x, z, null, 0, 1.6); } leg++; }
+        while (leg < vb.leg && alive()) { for (const [x, z] of W.turns[leg] || []) { if (!alive()) break; await move(x, z, null, 0, transit); } leg++; }
         const b = vb.b, z = W.zones.find((zn) => zn.chapter && zn.bays && zn.bays.includes(b));
-        if (z && z !== lastCh) { lastCh = z; visitCap('Chapitre ' + romanNum(z.chapter), z.name); setTimeout(() => { if (lastCh === z) visitCap('', ''); }, 4200); }
+        if (z && z !== lastCh) { lastCh = z; visitCap('Chapitre ' + romanNum(z.chapter), z.name); setTimeout(() => { if (lastCh === z) visitCap('', ''); }, Math.max(2500, per * 1600)); }
         if (!vb.n) continue;
         for (const sd of [1, -1]) {
           if (!alive()) break;
           const px = b.c[0] - b.o[0] * sd * 1.3, pz = b.c[1] - b.o[1] * sd * 1.3, yaw = Math.atan2(-b.o[0] * sd, -b.o[1] * sd);
-          await move(px, pz, yaw, vb.dense ? .1 : .02);
-          await wait(vb.dense ? 3600 : 3000);
+          await glideP(px, pz, yaw, vb.dense ? .1 : .02, moveMs);
+          await wait(holdMs);
         }
       }
       if (!alive()) break;
