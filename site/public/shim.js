@@ -140,9 +140,11 @@
   #door .alt{margin-top:14px;font-size:13px;color:rgba(246,241,231,.65)} #door .alt a{color:#f3c66b;cursor:pointer;text-decoration:underline}
   #door .err{min-height:20px;margin-top:10px;color:#ff9db0;font-size:13.5px}
   #door .heart{font-size:30px;margin-bottom:4px}`;
+  // l'invitation du QR code offert ne sert qu'une fois : ensuite, on propose simplement de se connecter
+  function inviteOf(st) { const i = new URLSearchParams(location.search).get('invite'); return i && /^cadeau-/.test(i) && st && st.giftOpen === false ? null : i; }
   function door(mode, st) {
     let el = document.getElementById('door'); if (!el) { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); el = document.createElement('div'); el.id = 'door'; document.body.appendChild(el); }
-    const invite = new URLSearchParams(location.search).get('invite');
+    const invite = inviteOf(st);
     const first = !st.hasOwner;
     if (mode === 'register' && !first && !invite) mode = 'login';
     const reg = mode === 'register';
@@ -174,8 +176,7 @@
     try { const { user: u } = await api('me'); start(u); }
     catch (e) {
       let st = { hasOwner: true }; try { st = await api('status'); } catch (e2) {}
-      const invite = new URLSearchParams(location.search).get('invite');
-      door(!st.hasOwner || invite ? 'register' : 'login', st);
+      door(!st.hasOwner || inviteOf(st) ? 'register' : 'login', st);
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();

@@ -3,7 +3,7 @@
    Tout est privé : chaque requête doit venir d'une personne connectée. */
 import type { Config, Context } from "@netlify/functions";
 import { getStore } from "@netlify/blobs";
-import { scryptSync, randomBytes } from "node:crypto";
+import { scryptSync, randomBytes, createHash } from "node:crypto";
 import { sign, verify } from "../lib/session.mts";
 
 const store = (name: string) => getStore({ name, consistency: "strong" });
@@ -20,6 +20,10 @@ const err = (code: string, status = 400, message = "") => json({ code, message: 
 const COOKIE = "chateau_sid";
 /* le compte du créateur garde l'identifiant qu'il avait dans la page Claude, pour que ses souvenirs restent signés de lui */
 const OWNER_ID = "u_8efd3NXwrMxqfCwEZxkpiQ";
+/* L'invitation imprimée dans le QR code offert avec les fleurs : valable une seule fois, pour le deuxième compte.
+   Seule son empreinte est ici (le code lui-même n'existe que sur le papier). */
+const GIFT_HASH = "ff296af7bed98711c4424309393233579c04e28077d6c50433d0a3a2022ca6be";
+const isGift = (code: unknown) => typeof code === "string" && createHash("sha256").update(code).digest("hex") === GIFT_HASH;
 const PART = 4 * 1024 * 1024;
 function sessionCookie(token: string, maxAgeS: number) {
   return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeS}`;
@@ -66,7 +70,7 @@ export default async (req: Request, context: Context) => {
     if (route === "status" && m === "GET") {
       const users = await allUsers();
       const imp = await auth().get("meta/imported", { type: "json" });
-      return json({ hasOwner: users.some((u) => u.isOwner), count: users.length, imported: !!imp });
+      return json({ hasOwner: users.some((u) => u.isOwner), count: users.length, imported: !!imp, giftOpen: users.length < 2 });
     }
     if (route === "register" && m === "POST") {
       const { email, password, name, invite } = await req.json();
@@ -74,7 +78,9 @@ export default async (req: Request, context: Context) => {
       if (!password || String(password).length < 8) return err("weak_password", 400, "Le mot de passe doit faire au moins 8 caractères");
       if (await userByEmail(email)) return err("exists", 409, "Un compte existe déjà avec cette adresse");
       const users = await allUsers(), first = !users.length;
-      if (!first) {
+      if (!first && isGift(invite)) {
+        if (users.length >= 2) return err("invite_used", 403, "Ce cadeau a déjà été ouvert : connecte-toi avec ton compte");
+      } else if (!first) {
         const inv = invite && (await auth().get("invite/" + invite, { type: "json" })) as any;
         if (!inv || inv.used) return err("invite_required", 403, "Il faut un lien d'invitation valide");
         await auth().setJSON("invite/" + invite, { ...inv, used: true, usedAt: Date.now() });
