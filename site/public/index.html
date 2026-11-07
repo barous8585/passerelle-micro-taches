@@ -175,10 +175,13 @@
   #story .t { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(18px, 4.4vw, 27px); line-height: 1.34; margin-top: 9px; text-shadow: 0 2px 14px rgba(0,0,0,.6); min-height: 3.2em; }
   #story .t span { opacity: 0; transition: opacity .9s; } #story .t span.v { opacity: 1; }
   #story .k.v { opacity: 1; }
-  #story .ctl { position: absolute; top: calc(12vh - 44px); right: 14px; display: flex; gap: 8px; pointer-events: auto; opacity: 0; transition: opacity 1s 1.2s; }
-  #story.on .ctl { opacity: 1; }
+  #story .ctl { position: absolute; top: calc(12vh - 44px); right: 14px; display: flex; gap: 8px; pointer-events: none; opacity: 0; transition: opacity 1s 1.2s; }
+  #story.on .ctl { opacity: 1; pointer-events: auto; }
+  #story:not(.on) .tap { display: none; }
   #story .ctl button { background: rgba(255,255,255,.1); color: rgba(246,239,226,.85); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 7px 14px; font: 400 12.5px "Jost", sans-serif; cursor: pointer; }
   #story .tap { position: absolute; left: 0; right: 0; bottom: 0; height: max(27vh, 190px); pointer-events: auto; }
+  #story:not(.on) { display: none; }
+  #story.pre { display: block; }
   #story .title { position: absolute; inset: 0; display: grid; place-items: center; background: #000; opacity: 0; transition: opacity 2s; text-align: center; color: #f3d79a; }
   #story .title.on { opacity: 1; }
   #story .title div { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(30px, 8vw, 54px); line-height: 1.15; }
@@ -3375,41 +3378,46 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const infoLine = h('div', { class: 'mini', style: 'margin-top:6px;color:#a3814a' });
     /* deuxième chemin : le sélecteur de fichiers du téléphone (sans autorisation « Photos » du navigateur) */
     const fileAny = h('input', { type: 'file', hidden: true, multiple: true });
+    let dupN = 0;
+    const moreBtn = h('button', { class: 'ghost', type: 'button', hidden: true, style: 'margin-top:8px', text: '＋ Ajouter encore des photos et vidéos', onclick: () => { file.value = ''; file.click(); } });
     const viaFiles = edit ? null : h('button', { class: 'ghost', type: 'button', style: 'margin-top:8px;font-size:13px', text: 'La galerie ne s\'ouvre pas ? Passer par « Fichiers »', onclick: () => fileAny.click() });
     const isMedia = (f) => /^(image|video)\//.test(f.type || '') || /\.(jpe?g|png|heic|heif|webp|gif|mov|mp4|m4v|webm|3gp)$/i.test(f.name || '');
-    fileAny.addEventListener('change', () => { const fs = [...fileAny.files].filter(isMedia); if (!fs.length) { if (fileAny.files.length) toast('Choisis des photos ou des vidéos'); return; } onPick(fs); });
-    file.addEventListener('change', () => onPick([...file.files]));
+    fileAny.addEventListener('change', () => { const fs = [...fileAny.files].filter(isMedia); fileAny.value = ''; if (!fs.length) { if (fileAny.files.length) toast('Choisis des photos ou des vidéos'); return; } onPick(fs); });
+    file.addEventListener('change', () => { const fs = [...file.files]; file.value = ''; onPick(fs); });
     async function onPick(fs) {
       if (!fs.length) return;
-      if (fs.length === 1 && !isVideoFile(fs[0])) {
+      if (edit || (fs.length === 1 && !isVideoFile(fs[0]) && !picked && !(batch && batch.length))) {
         const f = fs[0]; picked = f; batch = null; const u = URL.createObjectURL(f); preview.replaceChildren(h('img', { src: u, alt: '' }), h('span', { class: 'mini', text: f.name }));
         const info = await readPhotoInfo(f); const got = [];
         if (info.date && !date.value) { date.value = info.date; got.push((info.guess ? 'date approximative ' : 'date ') + frDate(info.date)); }
         if (info.lat != null && !coords) { coords = { lat: info.lat, lon: info.lon }; picker.set(coords); if (info.place && !placeIn.value) placeIn.value = info.place; got.push(info.place ? '📍 ' + info.place : '📍 position GPS'); placeStatus.textContent = '📍 Lieu de la photo placé sur le globe'; }
         if (!title.value.trim() && (info.date || info.place)) { title.value = autoTitle(info); got.push('titre proposé'); }
         infoLine.textContent = got.length ? '✨ Trouvé dans la photo : ' + got.join(' · ') + ' (tu peux tout modifier)' : 'Cette photo ne contient pas de date ni de lieu : remplis-les à la main.';
-        btn.textContent = 'Accrocher au mur';
+        btn.textContent = 'Accrocher au mur'; if (!edit) moreBtn.hidden = false;
         return;
       }
-      picked = null; batch = [];
+      // sélection qui s'additionne : on peut rouvrir la galerie autant de fois qu'on veut
+      if (!batch) batch = [];
+      if (picked) { const f0 = picked; picked = null; batch.push({ f: f0, info: await readPhotoInfo(f0), vid: false, fkey: fileKey(f0) }); }
       const grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:5px;width:100%' });
-      const nV = fs.filter(isVideoFile).length, nP = fs.length - nV;
-      preview.replaceChildren(grid, h('span', { class: 'mini', text: countText(nP, nV) + ' · lecture des dates et des lieux…' }));
-      const known = new Set((S.memories || []).map((m) => m.fkey).filter(Boolean));
-      let k = 0, dup = 0;
+      preview.replaceChildren(grid, h('span', { class: 'mini', text: 'Lecture des dates et des lieux…' }));
+      const known = new Set((S.memories || []).map((m) => m.fkey).filter(Boolean).concat(batch.map((x) => x.fkey)));
+      let k = 0;
       for (const f of fs) {
         k++; if (k % 8 === 0) preview.lastChild.textContent = `Lecture ${k}/${fs.length}…`;
         const vid = isVideoFile(f), fkey = fileKey(f);
-        if (known.has(fkey)) { dup++; continue; }
+        if (known.has(fkey)) { dupN++; continue; } known.add(fkey);
         const info = vid ? await readVideoInfo(f) : await readPhotoInfo(f);
         batch.push({ f, info, vid, fkey });
-        if (grid.childElementCount < 23) grid.append(vid ? h('div', { style: 'aspect-ratio:1;border-radius:6px;background:#2a2019;color:#f3e3c4;display:grid;place-items:center;font-size:22px', text: '🎬' }) : h('div', { style: `aspect-ratio:1;border-radius:6px;background:#3a2e26 url("${URL.createObjectURL(f)}") center/cover no-repeat` }));
       }
-      if (batch.length > 23) grid.append(h('div', { style: 'aspect-ratio:1;border-radius:6px;background:rgba(176,141,87,.18);color:#8a6a32;display:grid;place-items:center;font:500 15px Jost,sans-serif', text: '+' + (batch.length - 23) }));
+      const dup = dupN;
+      batch.slice(-23).forEach((x) => grid.append(x.vid ? h('div', { style: 'aspect-ratio:1;border-radius:6px;background:#2a2019;color:#f3e3c4;display:grid;place-items:center;font-size:22px', text: '🎬' }) : h('div', { style: `aspect-ratio:1;border-radius:6px;background:#3a2e26 url("${x.thumb || (x.thumb = URL.createObjectURL(x.f))}") center/cover no-repeat` })));
+      if (batch.length > 23) grid.prepend(h('div', { style: 'aspect-ratio:1;border-radius:6px;background:rgba(176,141,87,.18);color:#8a6a32;display:grid;place-items:center;font:500 15px Jost,sans-serif', text: '+' + (batch.length - 23) }));
+      moreBtn.hidden = false;
       batch.sort((a, b) => ((a.info.date || '9') + (a.info.time || '')).localeCompare((b.info.date || '9') + (b.info.time || '')));
       const withDate = batch.filter((x) => x.info.date && !x.info.guess).length, withPlace = batch.filter((x) => x.info.lat != null).length;
       const bv = batch.filter((x) => x.vid).length;
-      preview.lastChild.textContent = batch.length ? `${countText(batch.length - bv, bv)} · ${withDate} avec leur date · ${withPlace} avec leur lieu${dup ? ` · ${dup} déjà accrochée${dup > 1 ? 's' : ''} (ignorée${dup > 1 ? 's' : ''})` : ''}` : 'Elles sont toutes déjà accrochées ✨';
+      preview.lastChild.textContent = batch.length ? `${countText(batch.length - bv, bv)} · ${withDate} avec leur date · ${withPlace} avec leur lieu${dup ? ` · ${dup} en double (ignorée${dup > 1 ? "s" : ""})` : ''}` : 'Elles sont toutes déjà accrochées ✨';
       arrangeField.style.display = batch.length > 1 ? '' : 'none';
       const syncArr = () => { chapterField.firstChild.textContent = arrange.value === 'choisi' || batch.length < 2 ? 'Chapitre' : 'Chapitre (pour celles sans date)'; }; arrange.onchange = syncArr; setTimeout(syncArr);
       if (batch.length > 1 && !tabOpts.chapterId) arrange.value = 'mois'; else arrange.value = 'choisi';
@@ -3460,7 +3468,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       }
     });
     return [h('p', { class: 'lead', text: edit ? 'Modifie ce souvenir. Une nouvelle photo remplace l\'ancienne.' : 'Une photo, un titre, une date : le souvenir se range tout seul à sa place dans le chapitre.' }),
-      preview, viaFiles, fileAny, infoLine, file, arrangeField, chapterField, field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn, bar];
+      preview, moreBtn, viaFiles, fileAny, infoLine, file, arrangeField, chapterField, field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn, bar];
   }
 
 
@@ -3538,24 +3546,33 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         const top = [...places].sort((a, b) => b[1] - a[1])[0];
         chapterFor.set(norm2(t), await createChapter(t, top ? (/^[aeiouyhâàéèêëîïôûü]/i.test(top[0]) ? 'du côté d\'' : 'du côté de ') + top[0] : ''));
       }
-      for (const x of batch) {
-        k++; const lab = `Accrochage ${k}/${batch.length}`, fr = (k - 1) / batch.length;
-        btn.textContent = lab + '…'; if (fill) fill.style.width = Math.round(fr * 100) + '%'; bulkBadge(lab + (x.vid ? ' · vidéo' : '') + '…', fr);
-        try {
-          const chapterId = x.group ? chapterFor.get(norm2(x.group)) : await ensureFallback();
-          const { info } = x, data = { chapterId, title: o.title || autoTitle(info), date: info.date || '', dateLabel: '', place: info.place || '', lat: info.lat != null ? +info.lat.toFixed(3) : null, lon: info.lon != null ? +info.lon.toFixed(3) : null,
-            story: o.story, style: o.style, sound: x.vid ? '' : o.sound, fkey: x.fkey, author: S.meId, createdAt: Date.now() + k };
-          if (x.vid) {
-            if (x.f.size > VID_MAX) throw { code: 'too_large' };
-            const pst = await videoPoster(x.f);
-            data.video = await storeVideo(x.f, (t2) => bulkBadge(lab + ' · ' + t2.replace(/…$/, '') + '…', fr));
-            data.asset = await storeImage(pst.blob); data.aspect = pst.aspect; if (pst.duration) data.duration = Math.round(pst.duration);
-          } else {
-            const { blob, aspect } = await prepareImage(x.f); data.asset = await storeImage(blob); data.aspect = aspect;
-          }
-          await S.db.collection('memories').doc().set(data); ok++;
-        } catch (e) { failed++; console.warn('accrochage impossible', x.f && x.f.name, e); if (e && e.code === 'quota_exceeded') { toast('Le stockage est plein : accrochage arrêté'); break; } }
-      }
+      if (batch.some((x) => !x.group)) await ensureFallback();
+      // trois envois à la fois : bien plus rapide, sans saturer le téléphone
+      let next = 0, stop = false, done = 0; const base = Date.now();
+      const label = () => `Accrochage ${Math.min(done + 1, batch.length)}/${batch.length}`;
+      const tick = (extra) => { const fr = done / batch.length; btn.textContent = label() + '…'; if (fill) fill.style.width = Math.round(fr * 100) + '%'; bulkBadge(label() + (extra || '') + '…', fr); };
+      const worker = async () => {
+        while (!stop && next < batch.length) {
+          const i = next++, x = batch[i]; tick(x.vid ? ' · vidéo' : '');
+          try {
+            const chapterId = x.group ? chapterFor.get(norm2(x.group)) : fallbackId;
+            const { info } = x, data = { chapterId, title: o.title || autoTitle(info), date: info.date || '', dateLabel: '', place: info.place || '', lat: info.lat != null ? +info.lat.toFixed(3) : null, lon: info.lon != null ? +info.lon.toFixed(3) : null,
+              story: o.story, style: o.style, sound: x.vid ? '' : o.sound, fkey: x.fkey, author: S.meId, createdAt: base + i };
+            if (x.vid) {
+              if (x.f.size > VID_MAX) throw { code: 'too_large' };
+              const pst = await videoPoster(x.f);
+              data.video = await storeVideo(x.f, (t2) => bulkBadge(label() + ' · ' + t2.replace(/…$/, '') + '…', done / batch.length));
+              data.asset = await storeImage(pst.blob); data.aspect = pst.aspect; if (pst.duration) data.duration = Math.round(pst.duration);
+            } else {
+              const { blob, aspect } = await prepareImage(x.f); data.asset = await storeImage(blob); data.aspect = aspect;
+            }
+            await S.db.collection('memories').doc().set(data); ok++;
+          } catch (e) { failed++; console.warn('accrochage impossible', x.f && x.f.name, e); if (e && e.code === 'quota_exceeded') { stop = true; toast('Le stockage est plein : accrochage arrêté'); } }
+          if (x.thumb) { URL.revokeObjectURL(x.thumb); x.thumb = null; }
+          done++; tick();
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
     } finally {
       S.bulk = false; if (lock) lock.release().catch(() => {}); bulkBadge(null); scheduleRebuild();
     }
@@ -4863,7 +4880,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const page = (sc, extraMs) => storyPage(sc.kicker, storyFill((texts[sc.key] || '').trim() || sc.def), extraMs);
     try {
       // ouverture au noir
-      el.querySelector('.title').classList.add('on'); el.classList.add('on');
+      el.classList.add('on'); el.querySelector('.title').classList.add('on');
       await glideP(0, 70, 0, .1, 50); cx = 0; cz = 70;
       await storyTitle(storyFill(cfg.title || 'Le royaume de {elle}'), 'un conte', 3600);
       for (const sc of STORY) {
