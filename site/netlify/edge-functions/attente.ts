@@ -28,13 +28,13 @@ const page = (reste: number, version: string) => `<!doctype html>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0}
-  html,body{height:100%}
+  html,body{height:100%;overflow:hidden;overscroll-behavior:none;position:fixed;inset:0;width:100%;touch-action:none;-webkit-user-select:none;user-select:none}
   body{background:radial-gradient(120% 90% at 50% 0%,#2a1730 0%,#140c1c 55%,#0a0710 100%);color:#f6efe2;font-family:'Cormorant Garamond',Georgia,serif;display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow:hidden;text-align:center}
   canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
   main{position:relative;z-index:2;max-width:520px;width:100%}
-  .fond{position:fixed;inset:0;z-index:0;opacity:0}
+  .fond{position:fixed;top:0;left:0;width:100%;height:100vh;height:100lvh;z-index:0;opacity:0;pointer-events:none}
   .fond.on{opacity:1}
-  .fond img{width:100%;height:100%;object-fit:cover;object-position:52% 38%}
+  .fond img{display:block;width:100%;height:100%;-webkit-user-drag:none;object-fit:cover;object-position:52% 38%}
   .fond::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,16,.15) 0%,rgba(10,6,16,0) 30%,rgba(10,6,16,.55) 55%,rgba(10,6,16,.92) 78%,#0a0710 100%)}
   body.photo-on{align-items:flex-end;padding-bottom:max(26px,env(safe-area-inset-bottom));background:#0d0914}
 
@@ -42,7 +42,7 @@ const page = (reste: number, version: string) => `<!doctype html>
   body.photo-on h1,body.photo-on p,body.photo-on .bas{text-shadow:0 2px 14px rgba(0,0,0,.65)}
   body.photo-on .cpt div{background:rgba(10,6,16,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .sans .coeur{font-size:44px}
-  .coeur{font-size:44px;color:#e2486a;text-shadow:0 0 24px rgba(226,72,106,.6);will-change:transform}
+  .coeur{font-size:44px;color:#e2486a;text-shadow:0 0 24px rgba(226,72,106,.6)}
   .k{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:#d6ad62;margin:30px 0 8px}
   .sans .k{margin-top:18px}
   h1{font-weight:500;font-style:italic;font-size:clamp(38px,9vw,56px);line-height:1.05}
