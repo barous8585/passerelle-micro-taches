@@ -5,6 +5,7 @@ import type { Config, Context } from "@netlify/functions";
 import { getStore } from "@netlify/blobs";
 import { scryptSync, randomBytes, createHash } from "node:crypto";
 import { sign, verify } from "../lib/session.mts";
+import webpush from "web-push";
 
 const store = (name: string) => getStore({ name, consistency: "strong" });
 const auth = () => store("chateau-auth");
@@ -61,6 +62,53 @@ async function logChange(path: string, t: number) {
   await docs().setJSON(`log/${hourKey(t)}/${String(t).padStart(15, "0")}-${randomBytes(3).toString("hex")}`, { path, t });
 }
 async function readDoc(path: string) { return (await docs().get("d/" + path, { type: "json" })) as { data: any; t: number } | null; }
+
+/* ── notifications sur le téléphone (Web Push) ──
+   Les clés de l'app sont créées une seule fois et gardées côté serveur. */
+const pushStore = () => store("chateau-push");
+async function vapid(): Promise<{ publicKey: string; privateKey: string }> {
+  let v = (await auth().get("meta/vapid", { type: "json" })) as any;
+  if (!v) { await auth().setJSON("meta/vapid", webpush.generateVAPIDKeys(), { onlyIfNew: true }); v = await auth().get("meta/vapid", { type: "json" }); }
+  return v;
+}
+const subKey = (uid: string, endpoint: string) => `sub/${uid}/${createHash("sha256").update(endpoint).digest("hex").slice(0, 32)}`;
+async function pushTo(uids: string[], payload: Record<string, unknown>) {
+  if (!uids.length) return 0;
+  const v = await vapid(); webpush.setVapidDetails("https://hadiatoukaba.fr", v.publicKey, v.privateKey);
+  let sent = 0;
+  for (const uid of uids) {
+    const { blobs } = await pushStore().list({ prefix: `sub/${uid}/` });
+    for (const b of blobs) {
+      const rec = (await pushStore().get(b.key, { type: "json" })) as any; if (!rec || !rec.sub) continue;
+      try { await webpush.sendNotification(rec.sub, JSON.stringify(payload), { TTL: 60 * 60 * 24, urgency: "high" }); sent++; }
+      catch (e: any) { if (e && (e.statusCode === 404 || e.statusCode === 410)) await pushStore().delete(b.key); else console.warn("push", e && e.statusCode, e && e.body); }
+    }
+  }
+  return sent;
+}
+/* prévenir l'autre ; une seule fois par moment (pas 200 notifications pour 200 photos) */
+async function notifyOthers(me: User, kind: string, body: string, quietMs: number) {
+  const tk = `thr/${me.id}/${kind}`, now = Date.now();
+  const last = (await pushStore().get(tk, { type: "json" })) as any;
+  if (last && now - last.t < quietMs) return;
+  await pushStore().setJSON(tk, { t: now });
+  const others = (await allUsers()).filter((u) => u.id !== me.id).map((u) => u.id);
+  await pushTo(others, { title: "Notre château", body, tag: kind, url: "/" });
+}
+const firstName = (u: User) => (u.name || "").split(/\s+/)[0] || "Ton amour";
+const NOTIF: Record<string, [string, number]> = {
+  memories: ["{n} a accroché de nouveaux souvenirs dans le château 🖼️", 20 * 60e3],
+  letters: ["{n} t'a écrit une lettre 💌", 2 * 60e3],
+  notes: ["{n} t'a laissé un mot du jour 📝", 5 * 60e3],
+  reasons: ["{n} a ajouté une raison de t'aimer ♥", 10 * 60e3],
+  wishes: ["{n} a fait un vœu dans le jardin ✨", 10 * 60e3],
+  capsules: ["{n} a enterré une capsule temporelle ⏳", 10 * 60e3],
+  firsts: ["{n} a noté une nouvelle première fois 🌱", 10 * 60e3],
+  treasures: ["{n} a déposé un trésor 💎", 10 * 60e3],
+  projects: ["{n} a ajouté un projet pour vous deux 🗺️", 10 * 60e3],
+  library: ["{n} a rangé quelque chose dans la bibliothèque 📚", 10 * 60e3],
+  sounds: ["{n} a ajouté un son au phonographe 🎼", 10 * 60e3],
+};
 
 /* ── la fonction ── */
 export default async (req: Request, context: Context) => {
@@ -149,6 +197,17 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
       return json({ ok: true });
     }
 
+    /* notifications */
+    if (route === "push/key" && m === "GET") return json({ key: (await vapid()).publicKey });
+    if (route === "push/subscribe" && m === "POST") {
+      const { sub } = await req.json();
+      if (!sub || typeof sub.endpoint !== "string" || !/^https:\/\//.test(sub.endpoint) || !sub.keys) return err("bad_request", 400, "Abonnement invalide");
+      await pushStore().setJSON(subKey(me.id, sub.endpoint), { sub, ua: (req.headers.get("user-agent") || "").slice(0, 160), at: Date.now() });
+      return json({ ok: true });
+    }
+    if (route === "push/unsubscribe" && m === "POST") { const { endpoint } = await req.json(); if (endpoint) await pushStore().delete(subKey(me.id, String(endpoint))); return json({ ok: true }); }
+    if (route === "push/test" && m === "POST") { const n = await pushTo([me.id], { title: "Notre château", body: "Les notifications sont activées ✨ Tu seras prévenu·e quand quelque chose de nouveau arrive.", tag: "test", url: "/" }); return json({ sent: n }); }
+
     /* documents */
     if (route === "doc") {
       const path = url.searchParams.get("path") || "";
@@ -158,10 +217,13 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
       if (m === "PUT" || m === "PATCH") {
         const body = await req.json(); const t = Date.now();
         let data = body.data;
+        let isNew = false;
         if (m === "PATCH") { const cur = await readDoc(path); if (!cur || (cur as any).deleted) return err("not_found", 404, "Document introuvable"); data = { ...cur.data, ...data }; }
+        else { const segs = path.split("/"), col = segs[segs.length - 2]; if (NOTIF[col] && !isPrivatePath(path)) { const cur = await readDoc(path); isNew = !cur || !!(cur as any).deleted; } }
         const raw = JSON.stringify({ data, t });
         if (raw.length > 900_000) return err("too_large", 413, "Document trop volumineux");
         await docs().set("d/" + path, raw); await logChange(path, t);
+        if (isNew) { const segs = path.split("/"), [txt, quiet] = NOTIF[segs[segs.length - 2]]; const p = notifyOthers(me, segs[segs.length - 2], txt.replace("{n}", firstName(me)), quiet).catch((e) => console.warn("notif", e)); if ((context as any).waitUntil) (context as any).waitUntil(p); else await p; }
         return json({ ok: true, t });
       }
       if (m === "DELETE") { const t = Date.now(); await docs().setJSON("d/" + path, { deleted: true, t }); await logChange(path, t); return json({ ok: true }); }
@@ -218,7 +280,11 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
     /* présence en direct : chacun dépose sa position, reçoit celle de l'autre et les cœurs envoyés */
     if (route === "room" && m === "POST") {
       const { presence, emit, since } = await req.json(); const now = Date.now();
-      if (presence) await live().setJSON("p/" + me.id, { presence, at: now, by: me.id });
+      if (presence) {
+        const prev = (await live().get("p/" + me.id, { type: "json" })) as any;
+        await live().setJSON("p/" + me.id, { presence, at: now, by: me.id });
+        if (!prev || now - prev.at > 30 * 60e3) { const p = notifyOthers(me, "presence", `${firstName(me)} vient d'entrer dans le château 🏰`, 30 * 60e3).catch((e) => console.warn("notif", e)); if ((context as any).waitUntil) (context as any).waitUntil(p); else await p; }
+      }
       if (emit && emit.topic) await live().setJSON(`e/${String(now).padStart(15, "0")}-${randomBytes(3).toString("hex")}`, { topic: String(emit.topic).slice(0, 30), data: emit.data || {}, by: me.id, at: now });
       const { blobs } = await live().list({ prefix: "p/" });
       const peers = (await Promise.all(blobs.map((b) => live().get(b.key, { type: "json" })))).filter((p: any) => p && now - p.at < 15000);

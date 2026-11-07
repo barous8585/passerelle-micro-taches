@@ -4,7 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#0b0f24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Notre château">
 <script src="/shim.js"></script>
+<script src="/app.js" defer></script>
 <title>Notre château</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3760,6 +3768,17 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         const inp = h('input', { type: 'file', accept: '.json,application/json', style: 'display:none' }); document.body.appendChild(inp);
         inp.addEventListener('change', async () => { const f = inp.files[0]; inp.remove(); if (!f) return; try { const r = await NF.importFile(f, (t) => toast(t)); toast(r.already ? 'Vos souvenirs étaient déjà installés' : 'Souvenirs installés ✨ (' + r.docs + ' éléments, ' + r.files + ' fichiers)'); } catch (er) { toast(er.message || 'Import impossible'); } });
         inp.click(); } }) : null,
+      (() => { const A = window.__chateauApp; if (!A) return null;
+        const line = h('div', { class: 'mini', style: 'margin-top:12px', text: '…' });
+        const nb = h('button', { class: 'ghost', text: '🔔 Notifications', style: 'margin-top:6px' });
+        const ib = h('button', { class: 'ghost', text: '📱 Installer l\'app sur ce téléphone', style: 'margin-top:8px;display:none' });
+        const refresh = async () => { const st = await A.notifState().catch(() => 'unsupported');
+          line.textContent = { on: '🔔 Notifications activées sur cet appareil', off: 'Notifications désactivées sur cet appareil', denied: 'Notifications bloquées : autorise-les dans les réglages du téléphone', 'ios-install': 'Sur iPhone : Partager ⬆︎ puis « Sur l\'écran d\'accueil », puis ouvre l\'app depuis son icône pour activer les notifications', unsupported: 'Ce navigateur ne gère pas les notifications' }[st] || '';
+          nb.textContent = st === 'on' ? '🔕 Couper les notifications' : '🔔 Activer les notifications'; nb.style.display = st === 'on' || st === 'off' ? '' : 'none';
+          ib.style.display = A.canInstall() && !A.standalone() ? '' : 'none'; };
+        nb.onclick = async () => { nb.disabled = true; try { if ((await A.notifState()) === 'on') { await A.disableNotifs(); toast('Notifications coupées'); } else { await A.enableNotifs(); toast('Notifications activées ✨'); } } catch (er) { toast(er.message || 'Impossible'); } nb.disabled = false; refresh(); };
+        ib.onclick = async () => { await A.install(); refresh(); };
+        refresh(); return h('div', {}, line, nb, ib); })(),
       h('button', { class: 'ghost', text: '🔑 Changer mon mot de passe', style: 'margin-top:8px', onclick: async () => {
         const cur = prompt('Mot de passe actuel'); if (!cur) return; const nx = prompt('Nouveau mot de passe (8 caractères minimum)'); if (!nx) return;
         try { await NF.password(cur, nx); toast('Mot de passe changé'); } catch (er) { toast(er.message || 'Changement impossible'); } } }),

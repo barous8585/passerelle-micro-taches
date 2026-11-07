@@ -39,6 +39,7 @@ const PHOTO = "ZnREzWHoqt1EkqdbKaxCpeIFo0yWxLUtIHcpdwAwfegWFQFloem4cfoE4oQ27ciL8
 const page = (reste: number, version: string) => `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Notre château"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="robots" content="noindex, nofollow">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0a0710">
