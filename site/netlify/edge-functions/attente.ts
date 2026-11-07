@@ -34,7 +34,7 @@ const page = (reste: number) => `<!doctype html>
   .photo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:14px}
   .photo .coeur{position:absolute;left:50%;bottom:-24px;transform:translateX(-50%);font-size:38px}
   .sans .coeur{font-size:44px}
-  .coeur{font-size:44px;color:#e2486a;animation:bat 1.6s ease-in-out infinite;text-shadow:0 0 24px rgba(226,72,106,.6)}
+  .coeur{font-size:44px;color:#e2486a;animation:bat 1.6s ease-in-out infinite;text-shadow:0 0 24px rgba(226,72,106,.6);will-change:transform}
   @keyframes bat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.12)}}
   .k{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:#d6ad62;margin:30px 0 8px}
   .sans .k{margin-top:18px}
@@ -47,7 +47,7 @@ const page = (reste: number) => `<!doctype html>
   .h{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1;font-style:normal;font-weight:500;color:#f3d79a}
   .bas{font-size:16.5px;margin-top:18px;color:rgba(246,239,226,.6)}
 </style></head><body>
-<canvas id="c"></canvas>
+<canvas id="c"></canvas><canvas id="c2"></canvas>
 <main class="sans">
   <div class="photo" id="ph" hidden><img id="im" alt="Nous deux"><div class="coeur">♥</div></div>
   <div class="coeur" id="c0">♥</div>
@@ -81,10 +81,17 @@ const page = (reste: number) => `<!doctype html>
       im.src = URL.createObjectURL(new Blob([jpg], { type: 'image/jpeg' }));
     } catch (e) {}
   })();
-  // un ciel d'étoiles qui scintillent
-  const c = document.getElementById('c'), x = c.getContext('2d'); let W, H, E = [];
-  const taille = () => { W = c.width = innerWidth * devicePixelRatio; H = c.height = innerHeight * devicePixelRatio; E = Array.from({ length: 140 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (Math.random() * 1.3 + .3) * devicePixelRatio, p: Math.random() * 6.28 })); };
+  // un ciel d'étoiles : dessiné une seule fois ; seules quelques étoiles scintillent, 12 fois par seconde
+  const c = document.getElementById('c'), c2 = document.getElementById('c2'), x = c.getContext('2d'), x2 = c2.getContext('2d');
+  const R = Math.min(devicePixelRatio || 1, 1.5); let W, H, T = [];
+  const taille = () => {
+    W = c.width = c2.width = Math.round(innerWidth * R); H = c.height = c2.height = Math.round(innerHeight * R);
+    x.clearRect(0, 0, W, H); x.fillStyle = '#fff4dc';
+    for (let i = 0; i < 120; i++) { x.globalAlpha = .25 + Math.random() * .6; x.beginPath(); x.arc(Math.random() * W, Math.random() * H, (Math.random() * 1.2 + .3) * R, 0, 7); x.fill(); }
+    T = Array.from({ length: 22 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (Math.random() * 1.1 + .7) * R, p: Math.random() * 6.28 }));
+  };
   addEventListener('resize', taille); taille();
-  (function ciel(t) { x.clearRect(0, 0, W, H); E.forEach((e) => { x.globalAlpha = .35 + .65 * Math.abs(Math.sin(t / 1400 + e.p)); x.fillStyle = '#fff4dc'; x.beginPath(); x.arc(e.x, e.y, e.r, 0, 7); x.fill(); }); requestAnimationFrame(ciel); })(0);
+  const scint = () => { const t = performance.now(); x2.clearRect(0, 0, W, H); x2.fillStyle = '#fff4dc'; T.forEach((e) => { x2.globalAlpha = Math.abs(Math.sin(t / 900 + e.p)); x2.beginPath(); x2.arc(e.x, e.y, e.r, 0, 7); x2.fill(); }); };
+  scint(); setInterval(() => { if (!document.hidden) scint(); }, 85);
 </script>
 </body></html>`;
