@@ -92,9 +92,9 @@
   /* ─── HUD ─── */
   .hud { position: fixed; z-index: 20; opacity: 0; pointer-events: none; transition: opacity 1s; }
   body.entered .hud { opacity: 1; }
-  #brand { top: max(16px, env(safe-area-inset-top, 0px)); left: max(18px, env(safe-area-inset-left, 0px)); text-shadow: 0 1px 14px rgba(0,0,0,.5); }
+  #brand { top: max(16px, env(safe-area-inset-top, 0px)); left: max(18px, env(safe-area-inset-left, 0px)); text-shadow: 0 1px 3px rgba(0,0,0,.85), 0 1px 14px rgba(0,0,0,.6); }
   #brandNames { font-family: var(--display); font-size: 19px; letter-spacing: .04em; }
-  #brandPlace { font-size: 10px; letter-spacing: .36em; text-transform: uppercase; color: var(--gold); margin-top: 3px; transition: opacity .6s; }
+  #brandPlace { font-size: 10px; letter-spacing: .36em; text-transform: uppercase; color: #f3d79a; margin-top: 3px; transition: opacity .6s; text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 12px rgba(0,0,0,.6); }
   #hintBox {
     top: max(16px, env(safe-area-inset-top, 0px)); right: max(18px, env(safe-area-inset-right, 0px));
     max-width: 260px; text-align: right; font-size: 12px; line-height: 1.65; padding: 10px 14px;
@@ -994,12 +994,15 @@
     const rim = new THREE.Mesh(new THREE.TorusGeometry(3.2, .16, 10, 48), stoneM); rim.rotation.x = Math.PI / 2; rim.position.set(0, .7, fz); root.add(rim);
     const water = new THREE.Mesh(new THREE.CircleGeometry(3.15, 48), new THREE.MeshStandardMaterial({ color: '#1d3f6b', emissive: '#16305a', emissiveIntensity: .6, roughness: .08, metalness: .3, transparent: true, opacity: .92 }));
     water.rotation.x = -Math.PI / 2; water.position.set(0, .55, fz); root.add(water); W.fountainWater = water;
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(.28, .4, 1.8, 16), stoneM); col.position.set(0, 1.1, fz); root.add(col);
-    const bowl = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), stoneM); bowl.scale.set(1.1, .45, 1.1); bowl.position.set(0, 2.2, fz); root.add(bowl);
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(.22, 20, 12), new THREE.MeshBasicMaterial({ color: '#ffe7b3' })); orb.position.set(0, 2.55, fz); root.add(orb);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(.14, .24, 1.05, 16), stoneM); col.position.set(0, .95, fz); root.add(col);
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), stoneM); bowl.scale.set(.85, .3, .85); bowl.position.set(0, 1.55, fz); root.add(bowl);
+    { const bw = new THREE.Mesh(new THREE.CircleGeometry(.8, 32), water.material); bw.rotation.x = -Math.PI / 2; bw.position.set(0, 1.52, fz); root.add(bw);
+      const br = new THREE.Mesh(new THREE.TorusGeometry(.84, .05, 8, 40), stoneM); br.rotation.x = Math.PI / 2; br.position.set(0, 1.55, fz); root.add(br);
+      const tip = new THREE.Mesh(new THREE.CylinderGeometry(.06, .1, .45, 12), stoneM); tip.position.set(0, 1.75, fz); root.add(tip); }
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(.16, 20, 12), new THREE.MeshBasicMaterial({ color: '#ffe7b3' })); orb.position.set(0, 2.1, fz); root.add(orb);
     const og = glowSprite('#ffcf7a', 3, .8); og.position.copy(orb.position); root.add(og);
     const fl = new THREE.PointLight('#8fb6ff', 6, 12, 1.4); fl.position.set(0, 1.2, fz); root.add(fl);
-    W.anim.push((t) => { water.material.emissiveIntensity = .5 + Math.sin(t * 1.6) * .15; orb.position.y = 2.55 + Math.sin(t * 1.2) * .06; og.position.y = orb.position.y; });
+    W.anim.push((t) => { water.material.emissiveIntensity = .5 + Math.sin(t * 1.6) * .15; orb.position.y = 2.1 + Math.sin(t * 1.2) * .04; og.position.y = orb.position.y; });
     OBST.push([-3.5 - R, 3.5 + R, fz - 3.5 - R, fz + 3.5 + R]);
     const fhit = new THREE.Group(); fhit.add(basin.clone(), col.clone()); fhit.visible = true; fhit.children.forEach((c) => { c.material = new THREE.MeshBasicMaterial({ visible: false }); });
     fhit.children.forEach((c) => { c.position.z -= fz; }); fhit.position.set(0, 0, fz); root.add(fhit);
@@ -2741,20 +2744,35 @@ transformed.y += wing * abs(transformed.x) * fl * 1.1;`);
     });
   }
   function buildButterflies(root) {
-    const N = 34, geo = new THREE.BufferGeometry();
-    const v = [0, 0, 0, -.12, 0, .08, -.1, 0, -.09,   0, 0, 0, .1, 0, -.09, .12, 0, .08];
-    const side = [0, -1, -1, 0, 1, 1];
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); geo.setAttribute('side', new THREE.Float32BufferAttribute(side, 1));
-    const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, toneMapped: false });
+    const N = 26, geo = new THREE.BufferGeometry(), w = .15, l = .12;
+    // deux ailes (des rectangles texturés) ; l'attribut « side » dit de quel côté du corps
+    const v = [], uv = [], side = [], idx = [];
+    [-1, 1].forEach((sd, k) => {
+      const o = k * 4; v.push(0, 0, -l, sd * w, 0, -l, sd * w, 0, l, 0, 0, l); uv.push(1, 0, 0, 0, 0, 1, 1, 1); side.push(sd, sd, sd, sd);
+      idx.push(o, o + 1, o + 2, o, o + 2, o + 3);
+    });
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setAttribute('side', new THREE.Float32BufferAttribute(side, 1)); geo.setIndex(idx);
+    // une aile : grand lobe avant, petit lobe arrière, nervures et liseré sombre
+    const wing = textTexture(128, 128, (c, sz) => {
+      c.clearRect(0, 0, sz, sz); c.save();
+      const lobe = (cx, cy, rx, ry, rot) => { c.beginPath(); c.ellipse(cx, cy, rx, ry, rot, 0, Math.PI * 2); };
+      c.fillStyle = '#ffffff'; lobe(sz * .5, sz * .34, sz * .46, sz * .3, -.35); c.fill(); lobe(sz * .56, sz * .74, sz * .3, sz * .22, .4); c.fill();
+      c.globalCompositeOperation = 'source-atop';
+      c.strokeStyle = 'rgba(30,20,30,.85)'; c.lineWidth = sz * .07; lobe(sz * .5, sz * .34, sz * .46, sz * .3, -.35); c.stroke(); lobe(sz * .56, sz * .74, sz * .3, sz * .22, .4); c.stroke();
+      c.strokeStyle = 'rgba(30,20,30,.35)'; c.lineWidth = 2; for (let i = 0; i < 4; i++) { c.beginPath(); c.moveTo(sz, sz * .5); c.lineTo(sz * (.15 + i * .12), sz * (.12 + i * .2)); c.stroke(); }
+      c.fillStyle = 'rgba(255,255,255,.9)'; [[.3, .26], [.45, .2]].forEach(([x, y]) => { c.beginPath(); c.arc(sz * x, sz * y, sz * .045, 0, 7); c.fill(); });
+      c.restore();
+    });
+    const mat = new THREE.MeshBasicMaterial({ map: wing, side: THREE.DoubleSide, alphaTest: .5, toneMapped: false });
     mat.onBeforeCompile = (sh) => {
       sh.uniforms.uT = EXT.time;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float side; uniform float uT;')
         .replace('#include <begin_vertex>', `#include <begin_vertex>
-float fl = sin(uT * 16. + float(gl_InstanceID) * 2.3) * .5 + .5; float ang = fl * 1.25;
+float fl = sin(uT * 13. + float(gl_InstanceID) * 2.3) * .5 + .5; float ang = .15 + fl * 1.1;
 transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), transformed.z);`);
     };
     const inst = new THREE.InstancedMesh(geo, mat, N); inst.frustumCulled = false; root.add(inst);
-    const cols = ['#f5a623', '#ff6fa3', '#7ec8ff', '#fff27a', '#c38bff', '#ff8a4c', '#ffffff'];
+    const cols = ['#f7b23b', '#ff8fb8', '#8fd0ff', '#fff2a0', '#d7a8ff', '#ff9a5c', '#ffffff'];
     const beds = [[-7.2, 23], [7.2, 23], [-7.2, 49], [7.2, 49], [-4, 34], [5, 36], [0, 18], [-18, 40], [18, 50]];
     const seeds = Array.from({ length: N }, (_, i) => { const b = beds[i % beds.length]; inst.setColorAt(i, new THREE.Color(cols[i % cols.length])); return { b, ph: Math.random() * 6.28, r: 1 + Math.random() * 2.2, s: .4 + Math.random() * .5 }; });
     inst.instanceColor.needsUpdate = true;
@@ -2820,7 +2838,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     [-1, 1].forEach((sd) => root.add(box(.14, 3.2, .1, M.gold, sd * 2.32, 1.6, 10.03)));
     root.add(box(.6, .7, .3, limeMat(.3, .3), 0, 5.6, 10.1));
     // soubassement + chaîne d'angle + bandeau
-    root.add(box(28.2, .9, .25, limeMat(7, .3), 0, .45, 10.12));
+    [-1, 1].forEach((sd) => root.add(box(11.8, .9, .25, limeMat(3, .3), sd * 8.2, .45, 10.12)));   // de part et d'autre de la porte
     root.add(box(28.4, .28, .45, limeMat(7, .1), 0, 6.9, 10.2));
     [-1, 1].forEach((sd) => root.add(box(1.1, 12, .3, limeMat(.4, 3), sd * 13.45, 6, 10.15)));
     // ── le perron : trois marches et une terrasse dallée
