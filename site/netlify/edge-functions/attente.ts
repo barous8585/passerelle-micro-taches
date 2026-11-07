@@ -4,12 +4,25 @@
 
 // minuit, heure de Paris (UTC+1 en hiver)
 const OUVERTURE = Date.parse("2026-11-08T00:00:00+01:00");
+// notification sur le téléphone de Barous (application ntfy) quand le lien du QR code est ouvert
+const NTFY_TOPIC = "chateau-hk-pv3csotc9llge1";
 const DOMAINES = ["hadiatoukaba.fr", "www.hadiatoukaba.fr", "hadiatoukaba.eu", "www.hadiatoukaba.eu"];
 
-export default async (req: Request, context: { next: () => Promise<Response>; deploy?: { id?: string } }) => {
+export default async (req: Request, context: { next: () => Promise<Response>; deploy?: { id?: string }; geo?: { city?: string; country?: { name?: string } }; waitUntil?: (p: Promise<unknown>) => void }) => {
   const url = new URL(req.url);
   const reste = OUVERTURE - Date.now();
   const cadeau = /^cadeau-/.test(url.searchParams.get("invite") || "");   // le lien du QR code, sur n'importe quelle adresse
+  // 🔔 un vrai scan (pas les vérifications automatiques de la page, ni les aperçus) → notification
+  if (cadeau && req.method === "GET" && !url.searchParams.has("v") && !url.searchParams.has("apercu") && (req.headers.get("sec-fetch-dest") || "document") === "document") {
+    const ua = req.headers.get("user-agent") || "", appareil = /iPhone/.test(ua) ? "un iPhone" : /iPad/.test(ua) ? "un iPad" : /Android/.test(ua) ? "un téléphone Android" : /Macintosh/.test(ua) ? "un Mac" : /Windows/.test(ua) ? "un PC" : "un appareil";
+    const lieu = context.geo && context.geo.city ? ` (${context.geo.city})` : "";
+    const heure = new Date().toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" });
+    const avant = Date.now() < OUVERTURE;
+    const p = fetch("https://ntfy.sh/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      topic: NTFY_TOPIC, title: avant ? "💐 Le QR code vient d'être scanné !" : "🏰 Hadiatou entre dans le château",
+      message: `${avant ? "La page d'attente s'est ouverte" : "Le musée s'est ouvert"} à ${heure}, sur ${appareil}${lieu}.`, tags: ["heart"], priority: 5, click: "https://hadiatoukaba.fr/?apercu=1" }) }).catch(() => {});
+    if (context.waitUntil) context.waitUntil(p); else await p;
+  }
   if (reste <= 0 || !(DOMAINES.includes(url.hostname) || cadeau) || url.searchParams.has("apercu")) return context.next();
   return new Response(page(reste, (context.deploy && context.deploy.id) || "local"), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 };
@@ -81,9 +94,9 @@ const page = (reste: number, version: string) => `<!doctype html>
   addEventListener('pageshow', (e) => { if (e.persisted) location.reload(); });
   setInterval(async () => {
     if (document.hidden) return;
-    try { const t = await (await fetch(location.href, { cache: 'no-store' })).text(); const m = t.match(/const VERSION = '([^']*)'/); if (!m || m[1] !== VERSION) location.reload(); } catch (e) {}
+    try { const t = await (await fetch(location.href + (location.search ? '&' : '?') + 'v=1', { cache: 'no-store' })).text(); const m = t.match(/const VERSION = '([^']*)'/); if (!m || m[1] !== VERSION) location.reload(); } catch (e) {}
   }, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && performance.now() > 30000) fetch(location.href, { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = t.match(/const VERSION = '([^']*)'/); if (!m || m[1] !== VERSION) location.reload(); }).catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && performance.now() > 30000) fetch(location.href + (location.search ? '&' : '?') + 'v=1', { cache: 'no-store' }).then((r) => r.text()).then((t) => { const m = t.match(/const VERSION = '([^']*)'/); if (!m || m[1] !== VERSION) location.reload(); }).catch(() => {}); });
   // toujours en https : le déchiffrement de la photo n'est possible que sur une connexion sécurisée
   if (location.protocol === 'http:' && !/^(localhost|127\.)/.test(location.hostname)) location.replace('https:' + location.href.slice(5));
   // notre photo : chiffrée, elle ne s'affiche qu'avec le code contenu dans le QR code
