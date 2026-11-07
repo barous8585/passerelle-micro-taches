@@ -3341,8 +3341,14 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     let batch = null;
     preview.addEventListener('click', () => file.click()); preview.addEventListener('keydown', (e) => { if (e.key === 'Enter') file.click(); });
     const infoLine = h('div', { class: 'mini', style: 'margin-top:6px;color:#a3814a' });
-    file.addEventListener('change', async () => {
-      const fs = [...file.files]; if (!fs.length) return;
+    /* deuxième chemin : le sélecteur de fichiers du téléphone (sans autorisation « Photos » du navigateur) */
+    const fileAny = h('input', { type: 'file', hidden: true, multiple: true });
+    const viaFiles = edit ? null : h('button', { class: 'ghost', type: 'button', style: 'margin-top:8px;font-size:13px', text: 'La galerie ne s\'ouvre pas ? Passer par « Fichiers »', onclick: () => fileAny.click() });
+    const isMedia = (f) => /^(image|video)\//.test(f.type || '') || /\.(jpe?g|png|heic|heif|webp|gif|mov|mp4|m4v|webm|3gp)$/i.test(f.name || '');
+    fileAny.addEventListener('change', () => { const fs = [...fileAny.files].filter(isMedia); if (!fs.length) { if (fileAny.files.length) toast('Choisis des photos ou des vidéos'); return; } onPick(fs); });
+    file.addEventListener('change', () => onPick([...file.files]));
+    async function onPick(fs) {
+      if (!fs.length) return;
       if (fs.length === 1 && !isVideoFile(fs[0])) {
         const f = fs[0]; picked = f; batch = null; const u = URL.createObjectURL(f); preview.replaceChildren(h('img', { src: u, alt: '' }), h('span', { class: 'mini', text: f.name }));
         const info = await readPhotoInfo(f); const got = [];
@@ -3377,7 +3383,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       if (batch.length > 1 && !tabOpts.chapterId) arrange.value = 'mois'; else arrange.value = 'choisi';
       infoLine.textContent = batch.length ? '✨ Chaque photo et chaque vidéo devient un tableau, avec sa date et son lieu, rangés dans l\'ordre du temps. Les vidéos se lancent en touchant leur tableau. Le titre est proposé tout seul (lieu et date) : laisse « Titre » vide, ou écris un titre commun.' : '';
       btn.textContent = batch.length ? 'Accrocher les ' + batch.length + ' souvenirs' : 'Rien de nouveau à accrocher';
-    });
+    }
     const sel = h('select', { id: 'memChapter' }, chapters.map((c) => h('option', { value: c.id || '', text: c.title || 'Sans titre' })));
     sel.value = (edit ? edit.chapterId : tabOpts.chapterId) || (chapters[0].id || '');
     const chapterField = field('Chapitre', sel);
@@ -3422,7 +3428,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       }
     });
     return [h('p', { class: 'lead', text: edit ? 'Modifie ce souvenir. Une nouvelle photo remplace l\'ancienne.' : 'Une photo, un titre, une date : le souvenir se range tout seul à sa place dans le chapitre.' }),
-      preview, infoLine, file, arrangeField, chapterField, field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn, bar];
+      preview, viaFiles, fileAny, infoLine, file, arrangeField, chapterField, field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn, bar];
   }
 
 
@@ -3773,10 +3779,10 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         const nb = h('button', { class: 'ghost', text: '🔔 Notifications', style: 'margin-top:6px' });
         const ib = h('button', { class: 'ghost', text: '📱 Installer l\'app sur ce téléphone', style: 'margin-top:8px;display:none' });
         const refresh = async () => { const st = await A.notifState().catch(() => 'unsupported');
-          line.textContent = { on: '🔔 Notifications activées sur cet appareil', off: 'Notifications désactivées sur cet appareil', denied: 'Notifications bloquées : autorise-les dans les réglages du téléphone', 'ios-install': 'Sur iPhone : Partager ⬆︎ puis « Sur l\'écran d\'accueil », puis ouvre l\'app depuis son icône pour activer les notifications', unsupported: 'Ce navigateur ne gère pas les notifications' }[st] || '';
-          nb.textContent = st === 'on' ? '🔕 Couper les notifications' : '🔔 Activer les notifications'; nb.style.display = st === 'on' || st === 'off' ? '' : 'none';
+          line.textContent = { on: '🔔 Notifications activées sur cet appareil', off: 'Notifications désactivées sur cet appareil', denied: A.blockedHelp(), 'ios-install': 'Sur iPhone : Partager ⬆︎ puis « Sur l\'écran d\'accueil », puis ouvre l\'app depuis son icône pour activer les notifications', unsupported: 'Ce navigateur ne gère pas les notifications' }[st] || '';
+          nb.textContent = st === 'on' ? '🔕 Couper les notifications' : '🔔 Activer les notifications'; nb.style.display = st === 'on' || st === 'off' || st === 'denied' ? '' : 'none';
           ib.style.display = A.canInstall() && !A.standalone() ? '' : 'none'; };
-        nb.onclick = async () => { nb.disabled = true; try { if ((await A.notifState()) === 'on') { await A.disableNotifs(); toast('Notifications coupées'); } else { await A.enableNotifs(); toast('Notifications activées ✨'); } } catch (er) { toast(er.message || 'Impossible'); } nb.disabled = false; refresh(); };
+        nb.onclick = async () => { nb.disabled = true; try { if ((await A.notifState()) === 'on') { await A.disableNotifs(); toast('Notifications coupées'); } else { await A.enableNotifs(); toast('Notifications activées ✨'); } } catch (er) { line.textContent = er.message || 'Impossible'; toast('Notifications bloquées par le téléphone : regarde les étapes juste au-dessus'); nb.disabled = false; return; } nb.disabled = false; refresh(); };
         ib.onclick = async () => { await A.install(); refresh(); };
         refresh(); return h('div', {}, line, nb, ib); })(),
       h('button', { class: 'ghost', text: '🔑 Changer mon mot de passe', style: 'margin-top:8px', onclick: async () => {

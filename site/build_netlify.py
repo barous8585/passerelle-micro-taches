@@ -32,10 +32,10 @@ rep(anchor, """    const NF = window.__chateauNetlify;
         const nb = h('button', { class: 'ghost', text: '🔔 Notifications', style: 'margin-top:6px' });
         const ib = h('button', { class: 'ghost', text: '📱 Installer l\\'app sur ce téléphone', style: 'margin-top:8px;display:none' });
         const refresh = async () => { const st = await A.notifState().catch(() => 'unsupported');
-          line.textContent = { on: '🔔 Notifications activées sur cet appareil', off: 'Notifications désactivées sur cet appareil', denied: 'Notifications bloquées : autorise-les dans les réglages du téléphone', 'ios-install': 'Sur iPhone : Partager ⬆︎ puis « Sur l\\'écran d\\'accueil », puis ouvre l\\'app depuis son icône pour activer les notifications', unsupported: 'Ce navigateur ne gère pas les notifications' }[st] || '';
-          nb.textContent = st === 'on' ? '🔕 Couper les notifications' : '🔔 Activer les notifications'; nb.style.display = st === 'on' || st === 'off' ? '' : 'none';
+          line.textContent = { on: '🔔 Notifications activées sur cet appareil', off: 'Notifications désactivées sur cet appareil', denied: A.blockedHelp(), 'ios-install': 'Sur iPhone : Partager ⬆︎ puis « Sur l\\'écran d\\'accueil », puis ouvre l\\'app depuis son icône pour activer les notifications', unsupported: 'Ce navigateur ne gère pas les notifications' }[st] || '';
+          nb.textContent = st === 'on' ? '🔕 Couper les notifications' : '🔔 Activer les notifications'; nb.style.display = st === 'on' || st === 'off' || st === 'denied' ? '' : 'none';
           ib.style.display = A.canInstall() && !A.standalone() ? '' : 'none'; };
-        nb.onclick = async () => { nb.disabled = true; try { if ((await A.notifState()) === 'on') { await A.disableNotifs(); toast('Notifications coupées'); } else { await A.enableNotifs(); toast('Notifications activées ✨'); } } catch (er) { toast(er.message || 'Impossible'); } nb.disabled = false; refresh(); };
+        nb.onclick = async () => { nb.disabled = true; try { if ((await A.notifState()) === 'on') { await A.disableNotifs(); toast('Notifications coupées'); } else { await A.enableNotifs(); toast('Notifications activées ✨'); } } catch (er) { line.textContent = er.message || 'Impossible'; toast('Notifications bloquées par le téléphone : regarde les étapes juste au-dessus'); nb.disabled = false; return; } nb.disabled = false; refresh(); };
         ib.onclick = async () => { await A.install(); refresh(); };
         refresh(); return h('div', {}, line, nb, ib); })(),
       h('button', { class: 'ghost', text: '🔑 Changer mon mot de passe', style: 'margin-top:8px', onclick: async () => {

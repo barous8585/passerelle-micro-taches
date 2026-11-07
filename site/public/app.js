@@ -23,7 +23,7 @@
   async function enableNotifs() {
     if (!pushSupported()) throw new Error(isIOS ? 'Sur iPhone, installe d\'abord l\'app sur l\'écran d\'accueil, puis ouvre-la depuis son icône' : 'Ce navigateur ne gère pas les notifications');
     const perm = await Notification.requestPermission();
-    if (perm !== 'granted') throw new Error('Notifications refusées : tu peux les autoriser dans les réglages du téléphone');
+    if (perm !== 'granted') throw new Error(blockedHelp());
     const r = reg || (await navigator.serviceWorker.ready);
     const { key } = await api('push/key');
     let sub = await r.pushManager.getSubscription();
@@ -32,6 +32,14 @@
     ls.set('chateau-notifs', 'on');
     try { await api('push/test', {}); } catch (e) {}
     return true;
+  }
+  /* le téléphone a répondu « non » sans rien demander : l'autorisation a été coupée une fois, il faut la rouvrir à la main */
+  function blockedHelp() {
+    const samsung = /SamsungBrowser/.test(ua), android = /Android/.test(ua);
+    if (isIOS) return 'Bloqué par l\'iPhone : Réglages → Notifications → Notre château → Autoriser les notifications.';
+    if (android && samsung) return 'Bloqué par le téléphone. 1) Samsung Internet : ☰ → Paramètres → Sites et téléchargements → Autorisations des sites → Notifications → hadiatoukaba.fr → Autoriser. 2) Paramètres Android → Applications → Samsung Internet → Notifications → activer.';
+    if (android) return 'Bloqué par le téléphone. 1) Paramètres Android → Applications → Chrome (et « Notre château » si l\'app est installée) → Notifications → activer. 2) Dans Chrome : ⋮ → Paramètres → Paramètres des sites → Notifications → hadiatoukaba.fr → Autoriser. Puis réessaie.';
+    return 'Notifications bloquées : autorise-les pour hadiatoukaba.fr dans les réglages du navigateur (cadenas à gauche de l\'adresse).';
   }
   async function disableNotifs() {
     const r = reg || (await navigator.serviceWorker.ready); const s = await r.pushManager.getSubscription();
@@ -84,5 +92,5 @@
   const start = () => setTimeout(maybeInvite, 45000);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 
-  window.__chateauApp = { isIOS, standalone, canInstall: () => !!deferred, install, enableNotifs, disableNotifs, notifState };
+  window.__chateauApp = { blockedHelp, isIOS, standalone, canInstall: () => !!deferred, install, enableNotifs, disableNotifs, notifState };
 })();
