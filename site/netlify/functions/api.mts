@@ -22,9 +22,10 @@ const COOKIE = "chateau_sid";
 /* le compte du créateur garde l'identifiant qu'il avait dans la page Claude, pour que ses souvenirs restent signés de lui */
 const OWNER_ID = "u_8efd3NXwrMxqfCwEZxkpiQ";
 /* L'invitation imprimée dans le QR code offert avec les fleurs : valable une seule fois, pour le deuxième compte.
-   Seule son empreinte est ici (le code lui-même n'existe que sur le papier). */
-const GIFT_HASH = "ff296af7bed98711c4424309393233579c04e28077d6c50433d0a3a2022ca6be";
-const isGift = (code: unknown) => typeof code === "string" && createHash("sha256").update(code).digest("hex") === GIFT_HASH;
+   Seule son empreinte est ici (le code lui-même n'existe que sur le papier)
+   (empreinte salée : elle ne permet ni de retrouver le code, ni de déchiffrer quoi que ce soit) */
+const GIFT_HASH = "dd294e9fbba22663ffed92d498f5a6215ba47ff3a320b90d91980f7dedc0574b";
+const isGift = (code: unknown) => typeof code === "string" && createHash("sha256").update("chateau-cadeau|" + code).digest("hex") === GIFT_HASH;
 const PART = 4 * 1024 * 1024;
 function sessionCookie(token: string, maxAgeS: number) {
   return `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeS}`;

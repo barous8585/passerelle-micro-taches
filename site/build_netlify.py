@@ -15,7 +15,7 @@ out = '<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<meta 
 # 2. attendre la connexion au lieu de 2,5 s
 rep("const cl = await waitClaude(2500);", "const cl = await (window.__claudeReady || waitClaude(2500));")
 # 3. réglages : inviter, importer, mot de passe, déconnexion
-anchor = "    const backup = h('div', { class: 'field' },"
+anchor = "    const backup = !S.isOwner ? null : h('div', { class: 'field' },"
 rep(anchor, """    const NF = window.__chateauNetlify;
     const account = NF ? h('div', { class: 'field' }, h('div', { text: 'Nos comptes', style: 'margin-bottom:6px' }),
       h('div', { class: 'mini', text: 'Connecté·e : ' + ((NF.me && (NF.me.name + ' · ' + NF.me.email)) || '') }),

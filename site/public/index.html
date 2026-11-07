@@ -187,6 +187,8 @@
   #story .title div { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(30px, 8vw, 54px); line-height: 1.15; }
   #story .title small { display: block; margin-top: 14px; font: 400 11px "Jost", sans-serif; letter-spacing: .4em; text-transform: uppercase; color: rgba(246,239,226,.6); font-style: normal; }
   body.story #tourCap, body.story #benchMsg, body.story #motDuJour, body.story #hintBox { display: none !important; }
+  /* les photos restent dans le château : pas d'appui long « Enregistrer l'image », pas de glisser-déposer */
+  #modal img, #modal video, #pane img, .drop img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
   #fade { position: fixed; inset: 0; z-index: 30; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
   #fade.on { opacity: 1; }
 
@@ -1372,7 +1374,9 @@
     })();
     MEDIA.set(id, p); p.catch(() => MEDIA.delete(id)); return p;
   }
-  function imgOf(id, props) { const el = h('img', Object.assign({ alt: '' }, props || {})); mediaSrc(id).then((u) => { if (u) el.src = u; }).catch(() => {}); return el; }
+  document.addEventListener('contextmenu', (e) => { const t = e.target; if (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO' || t.tagName === 'CANVAS')) e.preventDefault(); });
+  document.addEventListener('dragstart', (e) => { const t = e.target; if (t && (t.tagName === 'IMG' || t.tagName === 'VIDEO')) e.preventDefault(); });
+  function imgOf(id, props) { const el = h('img', Object.assign({ alt: '', draggable: 'false' }, props || {})); mediaSrc(id).then((u) => { if (u) el.src = u; }).catch(() => {}); return el; }
   const blobToB64 = (blob) => new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(String(fr.result).split(',')[1] || ''); fr.onerror = () => rej(new Error('lecture impossible')); fr.readAsDataURL(blob); });
   async function shrinkJpeg(blob, max, q) {
     let bmp; try { bmp = await createImageBitmap(blob); } catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(blob); }); }
@@ -3236,7 +3240,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     let img = mem.asset && !mem.video ? imgOf(mem.asset, { alt: mem.title || 'Souvenir' }) : null;
     if (img) img.addEventListener('error', () => img.remove());
     if (mem.video) {
-      const ve = h('video', { controls: true, playsinline: true, preload: 'metadata', style: 'width:100%;max-height:62vh;background:#000;border-radius:10px' });
+      const ve = h('video', { controls: true, playsinline: true, preload: 'metadata', controlsList: 'nodownload noremoteplayback', disablePictureInPicture: true, style: 'width:100%;max-height:62vh;background:#000;border-radius:10px' });
+      ve.setAttribute('controlslist', 'nodownload noremoteplayback'); ve.setAttribute('disablepictureinpicture', '');
       ve.setAttribute('playsinline', ''); ve.setAttribute('webkit-playsinline', '');
       if (mem.asset) mediaSrc(mem.asset).then((u) => { if (u) ve.poster = u; }).catch(() => {});
       const wait = h('div', { class: 'mini', text: 'Chargement de la vidéo…' });
@@ -3890,7 +3895,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         const cur = prompt('Mot de passe actuel'); if (!cur) return; const nx = prompt('Nouveau mot de passe (8 caractères minimum)'); if (!nx) return;
         try { await NF.password(cur, nx); toast('Mot de passe changé'); } catch (er) { toast(er.message || 'Changement impossible'); } } }),
       h('button', { class: 'ghost', text: 'Se déconnecter', style: 'margin-top:8px', onclick: () => NF.logout() })) : null;
-    const backup = h('div', { class: 'field' }, h('div', { text: 'Sauvegarde complète', style: 'margin-bottom:6px' }), h('div', { class: 'mini', text: 'Un fichier .zip avec toutes vos photos, sons, vidéos, lettres et un album qui s\'ouvre sur n\'importe quel ordinateur, même dans 40 ans. À refaire de temps en temps et à garder précieusement.' }), h('button', { class: 'ghost', text: '💾 Télécharger la sauvegarde', style: 'margin-top:8px', onclick: (e) => exportArchive(e.currentTarget) }));
+    const backup = !S.isOwner ? null : h('div', { class: 'field' }, h('div', { text: 'Sauvegarde complète', style: 'margin-bottom:6px' }), h('div', { class: 'mini', text: 'Un fichier .zip avec toutes vos photos, sons, vidéos, lettres et un album qui s\'ouvre sur n\'importe quel ordinateur, même dans 40 ans. À refaire de temps en temps et à garder précieusement.' }), h('button', { class: 'ghost', text: '💾 Télécharger la sauvegarde', style: 'margin-top:8px', onclick: (e) => exportArchive(e.currentTarget) }));
     return [h('p', { class: 'lead', text: '💌 La surprise : la lettre qu\'elle découvre à sa toute première entrée, sous un feu d\'artifice.' }), field('Sa lettre d\'accueil', wl), field('Ta signature', ws), wPrev, h('div', { class: 'sep' }),
       field('Vos prénoms', names), field('Ensemble depuis le', since), field('Son anniversaire (feu d\'artifice ce jour-là)', bday), field('Citation du Belvédère', quote), field('Message du banc', bench), field('Notre chanson, jouée sur le banc', bSnd),
       h('div', { class: 'row2' }, field('Sa fleur préférée', fav), field('Couleur des fleurs', cF)), h('div', { class: 'row2' }, field('Couleur du tapis', cC), field('Couleur des lanternes', cL)), save,
