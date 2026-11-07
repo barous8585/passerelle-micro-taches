@@ -165,6 +165,25 @@
     max-width: calc(100vw - 32px);
   }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  /* ── le conte ── */
+  #story { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+  #story .bar { position: absolute; left: 0; right: 0; height: 0; background: #000; transition: height 1.6s cubic-bezier(.6,0,.2,1); }
+  #story .bar.top { top: 0; } #story .bar.bot { bottom: 0; }
+  #story.on .bar { height: 12vh; } #story.on .bar.bot { height: max(27vh, 190px); }
+  #story .cap { position: absolute; left: 50%; top: calc(100% - max(27vh, 190px) + 16px); transform: translateX(-50%); width: min(720px, calc(100% - 36px)); text-align: center; color: #f6efe2; }
+  #story .k { font: 500 11px/1 "Jost", sans-serif; letter-spacing: .38em; text-transform: uppercase; color: #e2bf7c; opacity: 0; transition: opacity 1.2s; min-height: 12px; }
+  #story .t { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(18px, 4.4vw, 27px); line-height: 1.34; margin-top: 9px; text-shadow: 0 2px 14px rgba(0,0,0,.6); min-height: 3.2em; }
+  #story .t span { opacity: 0; transition: opacity .9s; } #story .t span.v { opacity: 1; }
+  #story .k.v { opacity: 1; }
+  #story .ctl { position: absolute; top: calc(12vh - 44px); right: 14px; display: flex; gap: 8px; pointer-events: auto; opacity: 0; transition: opacity 1s 1.2s; }
+  #story.on .ctl { opacity: 1; }
+  #story .ctl button { background: rgba(255,255,255,.1); color: rgba(246,239,226,.85); border: 1px solid rgba(255,255,255,.18); border-radius: 999px; padding: 7px 14px; font: 400 12.5px "Jost", sans-serif; cursor: pointer; }
+  #story .tap { position: absolute; left: 0; right: 0; bottom: 0; height: max(27vh, 190px); pointer-events: auto; }
+  #story .title { position: absolute; inset: 0; display: grid; place-items: center; background: #000; opacity: 0; transition: opacity 2s; text-align: center; color: #f3d79a; }
+  #story .title.on { opacity: 1; }
+  #story .title div { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(30px, 8vw, 54px); line-height: 1.15; }
+  #story .title small { display: block; margin-top: 14px; font: 400 11px "Jost", sans-serif; letter-spacing: .4em; text-transform: uppercase; color: rgba(246,239,226,.6); font-style: normal; }
+  body.story #tourCap, body.story #benchMsg, body.story #motDuJour, body.story #hintBox { display: none !important; }
   #fade { position: fixed; inset: 0; z-index: 30; background: #000; opacity: 0; pointer-events: none; transition: opacity .45s; }
   #fade.on { opacity: 1; }
 
@@ -392,6 +411,7 @@
 <div id="benchMsg"></div>
 <div id="toast" role="status"></div>
 <div id="fade"></div>
+<div id="story" aria-live="polite"><div class="bar top"></div><div class="bar bot"></div><div class="tap"></div><div class="cap"><div class="k"></div><div class="t"></div></div><div class="ctl"><button type="button" class="nx">Suivant ›</button><button type="button" class="sk">Passer le conte</button></div><div class="title"><div></div></div></div>
 <div id="hearts" aria-hidden="true"></div>
 <div id="tourCap" role="status" aria-live="polite"><div id="tourKicker"></div><div id="tourText"></div><div class="row"><button id="tourNext">Suivant ›</button><button id="tourSkip">Passer la visite</button></div></div>
 <div id="rotateHint" role="status"><span class="ic">📱</span>Tourne ton téléphone<br>pour voir le château en grand</div>
@@ -783,7 +803,7 @@
       this.dry.connect(this.master); this.wet.connect(this.master); this.master.connect(ctx.destination);
       this.level(2.5); this.bar(); this.timer = setInterval(() => this.bar(), 7000);
     },
-    level(sec) { BG.vol(); if (!this.ctx) return; const v = this.on && !BG.active ? (this.duck ? .05 : .32) : 0, g = this.master.gain, t = this.ctx.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v, t + (sec || 1)); },
+    level(sec) { BG.vol(); if (!this.ctx) return; const v = this.on && !BG.active ? (this.duck ? .05 : this.story ? .42 : .32) : 0, g = this.master.gain, t = this.ctx.currentTime; g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(v, t + (sec || 1)); },
     pad(freq, t, dur) {
       const ctx = this.ctx;
       [[0, 'sine', .05], [3, 'triangle', .018]].forEach(([det, type, vol]) => {
@@ -799,8 +819,19 @@
       const g2 = ctx.createGain(); g2.gain.value = .25; o2.connect(g2); g2.connect(g); o.connect(g); g.connect(this.bus);
       o.start(t); o2.start(t); o.stop(t + 3); o2.stop(t + 3);
     },
+    /* le thème du conte : progression plus ample, une mélodie qui revient */
+    story: false, storyChords: [[174.61, 220.0, 261.63, 349.23], [220.0, 261.63, 329.63, 440.0], [233.08, 293.66, 349.23, 466.16], [261.63, 329.63, 392.0, 523.25], [146.83, 220.0, 293.66, 349.23], [233.08, 293.66, 349.23, 466.16], [174.61, 261.63, 349.23, 440.0], [196.0, 261.63, 329.63, 392.0]],
+    motif: [[0, 4], [1.1, 3], [2.2, 2], [3.3, 3], [4.6, 4], [5.6, 5]],
+    setStory(on) { this.story = on; this.step = 0; if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); this.level(2); },
     bar() {
       if (!this.ctx || !this.on || BG.active) return;
+      if (this.story) {
+        const t = this.ctx.currentTime + .05, ch = this.storyChords[this.step++ % this.storyChords.length];
+        ch.forEach((f) => this.pad(f / 2, t, 7)); this.pad(ch[0] / 4, t, 7); this.pad(ch[0] / 2, t, 7);
+        const up = ch.map((f) => f * 2);
+        this.motif.forEach(([dt, i]) => this.pluck(i < 4 ? up[i] : up[i - 4] * 2, t + .3 + dt + Math.random() * .05));
+        return;
+      }
       const t = this.ctx.currentTime + .05, ch = this.chords[this.step++ % this.chords.length];
       ch.forEach((f) => this.pad(f / 2, t, 7)); this.pad(ch[0] / 4, t, 7);
       const notes = ch.map((f) => f * 2).concat(ch.map((f) => f * 4).slice(0, 2));
@@ -3267,6 +3298,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const clues = S.treasures.filter((t) => !t.found && t.author !== S.meId), found = S.treasures.filter((t) => t.found && t.author !== S.meId);
     if (clues.length) body.push(h('h3', { text: '🗝️ Chasse au trésor' }), h('div', { class: 'list', style: 'margin-top:0' }, clues.map((t) => h('div', { class: 'item' }, h('div', { class: 't', text: 'Indice : ' + t.clue }), h('div', { class: 's', text: 'Un trésor est caché pour toi quelque part…' })))));
     body.push(h('div', { class: 'actions', style: 'margin-top:14px' },
+      h('button', { class: 'pbtn', text: '📖 Le conte', onclick: () => { closeModal(); setTimeout(runStory, 350); } }),
       h('button', { class: 'pbtn', text: '▶ Visite guidée', onclick: () => { closeModal(); setTimeout(runTour, 350); } }),
       h('button', { class: 'pbtn', text: '📖 Notre livre souvenir (PDF)', onclick: (e) => exportBook(e.currentTarget) }),
       h('button', { class: 'pbtn', text: '💾 Tout sauvegarder (.zip)', onclick: (e) => exportArchive(e.currentTarget) })));
@@ -3297,7 +3329,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   /* ════════════════════════════════════════════
      L'ATELIER
      ════════════════════════════════════════════ */
-  const TABS = [['souvenir', 'Souvenir'], ['chapitres', 'Chapitres'], ['sons', 'Sons'], ['lettres', 'Lettres'], ['raisons', 'Raisons'], ['serre', 'Premières fois'], ['biblio', 'Bibliothèque'], ['projets', 'Projets'], ['tresors', 'Trésors'], ['capsules', 'Capsules'], ['avent', 'Avent'], ['visite', 'Visite guidée'], ['mots', 'Mots du jour'], ['reglages', 'Réglages']];
+  const TABS = [['souvenir', 'Souvenir'], ['chapitres', 'Chapitres'], ['sons', 'Sons'], ['lettres', 'Lettres'], ['raisons', 'Raisons'], ['serre', 'Premières fois'], ['biblio', 'Bibliothèque'], ['projets', 'Projets'], ['tresors', 'Trésors'], ['capsules', 'Capsules'], ['avent', 'Avent'], ['conte', 'Le conte'], ['visite', 'Visite guidée'], ['mots', 'Mots du jour'], ['reglages', 'Réglages']];
   let curTab = 'souvenir', tabOpts = {};
   function openAtelier(tab, opts) {
     if (!S.canWrite) return;
@@ -3312,7 +3344,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   }
   function renderPane() {
     const pane = $('#pane');
-    const f = { souvenir: paneMemory, chapitres: paneChapters, sons: paneSounds, lettres: paneLetters, raisons: paneReasons, serre: paneFirsts, biblio: paneLibrary, projets: paneProjects, tresors: paneTreasures, capsules: paneCapsules, avent: paneAdvent, visite: paneTour, mots: paneNotes, reglages: paneSettings }[curTab];
+    const f = { souvenir: paneMemory, chapitres: paneChapters, sons: paneSounds, lettres: paneLetters, raisons: paneReasons, serre: paneFirsts, biblio: paneLibrary, projets: paneProjects, tresors: paneTreasures, capsules: paneCapsules, avent: paneAdvent, conte: paneStory, visite: paneTour, mots: paneNotes, reglages: paneSettings }[curTab];
     pane.replaceChildren(...[].concat(f()).filter(Boolean));
   }
   function field(label, input) { return h('label', { class: 'field' }, label, input); }
@@ -3504,7 +3536,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         if (chapterFor.has(norm2(t))) continue;
         const places = new Map(); xs.forEach((x) => x.info.place && places.set(x.info.place, (places.get(x.info.place) || 0) + 1));
         const top = [...places].sort((a, b) => b[1] - a[1])[0];
-        chapterFor.set(norm2(t), await createChapter(t, top ? 'du côté de ' + top[0] : ''));
+        chapterFor.set(norm2(t), await createChapter(t, top ? (/^[aeiouyhâàéèêëîïôûü]/i.test(top[0]) ? 'du côté d\'' : 'du côté de ') + top[0] : ''));
       }
       for (const x of batch) {
         k++; const lab = `Accrochage ${k}/${batch.length}`, fr = (k - 1) / batch.length;
@@ -4775,6 +4807,132 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   }
   function markTourSeen() { loadUserState().then(() => saveUserState({ tourSeen: true, at: Date.now() })).catch(() => {}); try { ls.set('chateau-tour-seen', '1'); } catch (e) {} }
 
+  /* ════════════════════════════════════════════
+     LE CONTE : à sa première connexion, le royaume se raconte
+     (caméra de cinéma, bandes noires, texte page après page, musique du conte)
+     ════════════════════════════════════════════ */
+  const STORY = [
+    { key: 'debut', where: 'jardin', kicker: 'Il était une fois…', def: '…une princesse nommée {elle}. Elle ne le savait pas encore, mais quelque part, un royaume l\'attendait.' },
+    { key: 'garcon', where: 'fontaine', kicker: 'Un garçon', def: 'Dans ce même monde vivait un garçon nommé {lui}. Il gardait un secret : il voulait lui offrir un endroit où rien de ce qu\'ils vivent ne se perdrait jamais.' },
+    { key: 'chateau', where: 'chateau', kicker: 'Le château', def: 'Alors, pierre après pierre, il bâtit un château. Pas un château de pierre… un château de souvenirs.' },
+    { key: 'coeur', where: 'hall', kicker: 'Le cœur', def: 'Au centre, sous la coupole, il plaça un cœur. Il bat pour chaque raison qu\'ils ont de s\'aimer. Touche-le, et il t\'en murmurera une.' },
+    { key: 'jardin', where: 'cour', kicker: 'Le jardin secret', def: 'Au milieu du château, il cacha un jardin que seuls eux deux connaissent.' },
+    { key: 'mots', where: 'bibliotheque', kicker: 'Les mots', def: 'Dans la bibliothèque dorment leurs lettres, leurs mots doux et leurs chansons. Certaines lettres ne s\'ouvriront qu\'au bon moment.' },
+    { key: 'monde', where: 'cartes', kicker: 'Le monde', def: 'Sur un globe, il alluma chaque endroit où leur histoire est passée{lieux}.' },
+    { key: 'chapitres', where: 'chapitres', kicker: 'Leur histoire', def: 'Et le long des galeries, leur histoire s\'écrit, chapitre après chapitre.' },
+    { key: 'avenir', where: 'avenir', kicker: 'L\'avenir', def: 'Mais l\'histoire n\'est pas finie. Ici commence la salle de leur avenir, encore vide… parce que c\'est ensemble qu\'ils l\'écriront.' },
+    { key: 'fin', where: 'banc', kicker: '', def: 'Ce royaume est le tien, {elle}. Bienvenue chez toi. ♥' },
+  ];
+  const storyCfg = () => S.settings.story || {};
+  function storyFill(t) {
+    const her = (storyCfg().her || '').trim() || 'Hadiatou', him = (S.settings.welcomeSign || '').trim() || 'Ousmane';
+    const seen = new Map(); (S.memories || []).slice().sort((a, b) => (a.date || '9').localeCompare(b.date || '9')).forEach((m) => { const p = (m.place || '').trim(); if (p && !seen.has(p.toLowerCase())) seen.set(p.toLowerCase(), p); });
+    const pl = [...seen.values()].slice(0, 4), lieux = pl.length ? ' : ' + (pl.length > 1 ? pl.slice(0, -1).join(', ') + ' et ' + pl[pl.length - 1] : pl[0]) : '';
+    return String(t).replace(/\{elle\}/g, her).replace(/\{lui\}/g, him).replace(/\{lieux\}/g, lieux).replace(/\{souvenirs\}/g, String((S.memories || []).length));
+  }
+  const ST = { next: null, abort: false };
+  function storyWait(ms) { return new Promise((r) => { const t = setTimeout(done, ms); function done() { clearTimeout(t); ST.next = null; r(); } ST.next = done; }); }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function storyPage(kicker, text, minMs) {
+    const el = $('#story'), k = el.querySelector('.k'), t = el.querySelector('.t');
+    k.classList.remove('v'); t.querySelectorAll('span').forEach((s2) => s2.classList.remove('v')); await sleep(700);
+    if (ST.abort) return;
+    k.textContent = kicker || ''; t.replaceChildren(...text.split(/(?<=[.…!?:;])\s+/).map((ph) => h('span', { text: ph + ' ' })));
+    k.classList.add('v');
+    const spans = [...t.querySelectorAll('span')];
+    for (const sp of spans) { if (ST.abort) return; sp.classList.add('v'); await sleep(Math.min(2600, 500 + sp.textContent.split(/\s+/).length * 150)); }
+    await storyWait(Math.max(minMs || 0, 1800 + text.split(/\s+/).length * 230));
+  }
+  async function storyClear() { const el = $('#story'); el.querySelector('.k').classList.remove('v'); el.querySelectorAll('.t span').forEach((s2) => s2.classList.remove('v')); await sleep(600); }
+  async function storyTitle(main, sub, ms) {
+    const tl = $('#story .title'); tl.firstChild.replaceChildren(document.createTextNode(main), sub ? h('small', { text: sub }) : '');
+    tl.classList.add('on'); await sleep(ms); tl.classList.remove('on'); await sleep(1800);
+  }
+  async function runStory() {
+    if (S.tour) return;
+    const cfg = storyCfg(), texts = cfg.texts || {};
+    S.tour = true; ST.abort = false; S.level = 0; stopGo(); controls(false); if (S.panel) closeAtelier(); if (S.modal) closeModal();
+    if (S.seated) { S.seated = false; S.seat = null; document.body.classList.remove('seated'); }
+    document.body.classList.add('touring', 'story'); const el = $('#story');
+    const snd = cfg.sound && SND.byId(cfg.sound);
+    if (snd) { if (!SND.isPlaying(snd)) SND.toggle(snd); } else { Music.start(); Music.setStory(true); }
+    const where = (key) => TOUR.find((x) => x.key === key);
+    const p0 = $('#player').object3D.position; let cx = p0.x, cz = p0.z;
+    const move = async (x, z, yaw, pitch, speed) => { const d = Math.hypot(x - cx, z - cz); if (d < .05) return; await glideP(x, z, yaw == null ? yawTo(cx, cz, x, z) : yaw, pitch == null ? 0 : pitch, Math.max(1400, d / (speed || 1.9) * 1000)); cx = x; cz = z; };
+    const drift = (yaw, pitch, ms) => glideP(cx, cz, yaw, pitch, ms);
+    const page = (sc, extraMs) => storyPage(sc.kicker, storyFill((texts[sc.key] || '').trim() || sc.def), extraMs);
+    try {
+      // ouverture au noir
+      el.querySelector('.title').classList.add('on'); el.classList.add('on');
+      await glideP(0, 70, 0, .1, 50); cx = 0; cz = 70;
+      await storyTitle(storyFill(cfg.title || 'Le royaume de {elle}'), 'un conte', 3600);
+      for (const sc of STORY) {
+        if (ST.abort) break;
+        if (sc.where !== 'jardin') await storyClear();
+        if (sc.where === 'chapitres') { await storyChapters(sc, page, move); continue; }
+        if (sc.where === 'avenir') {
+          const LP = W.loopPath || [], last = LP[LP.length - 1];
+          if (last) await move(last[0], last[1], null, 0, 2.6);
+          if (W.bench) { const at = [W.bench.x + 2.2, W.bench.z]; await move(at[0], at[1]); await glideP(at[0], at[1], yawTo(at[0], at[1], W.bench.x - 10, W.bench.z), 0, 1400); }
+          await page(sc); continue;
+        }
+        if (sc.where === 'banc') { if (W.bench) { sitDown(); await sleep(2200); } await page(sc, 3000); continue; }
+        const stop0 = where(sc.where); if (!stop0) continue;
+        const stop = sc.where === 'bibliotheque' ? Object.assign({}, stop0, { at: [17, -9.5], look: [14, -3], pitch: -.05 }) : stop0;
+        if (sc.where === 'jardin') { const yaw = yawTo(0, 70, 0, 30); const go = move(stop.at[0], stop.at[1] + 4, yaw, .06, 1.1); await page(sc); await go; continue; }
+        for (const [x, z] of stop.via || []) { if (ST.abort) break; await move(x, z); }
+        if (ST.abort) break;
+        await move(stop.at[0], stop.at[1]);
+        const yaw = yawTo(stop.at[0], stop.at[1], stop.look[0], stop.look[1]);
+        await glideP(stop.at[0], stop.at[1], yaw, stop.pitch || 0, 1500);
+        const pan = drift(yaw + .12, stop.pitch || 0, 9000);
+        await page(sc); await pan;
+      }
+      if (!ST.abort) await storyTitle('Fin…', 'ou plutôt, le début', 3200);
+    } catch (e) { console.error('conte', e); }
+    // retour au royaume
+    el.classList.remove('on'); el.querySelector('.title').classList.remove('on'); el.querySelector('.k').classList.remove('v'); el.querySelector('.t').replaceChildren();
+    if (!snd) Music.setStory(false); else if (ST.abort && SND.playing) SND.stop();
+    document.body.classList.remove('touring', 'story'); S.tour = false;
+    if (!S.seated) controls(true);
+    markStorySeen();
+  }
+  /* la traversée des chapitres, le long de la boucle */
+  async function storyChapters(sc, page, move) {
+    const LP = W.loopPath || []; if (!LP.length) { await page(sc); return; }
+    const cartes = TOUR.find((x) => x.key === 'cartes');
+    const P = [cartes ? cartes.at : LP[0]].concat(LP.slice(0, 3)).concat(LP.slice(3));
+    const segs = []; let acc = 0;
+    for (let i = 0; i < P.length - 1; i++) { const a = P[i], b = P[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]); segs.push({ a, b, L, s0: acc }); acc += L; }
+    const proj = (x, z) => { let best = null; segs.forEach((sg) => { const dx = sg.b[0] - sg.a[0], dz = sg.b[1] - sg.a[1], t = Math.max(0, Math.min(1, ((x - sg.a[0]) * dx + (z - sg.a[1]) * dz) / (sg.L * sg.L || 1))), px = sg.a[0] + dx * t, pz = sg.a[1] + dz * t, d = Math.hypot(px - x, pz - z); if (!best || d < best.d) best = { d, s: sg.s0 + t * sg.L, p: [px, pz] }; }); return best; };
+    const chs = sortedChapters(), zones = W.zones.filter((z) => z.chapter).map((z) => Object.assign({ z, ch: chs[z.chapter - 1] }, proj(z.tp[0], z.tp[1]))).sort((a, b) => a.s - b.s);
+    const lastS = LP.length > 3 ? proj(LP[2][0], LP[2][1]).s : acc;
+    // jusqu'à l'entrée de la galerie, puis la phrase d'introduction
+    await move(P[1][0], P[1][1]); await move(P[2][0], P[2][1]);
+    await page(sc);
+    const pts = segs.flatMap((sg, i) => [{ s: sg.s0 + sg.L, p: sg.b, corner: true, i }]).filter((x) => x.s > proj(P[2][0], P[2][1]).s + .01 && x.s <= proj(LP[LP.length - 1][0], LP[LP.length - 1][1]).s);
+    const items = pts.concat(zones.filter((z) => z.s > proj(P[2][0], P[2][1]).s - .5)).sort((a, b) => a.s - b.s);
+    const n = zones.length, quick = n > 8;
+    for (const it of items) {
+      if (ST.abort) return;
+      if (it.corner) { await move(it.p[0], it.p[1], null, 0, 3); continue; }
+      await storyClear(); await move(it.p[0], it.p[1], null, 0, 2.6);
+      { const $p = $('#player').object3D.position; await glideP($p.x, $p.z, it.z.tp[2], -.02, 1100); }
+      const ch = it.ch || {}, cnt = memoriesOf(ch.id, chs).length;
+      await storyPage('Chapitre ' + romanNum(it.z.chapter), (ch.title || it.z.name) + (ch.subtitle ? ' — ' + ch.subtitle : '') + (cnt ? ' · ' + cnt + ' souvenir' + (cnt > 1 ? 's' : '') : ''), quick ? 0 : 1200);
+    }
+    void lastS;
+  }
+  async function storySeen() {
+    if (ls.get('chateau-story-seen')) return true;
+    if (!S.db || !S.meId) return false;
+    try { const d = await loadUserState(); return !!d.storySeen; } catch (e) { return false; }
+  }
+  function markStorySeen() { if (S.isOwner) return; loadUserState().then(() => saveUserState({ storySeen: Date.now(), tourSeen: true })).catch(() => {}); try { ls.set('chateau-story-seen', '1'); ls.set('chateau-tour-seen', '1'); } catch (e) {} }
+  $('#story .nx').addEventListener('click', () => { if (ST.next) ST.next(); });
+  $('#story .tap').addEventListener('click', () => { if (ST.next) ST.next(); });
+  $('#story .sk').addEventListener('click', () => { ST.abort = true; if (ST.next) ST.next(); });
+
 
   /* ════════════════════════════════════════════
      LE MOT DU JOUR
@@ -5050,6 +5208,26 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
   /* ════════════════════════════════════════════
      ATELIER : visite guidée + mots du jour
      ════════════════════════════════════════════ */
+  function paneStory() {
+    const cfg = storyCfg(), texts = cfg.texts || {}, rows = {};
+    const auto = h('input', { type: 'checkbox', id: 'storyAuto', checked: cfg.auto !== false });
+    const her = h('input', { type: 'text', id: 'storyHer', maxlength: 30, placeholder: 'Hadiatou', value: cfg.her || '' });
+    const title = h('input', { type: 'text', id: 'storyTitle', maxlength: 60, placeholder: 'Le royaume de {elle}', value: cfg.title || '' });
+    const music = soundSelect('storySound', cfg.sound || '');
+    const blocks = STORY.map((sc) => {
+      const ta = h('textarea', { id: 'story-' + sc.key, maxlength: 600, placeholder: sc.def }); ta.value = texts[sc.key] || ''; ta.style.minHeight = '74px';
+      rows[sc.key] = ta;
+      return h('div', { class: 'chap', style: 'grid-template-columns:1fr' }, h('div', { class: 'mini', text: (sc.kicker || 'La dernière page') + (sc.key === 'chapitres' ? ' (puis chaque chapitre défile avec son titre)' : '') }), ta);
+    });
+    const save = h('button', { class: 'gbtn', text: 'Enregistrer le conte' });
+    const collect = () => { const t = {}; Object.entries(rows).forEach(([k, ta]) => { if (ta.value.trim()) t[k] = ta.value.trim(); }); return { auto: auto.checked, her: her.value.trim(), title: title.value.trim(), sound: music.value || '', texts: t }; };
+    save.addEventListener('click', async () => { save.disabled = true; try { await saveSettings({ story: collect() }); toast('Conte enregistré 📖'); } catch (e) { toast('Enregistrement impossible'); } save.disabled = false; });
+    const prev = h('button', { class: 'ghost', text: '▶ Voir le conte comme elle le verra', onclick: async () => { try { await saveSettings({ story: collect() }); } catch (e) {} closeAtelier(); setTimeout(runStory, 400); } });
+    return [h('p', { class: 'lead', text: 'À sa première connexion, après sa lettre, le royaume se raconte comme un conte : la caméra traverse chaque lieu, les phrases apparaissent une à une, et la musique du conte joue. Réécris chaque page à ta façon. {elle} et {lui} sont remplacés par vos prénoms, {lieux} par les lieux de vos photos.' }),
+      h('label', { class: 'check' }, auto, 'Raconter le conte automatiquement à sa première connexion'), prev,
+      h('div', { class: 'row2' }, field('Son prénom dans le conte', her), field('Titre du conte', title)),
+      field('Musique (sinon la musique du conte, composée en direct)', music), ...blocks, save];
+  }
   function paneTour() {
     const cur = S.settings.tour || {}, rows = {};
     const auto = h('input', { type: 'checkbox', id: 'tourAuto', checked: S.settings.tourAuto !== false });
@@ -5248,7 +5426,9 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       S.entered = true; controls(true);
       if (await welcomeDue().catch(() => false)) { saveUserState({ welcomeSeen: Date.now() }); await showWelcome(); }
       const auto = S.settings.tourAuto !== false && !S.isOwner && !!S.db;
-      if (auto && !(await tourSeen())) { markTourSeen(); showNews(true); setTimeout(() => runTour().catch((e) => { console.error('visite', e); S.tour = false; document.body.classList.remove('touring'); controls(true); }), 700); }
+      const storyAuto = storyCfg().auto !== false && !S.isOwner && !!S.db;
+      if (storyAuto && !(await storySeen())) { markTourSeen(); showNews(true); setTimeout(() => runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }), 900); }
+      else if (auto && !(await tourSeen())) { markTourSeen(); showNews(true); setTimeout(() => runTour().catch((e) => { console.error('visite', e); S.tour = false; document.body.classList.remove('touring'); controls(true); }), 700); }
       else { setTimeout(() => showNews().catch(() => {}), 900); if (S.isOwner && !ls.get('chateau-owner-tour-hint')) { ls.set('chateau-owner-tour-hint', '1'); setTimeout(() => toast('Astuce : Plan ✦ → ▶ Visite guidée, pour voir ce qu\'elle verra'), 6500); } }
     });
     if (S.canWrite && !S.memories.length) setTimeout(() => toast('Ouvre l\'Atelier ✎ pour accrocher votre premier souvenir'), 4500);
