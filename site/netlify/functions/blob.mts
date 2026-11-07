@@ -40,7 +40,7 @@ export default async (req: Request, context: Context) => {
   });
   const headers: Record<string, string> = {
     "content-type": meta.type, "accept-ranges": "bytes", "content-length": String(end - start + 1),
-    "cache-control": "private, max-age=31536000, immutable",
+    "cache-control": "private, max-age=31536000, immutable", "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex",
   };
   if (status === 206) headers["content-range"] = `bytes ${start}-${end}/${size}`;
   return new Response(stream, { status, headers });

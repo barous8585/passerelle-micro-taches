@@ -5,3 +5,10 @@
 [functions]
   directory = "netlify/functions"
   node_bundler = "esbuild"
+
+# Le château ne doit jamais apparaître dans les moteurs de recherche
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow, noarchive, nosnippet, noimageindex"
+    Referrer-Policy = "no-referrer"
