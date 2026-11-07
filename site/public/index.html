@@ -3053,7 +3053,20 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       { const snap0 = snapStatic(root); setTimeout(() => { try { deepMerge(root, snap0); } catch (e) { console.warn('regroupement', e); } }, 2500); }
       const envUp = () => { try { buildEnvironment(this.el); } catch (e) { console.warn('environnement', e); } };
       if (this.el.renderer) envUp(); else this.el.addEventListener('renderstart', envUp, { once: true });
-      const capDpr = () => { try { this.el.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.3 : 2)); } catch (e) {} };
+      /* netteté adaptative : on vise haut (écrans très fins des iPhone Pro / Galaxy Ultra),
+         et on ne baisse que si les images par seconde chutent ; on remonte quand ça redevient fluide */
+      const DPR_MAX = Math.min(window.devicePixelRatio || 1, 2);
+      this.dpr = isMobile ? Math.min(DPR_MAX, 1.75) : DPR_MAX; this.fpsAcc = 0; this.fpsN = 0; this.fpsCool = 4;
+      const capDpr = () => { try { this.el.renderer.setPixelRatio(this.dpr); } catch (e) {} };
+      this.adaptDpr = (raw) => {
+        if (document.hidden || raw > .5) return;
+        this.fpsAcc += raw; this.fpsN++; if (this.fpsAcc < 2) return;
+        const fps = this.fpsN / this.fpsAcc; this.fpsAcc = 0; this.fpsN = 0;
+        if (this.fpsCool > 0) { this.fpsCool--; return; }
+        let d = this.dpr;
+        if (fps < 40 && d > 1) d = Math.max(1, d - .25); else if (fps > 56 && d < DPR_MAX) d = Math.min(DPR_MAX, d + .25);
+        if (d !== this.dpr) { this.dpr = d; capDpr(); this.fpsCool = 2; }
+      };
       if (this.el.renderer) capDpr(); else this.el.addEventListener('renderstart', capDpr, { once: true });
       window.addEventListener('resize', () => setTimeout(capDpr, 60));
       this.skyAcc = 0; this.liveAcc = 0; this.togAcc = 0;
@@ -3063,6 +3076,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     },
     tick(t, dt) {
       const raw = dt / 1000; dt = Math.min(dt, 60) / 1000; this.t += dt;
+      if (this.adaptDpr) this.adaptDpr(raw);
       W.anim.forEach((f) => f(this.t, dt));
       if (W.lanterns) W.lanterns.children.forEach((g) => { g.position.y = g.userData.base + Math.sin(this.t * .6 + g.userData.seed) * .35; g.rotation.y += dt * .2; });
       W.frames.forEach((f) => { const tg = f.state.focus ? 1.055 : 1; f.state.s += (tg - f.state.s) * Math.min(1, dt * 6); f.art.scale.setScalar(f.state.s); f.art.position.z = (f.state.s - 1) * .6; });
