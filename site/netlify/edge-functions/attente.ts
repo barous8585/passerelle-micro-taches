@@ -44,6 +44,7 @@ const page = (reste: number) => `<!doctype html>
   .cpt div{min-width:76px;padding:11px 8px 8px;border:1px solid rgba(214,173,98,.45);border-radius:14px;background:rgba(255,255,255,.04)}
   .cpt b{display:block;font-family:Inter,sans-serif;font-weight:500;font-size:clamp(26px,7vw,34px);color:#f3d79a;font-variant-numeric:tabular-nums}
   .cpt span{font-family:Inter,sans-serif;font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;color:rgba(246,239,226,.55)}
+  .h{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1;font-style:normal;font-weight:500;color:#f3d79a}
   .bas{font-size:16.5px;margin-top:18px;color:rgba(246,239,226,.6)}
 </style></head><body>
 <canvas id="c"></canvas>
@@ -52,7 +53,7 @@ const page = (reste: number) => `<!doctype html>
   <div class="coeur" id="c0">♥</div>
   <div class="k">Un cadeau pour toi</div>
   <h1>Hadiatou,<br>patience…</h1>
-  <p>Ce QR code s'ouvrira à minuit.<br>Reviens le scanner à 00h00 : quelque chose t'attend.</p>
+  <p>Ce QR code s'ouvrira à minuit.<br>Reviens le scanner à <span class="h">00h00</span> : quelque chose t'attend.</p>
   <div class="cpt"><div><b id="h">--</b><span>heures</span></div><div><b id="m">--</b><span>minutes</span></div><div><b id="s">--</b><span>secondes</span></div></div>
   <div class="bas">Garde-le précieusement : il ne s'ouvrira que pour toi, et pour toujours.</div>
 </main>
