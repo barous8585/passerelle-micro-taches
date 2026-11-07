@@ -1116,7 +1116,7 @@
      ════════════════════════════════════════════ */
   const ROT = { x: 0, z: -5, r: 9, h: 9 };
   const ROT_E = [1.5875, 2.0128];   // ouverture vers la bibliothèque (angles : x = sin θ, z = cos θ)
-  const ROT_OPEN = [[-.2445, .2445, 5.4], [ROT_E[0], ROT_E[1], 4.6], [Math.PI - .2222, Math.PI + .2222, 5], [2 * Math.PI - ROT_E[1], 2 * Math.PI - ROT_E[0], 4.6]];
+  const ROT_OPEN = [[-.2445, .2445, 5.4], [Math.PI - .2222, Math.PI + .2222, 5]];
   const rotAt = (th, rad, y) => new THREE.Vector3(ROT.x + Math.sin(th) * rad, y || 0, ROT.z + Math.cos(th) * rad);
   const faceCenter = (th) => Math.atan2(-Math.sin(th), -Math.cos(th));
   function domeCanvas() {
@@ -1210,7 +1210,7 @@
     W.hallPlate = new THREE.Group(); W.hallPlate.position.copy(hp); W.hallPlate.rotation.y = faceCenter(Math.PI); root.add(W.hallPlate);
     { const bk = plane(6.2, 1.25, new THREE.MeshStandardMaterial({ color: '#f4ead8', roughness: .8 })), fr = plane(6.4, 1.45, M.gold); bk.position.set(hp.x, hp.y, hp.z + .03); fr.position.set(hp.x, hp.y, hp.z + .02); root.add(fr, bk); W.hallPlate.position.z += .05; }
     const pl = (t, s) => [{ text: t, y: .38, size: .42, italic: true, color: '#3b3226' }, { text: s, y: .8, size: .2, sans: true, spacing: 6, color: '#b08d57' }];
-    [[(ROT_E[0] + ROT_E[1]) / 2, 'La bibliothèque', 'NOS MOTS  ·  NOS PROJETS'], [-(ROT_E[0] + ROT_E[1]) / 2, 'La salle des cartes', 'NOS LIEUX']].forEach(([th, t, s]) => {
+    [].forEach(([th, t, s]) => {
       const p = rotAt(th, r - .3, 5.55); wallPlate(root, p.x, p.y, p.z, faceCenter(th), 3.2, pl(t, s));
     });
 
@@ -1232,7 +1232,7 @@
     W.anim.push((t, dt) => { heart.rotation.y += dt * .6; const b = 1 + Math.max(0, Math.sin(t * 3.2)) * .06; heart.scale.setScalar(b); heart.position.y = 1.3 + Math.sin(t * 1.2) * .02; W.heartMat.emissiveIntensity = .35 + (Math.sin(t * 2) + 1) * .2; });
 
     // ✉ Le bureau aux lettres
-    const dx = 18.6, dz = -4.7, desk = new THREE.Group(); desk.position.set(dx, 0, dz); desk.rotation.y = Math.PI;
+    const dp = rotAt(1.75, 6.3), dx = dp.x, dz = dp.z, desk = new THREE.Group(); desk.position.set(dx, 0, dz); desk.rotation.y = faceCenter(1.75) + Math.PI / 2;
     const woodM = new THREE.MeshStandardMaterial({ map: tex('wood', 2, 1), roughness: .7 });
     desk.add(box(2.2, .08, 1, woodM, 0, .82, 0));
     [[-1, -.42], [1, -.42], [-1, .42], [1, .42]].forEach(([lx, lz]) => desk.add(box(.08, .8, .08, woodM, lx, .4, lz)));
@@ -1244,11 +1244,11 @@
     root.add(desk);
     const dhit = box(2.3, 1.2, 1.1, new THREE.MeshBasicMaterial({ visible: false }), 0, .6, 0); desk.add(dhit);
     interactive(dhit, { range: 3.8, near: { type: 'hint', text: () => '✉️ Le bureau aux lettres scellées' }, click: openLetters });
-    OBST.push([dx - 1.1 - R, dx + 1.1 + R, dz - .5 - R, dz + .5 + R]);
+    OBST.push([dx - .6 - R, dx + .6 + R, dz - 1.1 - R, dz + 1.1 + R]);
 
     // 🎬 Écran de la rétrospective, sur le mur courbe face au centre ; le phonographe dans la bibliothèque
     { const vp = rotAt(-2.45, 8.3); buildVideoScreen(root, vp.x, 3.4, vp.z, faceCenter(-2.45)); }
-    buildPhono(root, 13.2, -4.7);
+    { const pp = rotAt(-1.75, 6.6); buildPhono(root, pp.x, pp.z); }
     // murs extérieurs entre la façade et les ailes
     [-1, 1].forEach((sd) => root.add(box(1.2, 12, 11.3, wallMat('stone', 11.3, 12, PALETTE.facade), sd * 14.6, 6, 4.35)));
   }
@@ -1674,8 +1674,7 @@
       [-2.2 + R, 2.2 - R, HALL.z0 - .5, GARDEN.zMin + .7],                  // porte
       [-2.2 + R, 2.2 - R, RC + 7.8, 8.2],                                   // vestibule
       [-3.4, 3.4, RC - 8, RC + 8], [-6, 6, RC - 6, RC + 6], [-8, 8, RC - 3.3, RC + 3.3],   // rotonde
-      [-1.6, 1.6, RC - 9.8, RC - 7.8],                                      // vers le jardin intérieur
-      [7.5, 10.9, -8.85 + R, -5.15 - R], [-10.9, -7.5, -8.85 + R, -5.15 - R],   // passages vers les ailes
+      [-1.6, 1.6, RC - 9.6, RC - 7.8],                                      // vers les galeries
       ...EXTRA_WALK,
     ];
     W.zones.push({ name: 'Le Jardin des vœux', outside: true, tp: [0, 56, 0], r: [-GARDEN.x, GARDEN.x, 8.5, GARDEN.zMax] });
@@ -1684,14 +1683,14 @@
     // ── combien de travées ? chaque travée porte deux cadres (mur extérieur + mur sur le jardin)
     const chapters = sortedChapters();
     const info = chapters.map((ch) => { const all = memoriesOf(ch.id, chapters), mems = wallOf(all), album = all.length > mems.length; const slots = mems.length + (S.canWrite ? 1 : 0), dense = slots > 4; return { ch, mems, all, album: all.length > 12, slots, dense, bays: Math.max(2, Math.ceil(slots / (dense ? 4 : 2))) }; });
-    const need = info.reduce((a, c) => a + c.bays, 0) + 1;
-    const n = Math.max(5, Math.ceil((need - 4) / 2)), zc = Z0 - n * BL;   // zc : bord nord du jardin intérieur
-    const topBL = ((XR - hw) - (XL + hw)) / 7;
-    const legs = [
-      { s: [XL, Z0], u: [0, -1], o: [-1, 0], n, bl: BL },
-      { s: [XL + hw, zc - hw], u: [1, 0], o: [0, -1], n: 7, bl: topBL },
-      { s: [XR, zc], u: [0, 1], o: [1, 0], n: n - 3, bl: BL },
-    ];
+    /* LES GALERIES EN SERPENTIN, derrière la rotonde : des allées côte à côte, reliées à leurs extrémités ;
+       on entre par l'arche nord de la rotonde, on finit dans la salle de « Notre avenir » */
+    const need = info.reduce((a, c) => a + c.bays, 0) + 1 + 2;
+    const NB = 8, SP = CW + .6, zE = RC - 9.3, zT = zE - (NB + 2) * BL, zS = zT + NB * BL;
+    const nC = 1 + Math.max(0, Math.ceil((need - (NB + 2)) / NB)), xOf = (i) => i * SP;
+    const legs = [];
+    for (let i = 0; i < nC; i++) legs.push(i === 0 ? { s: [0, zE], u: [0, -1], o: [-1, 0], n: NB + 2, bl: BL } : i % 2 ? { s: [xOf(i), zT], u: [0, 1], o: [1, 0], n: NB, bl: BL } : { s: [xOf(i), zS], u: [0, -1], o: [-1, 0], n: NB, bl: BL });
+    const zc = zT;
     const bays = [];
     legs.forEach((L) => { for (let k = 0; k < L.n; k++) bays.push({ L, k, u: L.u, o: L.o, bl: L.bl, c: [L.s[0] + L.u[0] * (k + .5) * L.bl, L.s[1] + L.u[1] * (k + .5) * L.bl] }); });
     const rotOf = (u) => Math.atan2(u[0], u[1]);
@@ -1729,7 +1728,7 @@
     };
     const portal = (b, wm, lines) => {   // une arche à l'entrée d'un chapitre, avec sa plaque
       const s = at(b.c, b.u, b.o, -b.bl / 2, 0), ry = rotOf(b.u);
-      if (b.L === legs[0] && b.k === 0) {   // le premier chapitre : sa plaque au-dessus de l'arche de la salle des cartes
+      if (false) {
         if (lines) { const pq = textPlane(5.6, 1.05, lines), bg = plane(4.9, 1.0, new THREE.MeshStandardMaterial({ color: '#f4ead8', roughness: .8 })); bg.position.set(XL, 5.3, Z0 + .03); pq.position.set(XL, 5.3, Z0 + .05); D.add(bg, pq); }
         return;
       }
@@ -1759,7 +1758,7 @@
         { text: ch.subtitle || '', y: .86, size: .19, italic: true, weight: 400, color: '#8a7350' },
       ]);
       for (let k = 0; k < nb; k++) {
-        const b = bays[bi + k]; buildBay(b, wm, dense);
+        const b = bays[bi + k]; buildBay(b, wm, true);
         if (!dense) [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
         else [[1, 0], [-1, 0], [1, 1], [-1, 1]].forEach(([side, row], j) => { const s = k * 4 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id, row); });
       }
@@ -1770,10 +1769,10 @@
       bi += nb;
     });
     // ── « La suite » : les travées encore vides, qui attendent les prochains chapitres
-    const suite = bays.slice(bi); const swm = wallMat('plaster', BL, CH, '#efe6d6');
+    const suite = bays.slice(bi, bays.length - 2); const swm = wallMat('plaster', BL, CH, '#efe6d6');
     portal(suite[0], swm, [{ text: 'LA SUITE', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 's\'écrit ensemble', y: .7, size: .36, italic: true, color: '#3b3226' }]);
     suite.forEach((b, k) => {
-      buildBay(b, swm);
+      buildBay(b, swm, true);
       [1, -1].forEach((side) => { const p = at(b.c, b.u, b.o, 0, side * (hw - .01)); const gh = plane(1, 1.3, new THREE.MeshBasicMaterial({ color: '#c9b48a', transparent: true, opacity: .14 })); gh.position.set(p[0], 1.75, p[1]); gh.rotation.y = Math.atan2(-side * b.o[0], -side * b.o[1]); D.add(gh); });
     });
     { const b = suite[0], lect = new THREE.Group(); lect.position.set(b.c[0], 0, b.c[1]); lect.rotation.y = Math.atan2(-b.u[0], -b.u[1]); D.add(lect);
@@ -1785,77 +1784,48 @@
       W.zones.push({ name: 'La suite', tp: [...at(b.c, b.u, b.o, -1.4, 0), Math.atan2(-b.u[0], -b.u[1])], bays: suite });
       W.nextRoom = { lect: b.c };
     }
-    // ── les deux angles du fond
+    // ── l'entrée depuis la rotonde : on ferme les côtés de l'allée autour de l'arche
+    { const ew = wallMat('plaster', 2, CH, wallColorOf(chapters[0] || {})); [-1, 1].forEach((sd) => { D.add(box(hw - 1.6 + .3, CH, .3, ew, sd * (1.6 + (hw - 1.6 + .3) / 2), CH / 2, zE + .15)); });
+      D.add(box(3.2, CH - 4.4, .3, ew, 0, (CH + 4.4) / 2, zE + .15)); D.add(box(3.3, .08, .32, M.gold, 0, 4.4, zE + .15)); [-1, 1].forEach((sd) => D.add(box(.08, 4.4, .32, M.gold, sd * 1.6, 2.2, zE + .15)));
+      D.add(box(3.2, .04, zE - (RC - 9.6) + .2, floorM, 0, .01, (zE + RC - 9.6) / 2)); }
+    // ── les virages entre deux allées
     const cw = wallMat('plaster', CW, CH, '#efe6d6');
-    corner(XL, zc - hw, cw, [[-1, 0], [0, -1]]); corner(XR, zc - hw, cw, [[1, 0], [0, -1]]);
-    // les galeries elles-mêmes sont praticables
+    for (let i = 0; i < nC - 1; i++) {
+      const top = i % 2 === 0, cz = top ? zT - hw : zS + hw, dz = top ? -1 : 1, xa = xOf(i), xb = xOf(i + 1);
+      corner(xa, cz, cw, [[-1, 0], [0, dz]]); corner(xb, cz, cw, [[1, 0], [0, dz]]);
+      const gx = (xa + xb) / 2, gw = xb - xa - CW;
+      D.add(box(gw + .02, .04, CW, floorM, gx, 0, cz)); D.add(box(gw + .6, .05, CW + .6, M.ceiling, gx, CH + .02, cz)); D.add(box(gw + .02, CH, .3, cw, gx, CH / 2, cz + dz * (hw + .15)));
+      WALK.push([xa - hw + R, xb + hw - R, top ? cz - hw + R : cz - hw - .2, top ? cz + hw + .2 : cz + hw - R]);
+    }
+    // les allées elles-mêmes sont praticables
     legs.forEach((L) => { const len = L.n * L.bl, e = [L.s[0] + L.u[0] * len, L.s[1] + L.u[1] * len];
       WALK.push([Math.min(L.s[0], e[0]) - (L.u[0] ? 0 : hw - R), Math.max(L.s[0], e[0]) + (L.u[0] ? 0 : hw - R), Math.min(L.s[1], e[1]) - (L.u[1] ? 0 : hw - R), Math.max(L.s[1], e[1]) + (L.u[1] ? 0 : hw - R)]); });
 
-    // ── « Notre avenir » : la dernière salle, grande baie sur le jardin intérieur, le banc
-    const az0 = zc + (n - 3) * BL, az1 = Z0, aL = az1 - az0, azc = (az0 + az1) / 2, ax0 = XR - hw, ax1 = XR + hw;
-    const awm = wallMat('plaster', aL, CH, '#2c4775');
-    portal({ c: [XR, az0 + 1.7], u: [0, 1], o: [1, 0], bl: 3.4 }, awm, [{ text: 'NOTRE AVENIR', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 'tout ce qu\'il nous reste à vivre', y: .7, size: .32, italic: true, color: '#3b3226' }]);
-    D.add(box(.3, CH, aL, awm, ax1 + .15, CH / 2, azc));
-    const wy0 = .7, wy1 = 5.2;
-    D.add(box(.3, wy0, aL, awm, ax0 - .15, wy0 / 2, azc)); D.add(box(.3, CH - wy1, aL, awm, ax0 - .15, (CH + wy1) / 2, azc));
-    D.add(box(.06, wy0, aL, facadeM, ax0 - .33, wy0 / 2, azc)); D.add(box(.06, CH - wy1, aL, facadeM, ax0 - .33, (CH + wy1) / 2, azc));
-    { const gp = glassPane(aL, wy1 - wy0); gp.position.set(ax0 - .15, (wy0 + wy1) / 2, azc); gp.rotation.y = -Math.PI / 2; D.add(gp); }
-    for (let k = 0; k <= 4; k++) D.add(box(.12, wy1 - wy0, .08, M.black, ax0 - .15, (wy0 + wy1) / 2, az0 + k * aL / 4));
-    D.add(box(.34, .06, aL, M.black, ax0 - .15, wy0 + (wy1 - wy0) * .72, azc));
-    D.add(box(CW + .6, .05, aL, M.ceiling, XR, CH + .02, azc)); D.add(box(CW, .04, aL, floorM, XR, 0, azc));
-    const q = textPlane(9, .5, [{ text: S.settings.quote || '« Si c\'était à refaire, je te choisirais encore. »', y: .5, size: .62, italic: true, color: '#e8d6ad' }]);
-    q.position.set(ax0 + .02, 5.6, azc); q.rotation.y = Math.PI / 2; D.add(q);
-    const ap = textPlane(5.4, 1.1, [{ text: 'NOTRE AVENIR', y: .28, size: .26, sans: true, spacing: 14, color: '#d6ad62' }, { text: 'nos projets, nos rêves, nos promesses', y: .68, size: .3, italic: true, color: '#efe2c4' }]);
-    ap.position.set(ax1 - .02, 3.2, azc); ap.rotation.y = -Math.PI / 2; D.add(ap);
-    for (let k = 0; k < 40; k++) { const st = glowSprite('#ffe9b8', .18 + Math.random() * .2, .7); st.position.set(ax1 - .05, 1 + Math.random() * 4.6, az0 + .5 + Math.random() * (aL - 1)); D.add(st); }
-    // le banc, face au jardin intérieur
-    const benchX = ax0 + 2.3, bench = new THREE.Group(); bench.position.set(benchX, 0, azc); bench.rotation.y = Math.PI / 2; D.add(bench);
+    // ── « Notre avenir » : les deux dernières travées, le banc, et le mur du fond
+    const av = bays.slice(bays.length - 2), awm = wallMat('plaster', BL, CH, '#2c4775');
+    portal(av[0], awm, [{ text: 'NOTRE AVENIR', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 'tout ce qu\'il nous reste à vivre', y: .7, size: .32, italic: true, color: '#3b3226' }]);
+    av.forEach((b) => buildBay(b, awm, true));
+    { const b = av[1], endP = at(b.c, b.u, b.o, b.bl / 2 + .15, 0), ry = rotOf(b.u);
+      const ew = box(CW + .6, CH, .3, awm, endP[0], CH / 2, endP[1]); ew.rotation.y = ry; D.add(ew);
+      const q = textPlane(6.4, .5, [{ text: S.settings.quote || '« Si c\'était à refaire, je te choisirais encore. »', y: .5, size: .62, italic: true, color: '#e8d6ad' }]);
+      const qp = at(b.c, b.u, b.o, b.bl / 2 - .02, 0); q.position.set(qp[0], 4.2, qp[1]); q.rotation.y = Math.atan2(-b.u[0], -b.u[1]); D.add(q);
+      for (let k = 0; k < 30; k++) { const st = glowSprite('#ffe9b8', .18 + Math.random() * .2, .7), sp = at(b.c, b.u, b.o, b.bl / 2 - .08, (Math.random() - .5) * (CW - 1)); st.position.set(sp[0], 1 + Math.random() * 4.6, sp[1]); D.add(st); } }
+    // le banc, face au mur du fond étoilé
+    const bc = at(av[1].c, av[1].u, av[1].o, -.3, 0), byaw = Math.atan2(-av[1].u[0], -av[1].u[1]);
+    const bench = new THREE.Group(); bench.position.set(bc[0], 0, bc[1]); bench.rotation.y = rotOf(av[1].u); D.add(bench);
     bench.add(box(2.6, .07, .58, new THREE.MeshStandardMaterial({ color: '#c9a27a', roughness: .6 }), 0, .44, 0));
     bench.add(box(2.5, .05, .52, new THREE.MeshStandardMaterial({ color: '#ece6dc', roughness: 1 }), 0, .5, 0));
     bench.add(box(.05, .4, .52, M.black, -1.1, .2, 0)); bench.add(box(.05, .4, .52, M.black, 1.1, .2, 0));
     const bHit = box(2.7, .8, .7, new THREE.MeshBasicMaterial({ visible: false }), 0, .4, 0); bench.add(bHit);
-    interactive(bHit, { range: 4.5, near: { type: 'hint', text: () => '🪑 Toucher le banc pour t\'asseoir face au jardin' }, click: () => { if (!S.seated) sitDown(); } }, 'gallery');
-    dyn([benchX - .3 - R, benchX + .3 + R, azc - 1.35 - R, azc + 1.35 + R]);
-    W.bench = { x: benchX, z: azc, yaw: Math.PI / 2 };
-    WALK.push([ax0 + R, ax1 - R, az0 - .2, az1 + .2]);
-    WALK.push([XR - 2 + R, XR + 2 - R, az1 - .5, az1 + .8]);       // arche vers la bibliothèque
-    WALK.push([XL - 2 + R, XL + 2 - R, Z0 - .5, Z0 + .8]);         // arche depuis la salle des cartes
-    W.zones.push({ name: 'Notre avenir', tp: [benchX + 1.4, azc + 2.2, Math.PI / 2], r: [ax0, ax1, az0, az1] });
+    interactive(bHit, { range: 4.5, near: { type: 'hint', text: () => '🪑 Toucher le banc pour t\'asseoir' }, click: () => { if (!S.seated) sitDown(); } }, 'gallery');
+    dyn(rectAt(bc, av[1].u, .3, 1.3));
+    W.bench = { x: bc[0], z: bc[1], yaw: byaw };
+    W.zones.push({ name: 'Notre avenir', tp: [...at(av[0].c, av[0].u, av[0].o, -1.4, 0), Math.atan2(-av[0].u[0], -av[0].u[1])], bays: av });
 
-    // ── le jardin intérieur, à ciel ouvert
-    const gx0 = XL + hw + .36, gx1 = XR - hw - .36, gz0 = zc + .36, gz1 = Z0, gcx = (gx0 + gx1) / 2, gcz = (gz0 + RC - 9.3) / 2;
-    const lawn = plane(gx1 - gx0, gz1 - gz0, new THREE.MeshStandardMaterial({ map: realTex('grassG', grassGroundCanvas, (gx1 - gx0) / 4, (gz1 - gz0) / 4, true), roughness: 1 }));
-    lawn.rotation.x = -Math.PI / 2; lawn.position.set(gcx, -.005, (gz0 + gz1) / 2); D.add(lawn);
-    const grav = (w, l, x, z) => { const p = plane(w, l, new THREE.MeshStandardMaterial({ map: tex('gravel', w / 2.2, l / 2.2), roughness: .95 })); p.rotation.x = -Math.PI / 2; p.position.set(x, .02, z); D.add(p); };
-    grav(2.4, (RC - 9.3) - gz0, 0, ((RC - 9.3) + gz0) / 2); grav(gx1 - gx0, 2.4, gcx, gcz);
-    const ring = new THREE.Mesh(new THREE.CircleGeometry(3.6, 40), new THREE.MeshStandardMaterial({ map: tex('gravel', 3, 3), roughness: .95 })); ring.rotation.x = -Math.PI / 2; ring.position.set(0, .025, gcz); D.add(ring);
-    // un bassin et son jet d'eau
-    const stoneM = limeMat(2, .3);
-    const basin = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 2, .55, 40, 1, true), stoneM); basin.position.set(0, .27, gcz); D.add(basin);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.9, .12, 8, 40), stoneM); rim.rotation.x = Math.PI / 2; rim.position.set(0, .55, gcz); D.add(rim);
-    const water = new THREE.Mesh(new THREE.CircleGeometry(1.88, 40), new THREE.MeshStandardMaterial({ color: '#2a5a86', emissive: '#16305a', emissiveIntensity: .5, roughness: .06, metalness: .3 })); water.rotation.x = -Math.PI / 2; water.position.set(0, .45, gcz); D.add(water);
-    const jet = new THREE.Mesh(new THREE.CylinderGeometry(.03, .07, 1.4, 10, 1, true), new THREE.MeshBasicMaterial({ color: '#cfe6ff', transparent: true, opacity: .55 })); jet.position.set(0, 1.15, gcz); D.add(jet);
-    const spray = glowSprite('#dff0ff', 1.4, .6); spray.position.set(0, 1.85, gcz); D.add(spray);
-    dyn([-2.1 - R, 2.1 + R, gcz - 2.1 - R, gcz + 2.1 + R]);
-    // quatre cerisiers, des bancs, des massifs de fleurs
-    const tq = [[gx0 + 3.2, gz0 + 3.2], [gx1 - 3.2, gz0 + 3.2], [gx0 + 3.2, gcz + 4], [gx1 - 3.2, gcz + 4]].filter(([, z2]) => z2 < Z0 - 1.5);
-    buildTrees(D, tq.map(([x, z2], k) => [x, z2, .62 + k * .05]));
-    tq.forEach(([x, z2]) => dyn([x - .45 - R, x + .45 + R, z2 - .45 - R, z2 + .45 + R]));
-    [[-1, 0], [1, 0], [0, -1]].forEach(([dx, dz]) => { const bx = dx * 4.6, bz = gcz + dz * 4.6; museumBench(D, bx, bz, 2.2, dx ? 0 : Math.PI / 2); dyn(dx ? [bx - .31 - R, bx + .31 + R, bz - 1.1 - R, bz + 1.1 + R] : [bx - 1.1 - R, bx + 1.1 + R, bz - .31 - R, bz + .31 + R]); });
-    const flowers = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(.13, 0), new THREE.MeshStandardMaterial({ roughness: .7 }), 240); let nf = 0;
-    const fcol = ['#e2486a', '#f2a7c3', '#fff3f0', '#f6c445', '#c46ad6', '#ff8a5c'].map((c2) => new THREE.Color(c2));
-    const bed = (x0, x1, z0, z1) => { for (let i = 0; i < 60 && nf < 240; i++) { _m4.makeTranslation(x0 + Math.random() * (x1 - x0), .12 + Math.random() * .25, z0 + Math.random() * (z1 - z0)); flowers.setMatrixAt(nf, _m4); flowers.setColorAt(nf, fcol[nf % fcol.length]); nf++; } };
-    bed(gx0 + .3, gx0 + 1.3, gz0 + .5, gz1 - .5); bed(gx1 - 1.3, gx1 - .3, gz0 + .5, gz1 - .5); bed(gx0 + 1.5, gx1 - 1.5, gz0 + .3, gz0 + 1.1);
-    flowers.count = nf; flowers.instanceMatrix.needsUpdate = true; if (flowers.instanceColor) flowers.instanceColor.needsUpdate = true; D.add(flowers);
-    // murets qui ferment le jardin entre la rotonde et les ailes
-    [-1, 1].forEach((sd) => { const x0 = 5.66, x1 = 10.4, L = x1 - x0; D.add(box(L, 9, .3, facadeM, sd * (x0 + L / 2), 4.5, Z0 - .15)); });
-    WALK.push([gx0 + R, gx1 - R, gz0 + R, RC - 9.6], [gx0 + R, -5.9, RC - 9.6, Z0 - .3 - R], [5.9, gx1 - R, RC - 9.6, Z0 - .3 - R]);
-    W.zones.push({ name: 'Le jardin intérieur', tp: [0, RC - 11.2, 0], r: [gx0, gx1, gz0, Z0] });
-
-    // ── trajet de la visite guidée le long de la boucle (décalé de 1,6 m vers le jardin pour éviter les bancs)
-    const off = 1.6;
-    W.loopPath = [[-15, -9.6], [XL, Z0 + .6], [XL + off, Z0 - 1.4], [XL + off, zc - hw + off], [XR - off, zc - hw + off], [XR - off, az0 - .6]];
+    // ── trajet de la caméra le long des allées (décalé pour éviter les bancs et les pupitres)
+    const off = 1.8; W.loopPath = [[0, zE + 1.5], [off, zE - 1]];
+    for (let i = 0; i < nC; i++) { const ex = xOf(i) + off; if (i < nC - 1) { const cz = i % 2 === 0 ? zT - hw : zS + hw; W.loopPath.push([ex, cz], [xOf(i + 1) + off, cz]); } }
+    { const b = av[1], p2 = at(b.c, b.u, b.o, -1.2, 0); W.loopPath.push([p2[0] + (b.u[1] ? off * (b.u[1] > 0 ? 1 : 1) : 0), p2[1]]); }
     W.chapters = chapters; W.endZ = zc;
     refreshLanterns(); refreshEnvelopes(); if (W.root) realify(W.root); mergeStatic(D);
   }
@@ -3237,7 +3207,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       this.amb = new THREE.AmbientLight('#fff4e6', .2); this.hemi = new THREE.HemisphereLight('#5a6bb0', '#141826', .5);
       this.moon = new THREE.DirectionalLight('#b9c8ff', .7); this.moon.position.set(-30, 60, -60);
       root.add(this.amb, this.hemi, this.moon);
-      buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildFauna(root); buildHall(root); buildUpperWindows(root); buildWings(root); buildSerre(root); buildCapsuleField(root); buildAdvent(root); initSpotPool(root); initFX(root);
+      buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildFauna(root); buildHall(root); buildUpperWindows(root);  initSpotPool(root); initFX(root);
       W.peerGroup = new THREE.Group(); root.add(W.peerGroup);
       buildDust(root);
       buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(S.settings.video || null);
@@ -3453,7 +3423,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     if (clues.length) body.push(h('h3', { text: '🗝️ Chasse au trésor' }), h('div', { class: 'list', style: 'margin-top:0' }, clues.map((t) => h('div', { class: 'item' }, h('div', { class: 't', text: 'Indice : ' + t.clue }), h('div', { class: 's', text: 'Un trésor est caché pour toi quelque part…' })))));
     body.push(h('div', { class: 'actions', style: 'margin-top:14px' },
       h('button', { class: 'pbtn', text: '📖 Le conte', onclick: () => { closeModal(); setTimeout(runStory, 350); } }),
-      h('button', { class: 'pbtn', text: '▶ Visite guidée', onclick: () => { closeModal(); setTimeout(runTour, 350); } }),
+
       h('button', { class: 'pbtn', text: '📖 Notre livre souvenir (PDF)', onclick: (e) => exportBook(e.currentTarget) }),
       h('button', { class: 'pbtn', text: '💾 Tout sauvegarder (.zip)', onclick: (e) => exportArchive(e.currentTarget) })));
     body.push(h('h3', { text: 'Les lieux' }), h('div', { class: 'list', style: 'margin-top:0' }, items));
@@ -3483,7 +3453,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   /* ════════════════════════════════════════════
      L'ATELIER
      ════════════════════════════════════════════ */
-  const TABS = [['souvenir', 'Souvenir'], ['chapitres', 'Chapitres'], ['sons', 'Sons'], ['lettres', 'Lettres'], ['raisons', 'Raisons'], ['serre', 'Premières fois'], ['biblio', 'Bibliothèque'], ['projets', 'Projets'], ['tresors', 'Trésors'], ['capsules', 'Capsules'], ['avent', 'Avent'], ['conte', 'Le conte'], ['visite', 'Visite guidée'], ['mots', 'Mots du jour'], ['reglages', 'Réglages']];
+  const TABS = [['souvenir', 'Souvenir'], ['chapitres', 'Chapitres'], ['conte', 'Le conte'], ['sons', 'Sons'], ['lettres', 'Lettres'], ['raisons', 'Raisons'], ['reglages', 'Réglages']];
   let curTab = 'souvenir', tabOpts = {};
   function openAtelier(tab, opts) {
     if (!S.canWrite) return;
@@ -4110,12 +4080,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
      LES AILES DU CHÂTEAU
      ════════════════════════════════════════════ */
   const WING_H = 6;
-  const EXTRA_WALK = [
-    [-24 + R, -10.4 - R, -12 + R, -2 - R],              // salle des cartes
-    [10.4 + R, 22 - R, -12 + R, -2 - R],                // bibliothèque
-    [22.4 + R, 34 - R, -12 + R, -2 - R],                // salle des projets
-    [21.6, 22.8, -7 - 2.2 + R, -7 + 2.2 - R],            // porte bibliothèque → projets
-  ];
+  const EXTRA_WALK = [];
   function wingRoom(root, x0, x1, z0, z1, walls) {
     const H = WING_H, w = x1 - x0, d = z1 - z0, xc = (x0 + x1) / 2, zc = (z0 + z1) / 2;
     const fl = plane(w, d, new THREE.MeshStandardMaterial({ map: tex('floor', w / 4, d / 4), roughness: .2, metalness: .05 })); fl.rotation.x = -Math.PI / 2; fl.position.set(xc, .02, zc); root.add(fl);
@@ -4813,7 +4778,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     }
     return z > 8.5 ? 'Le Jardin des vœux' : 'Notre château';
   }
-  function refreshExtras() { if (!W.root) return; refreshGlobe(); refreshBooks(); refreshProjects(); refreshSerre(); refreshCapsules(); refreshAdvent(); refreshTreasures(); if (W.root) realify(W.root); }
+  function refreshExtras() { if (!W.root) return; refreshTreasures(); if (W.root) realify(W.root); }
 
   /* ════════════════════════════════════════════
      NAVIGATION : joystick analogique, toucher le sol pour y aller, plein écran
@@ -5049,14 +5014,23 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       // ouverture au noir
       el.classList.add('on'); el.querySelector('.title').classList.add('on');
       await glideP(0, 70, 0, .1, 50); cx = 0; cz = 70;
-      await storyTitle(storyFill(cfg.title || 'Le royaume de {elle}'), 'un conte', 3600);
+      // ta voix d'abord, sur l'écran noir du titre
+      const voice = cfg.voice && SND.byId(cfg.voice);
+      if (voice && !ST.abort) {
+        const tl = el.querySelector('.title'); tl.firstChild.replaceChildren(document.createTextNode(storyFill(cfg.title || 'Le royaume de {elle}')), h('small', { text: '🎙️ ' + ((S.settings.welcomeSign || 'Ousmane').trim()) }));
+        tl.classList.add('on'); if (snd && SND.isPlaying(snd)) SND.stop(); Music.setDuck(true);
+        await SND.toggle(voice); await sleep(400);
+        await new Promise((r) => { const tk = setInterval(() => { if (ST.abort || !SND.isPlaying(voice)) { clearInterval(tk); ST.next = null; r(); } }, 300); ST.next = () => { clearInterval(tk); ST.next = null; if (SND.isPlaying(voice)) SND.stop(); r(); }; });
+        Music.setDuck(false); tl.classList.remove('on'); await sleep(1600);
+        if (snd && !ST.abort) SND.toggle(snd);
+      } else await storyTitle(storyFill(cfg.title || 'Le royaume de {elle}'), 'un conte', 3600);
       for (const sc of STORY) {
         if (ST.abort) break;
         if (sc.where !== 'jardin') await storyClear();
         if (sc.where === 'chapitres') { await storyChapters(sc, page, move); continue; }
         if (sc.where === 'film') { await storyFilm(cfg, storyFill((texts.film || '').trim() || sc.def), snd); continue; }
         if (sc.where === 'avenir') {
-          if (W.bench) { const at = [W.bench.x + 2.6, W.bench.z], yaw = yawTo(at[0], at[1], W.bench.x - 10, W.bench.z);
+          if (W.bench) { const yaw = W.bench.yaw, at = [W.bench.x + Math.sin(yaw) * 2.6, W.bench.z + Math.cos(yaw) * 2.6];
             $('#fade').classList.add('on'); await sleep(700); { const pl = $('#player'); pl.object3D.position.set(at[0], EYE, at[1]); if (pl.components.bounds) pl.components.bounds.last.set(at[0], EYE, at[1]); look().yawObject.rotation.y = yaw; look().pitchObject.rotation.x = 0; } cx = at[0]; cz = at[1];
             await sleep(300); $('#fade').classList.remove('on'); await sleep(600); }
           await page(sc); continue;
@@ -5452,6 +5426,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     const her = h('input', { type: 'text', id: 'storyHer', maxlength: 30, placeholder: 'Hadiatou', value: cfg.her || '' });
     const title = h('input', { type: 'text', id: 'storyTitle', maxlength: 60, placeholder: 'Le royaume de {elle}', value: cfg.title || '' });
     const music = soundSelect('storySound', cfg.sound || '');
+    const voiceSel = soundSelect('storyVoice', cfg.voice || '');
     const filmLen = h('select', { id: 'storyFilmLen' }, [['court', 'Court (~1 min 30)'], ['moyen', 'Moyen (~2 min 30)'], ['long', 'Long (~4 min)']].map(([v, l]) => h('option', { value: v, text: l })));
     filmLen.value = cfg.filmLen || 'moyen';
     const filmSnd = soundSelect('storyFilmSound', cfg.filmSound || '');
@@ -5464,13 +5439,13 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       return h('div', { class: 'chap', style: 'grid-template-columns:1fr' }, h('div', { class: 'mini', text: (sc.kicker || 'La dernière page') + (sc.key === 'chapitresX' ? ' (puis chaque chapitre défile avec son titre)' : '') }), ta);
     });
     const save = h('button', { class: 'gbtn', text: 'Enregistrer le conte' });
-    const collect = () => { const t = {}; Object.entries(rows).forEach(([k, ta]) => { if (ta.value.trim()) t[k] = ta.value.trim(); }); return { filmLen: filmLen.value, filmSound: filmSnd.value || '', filmVideo: filmVid.checked, auto: auto.checked, her: her.value.trim(), title: title.value.trim(), sound: music.value || '', texts: t }; };
+    const collect = () => { const t = {}; Object.entries(rows).forEach(([k, ta]) => { if (ta.value.trim()) t[k] = ta.value.trim(); }); return { voice: voiceSel.value || '', filmLen: filmLen.value, filmSound: filmSnd.value || '', filmVideo: filmVid.checked, auto: auto.checked, her: her.value.trim(), title: title.value.trim(), sound: music.value || '', texts: t }; };
     save.addEventListener('click', async () => { save.disabled = true; try { await saveSettings({ story: collect() }); toast('Conte enregistré 📖'); } catch (e) { toast('Enregistrement impossible'); } save.disabled = false; });
     const prev = h('button', { class: 'ghost', text: '▶ Voir le conte comme elle le verra', onclick: async () => { try { await saveSettings({ story: collect() }); } catch (e) {} closeAtelier(); setTimeout(runStory, 400); } });
     return [h('p', { class: 'lead', text: 'À sa première connexion, après sa lettre, le royaume se raconte comme un conte : quelques lieux du château, puis le film de votre histoire (la vidéo de l\'entrée, puis toutes vos photos en fondu, chapitre par chapitre), et le banc de l\'avenir. Réécris chaque page à ta façon : {elle} et {lui} deviennent vos prénoms, {souvenirs} le nombre de vos souvenirs. Ajoute tes musiques dans l\'onglet Sons, puis choisis-les ici.' }),
       h('label', { class: 'check' }, auto, 'Raconter le conte automatiquement à sa première connexion'), prev,
       h('div', { class: 'row2' }, field('Son prénom dans le conte', her), field('Titre du conte', title)),
-      field('Musique (sinon la musique du conte, composée en direct)', music), ...blocks, save];
+      field('🎙️ Ton message vocal d\'ouverture (il joue en premier, sur le titre)', voiceSel), field('Musique du conte (après ta voix ; sinon la musique composée en direct)', music), ...blocks, save];
   }
   function paneTour() {
     const cur = S.settings.tour || {}, rows = {};
@@ -5628,7 +5603,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
 
   function maybeReady() {
     if (!S.ready.scene || !S.ready.data) return;
-    updateIntro(); renderMot();
+    updateIntro();
     const st = S.settings, btn = $('#enterBtn');
     if (!st.codeHash && S.isOwner && S.db && !ls.get('chateau-setup-skip')) { $('#gate').hidden = true; $('#setup').classList.add('on'); return; }
     btn.disabled = false; btn.textContent = 'Entrer dans notre histoire ✨';
@@ -5668,12 +5643,11 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     setTimeout(() => hint.classList.add('fade'), 12000);
     glide(new THREE.Vector3(0, EYE, 57), 0, .05, 3200, async () => {
       S.entered = true; controls(true);
-      if (await welcomeDue().catch(() => false)) { saveUserState({ welcomeSeen: Date.now() }); await showWelcome(); }
-      const auto = S.settings.tourAuto !== false && !S.isOwner && !!S.db;
+      // à sa première venue : l'histoire commence tout de suite (ta voix, puis le conte), et sa lettre l'attend à la fin
       const storyAuto = storyCfg().auto !== false && !S.isOwner && !!S.db;
-      if (storyAuto && !(await storySeen())) { markTourSeen(); showNews(true); setTimeout(() => runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }), 900); }
-      else if (auto && !(await tourSeen())) { markTourSeen(); showNews(true); setTimeout(() => runTour().catch((e) => { console.error('visite', e); S.tour = false; document.body.classList.remove('touring'); controls(true); }), 700); }
-      else { setTimeout(() => showNews().catch(() => {}), 900); if (S.isOwner && !ls.get('chateau-owner-tour-hint')) { ls.set('chateau-owner-tour-hint', '1'); setTimeout(() => toast('Astuce : Plan ✦ → ▶ Visite guidée, pour voir ce qu\'elle verra'), 6500); } }
+      if (storyAuto && !(await storySeen().catch(() => true))) { markTourSeen(); await sleep(600); await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }); }
+      if (await welcomeDue().catch(() => false)) { saveUserState({ welcomeSeen: Date.now() }); await showWelcome(); }
+      setTimeout(() => showNews().catch(() => {}), 900);
     });
     if (S.canWrite && !S.memories.length) setTimeout(() => toast('Ouvre l\'Atelier ✎ pour accrocher votre premier souvenir'), 4500);
     setTimeout(() => backfillThumbs().catch(() => {}), 15000);
