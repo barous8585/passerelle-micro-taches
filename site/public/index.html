@@ -603,10 +603,11 @@
   }
   function textPlane(w, hh, lines, opt) {
     opt = opt || {};
-    const mat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false });
+    const mat = new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false }); mat.userData.own = true;
     const m = plane(w, hh, mat);
     const draw = () => {
-      const pxW = 1600, pxH = Math.round(pxW * hh / w);
+      if (mat.userData.gone) return;
+      const pxW = opt.px || 1600, pxH = Math.round(pxW * hh / w);
       mat.map = textTexture(pxW, pxH, (c, W, H) => {
         c.textAlign = 'center'; c.textBaseline = 'middle';
         lines.forEach((ln) => {
@@ -1355,12 +1356,34 @@
     if (S.assets) S.assets.delete(id).catch(() => {});
   }
   const TEXCACHE = new Map();
+  /* les photos des cadres : chargées seulement quand on s'approche, réduites pour la carte graphique,
+     et libérées quand on s'éloigne (des centaines de tableaux tiennent ainsi sur un téléphone) */
+  const TEX_MAX = isMobile ? 1024 : 1600;
   function photoTexture(assetId, onReady) {
-    if (TEXCACHE.has(assetId)) { const e = TEXCACHE.get(assetId); if (e.tex) onReady(e.tex, e.aspect); else e.waiters.push(onReady); return; }
-    const e = { tex: null, aspect: 1, waiters: [onReady] }; TEXCACHE.set(assetId, e);
-    mediaSrc(assetId).then((src) => new THREE.TextureLoader().load(src, (t) => { srgb(t); t.anisotropy = 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; e.tex = t; e.aspect = t.image.width / t.image.height; e.waiters.forEach((f) => f(t, e.aspect)); e.waiters = []; },
-      undefined, () => { TEXCACHE.delete(assetId); })).catch(() => TEXCACHE.delete(assetId));
+    if (TEXCACHE.has(assetId)) { const e = TEXCACHE.get(assetId); e.refs++; if (e.tex) onReady(e.tex, e.aspect); else e.waiters.push(onReady); return; }
+    const e = { tex: null, aspect: 1, waiters: [onReady], refs: 1 }; TEXCACHE.set(assetId, e);
+    mediaSrc(assetId).then((src) => new THREE.TextureLoader().load(src, (t) => {
+      const im = t.image, big = Math.max(im.width, im.height);
+      if (big > TEX_MAX) { const k = TEX_MAX / big, c = cnv(Math.round(im.width * k), Math.round(im.height * k), (ctx) => ctx.drawImage(im, 0, 0, Math.round(im.width * k), Math.round(im.height * k))); t.dispose(); t = new THREE.CanvasTexture(c); }
+      srgb(t); t.anisotropy = 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      const aspect = im.width / im.height;
+      if (TEXCACHE.get(assetId) !== e) { t.dispose(); return; }
+      e.tex = t; e.aspect = aspect; e.waiters.forEach((f) => f(t, aspect)); e.waiters = []; },
+      undefined, () => { if (TEXCACHE.get(assetId) === e) TEXCACHE.delete(assetId); })).catch(() => { if (TEXCACHE.get(assetId) === e) TEXCACHE.delete(assetId); });
   }
+  function releaseTexture(assetId) {
+    const e = TEXCACHE.get(assetId); if (!e) return;
+    if (--e.refs > 0) return;
+    TEXCACHE.delete(assetId); if (e.tex) e.tex.dispose();
+  }
+  let PH_TEX = null;
+  const sharedPlaceholder = () => PH_TEX || (PH_TEX = placeholderTexture('…', null, 1.333));
+  let PLAY_TEX = null;
+  const playTexture = () => PLAY_TEX || (PLAY_TEX = textTexture(256, 256, (c, w) => {
+    c.clearRect(0, 0, w, w); c.fillStyle = 'rgba(20,14,10,.55)'; c.beginPath(); c.arc(w / 2, w / 2, w * .46, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = 'rgba(255,240,215,.95)'; c.lineWidth = w * .035; c.stroke();
+    c.fillStyle = 'rgba(255,240,215,.97)'; c.beginPath(); c.moveTo(w * .41, w * .3); c.lineTo(w * .72, w * .5); c.lineTo(w * .41, w * .7); c.closePath(); c.fill();
+  }));
   function placeholderTexture(text, sub, aspect) {
     return textTexture(600, Math.round(600 / aspect), (c, w, hh) => {
       const g = c.createLinearGradient(0, 0, w, hh); g.addColorStop(0, '#efe7da'); g.addColorStop(1, '#d9cbb4'); c.fillStyle = g; c.fillRect(0, 0, w, hh);
@@ -1378,7 +1401,7 @@
     const halo = plane(1, 1, M.halo); halo.position.set(0, .15, .006); g.add(halo);
     const art = new THREE.Group(); g.add(art);
     const fm = mem.style === 'bois' ? M.frameBois : mem.style === 'or' ? M.frameOr : M.frameNoir;
-    const ph0 = placeholderTexture('…', null, mem.aspect || 1.333);
+    const ph0 = sharedPlaceholder();
     const photoMat = new THREE.MeshStandardMaterial({ roughness: .5, map: ph0, emissive: '#ffffff', emissiveMap: ph0, emissiveIntensity: .5 });
     const vit = mem.style === 'vitrine' ? vitrineParts(art, mem, photoMat) : null;
     let fbox, matte, photo, glass;
@@ -1388,21 +1411,34 @@
       photo = plane(1, 1, photoMat); photo.position.z = .052; art.add(photo);
       glass = glassPane(1, 1); glass.position.z = .057; art.add(glass);
     }
-    // cartel
-    const cart = textPlane(.36, .14, [{ text: dateText(mem).toUpperCase(), y: .3, size: .16, sans: true, spacing: 3, color: '#9a7b4a', weight: 500 }, { text: mem.title || '', y: .68, size: .3, italic: true, color: '#1e1b17' }]);
-    const cartBg = plane(.38, .16, new THREE.MeshStandardMaterial({ color: '#fbfaf7', roughness: .8 })); g.add(cartBg); g.add(cart);
-    const fr = { size: 1.5 };
+    // cartel (son texte n'est dessiné que lorsqu'on approche)
+    const cartLines = [{ text: dateText(mem).toUpperCase(), y: .3, size: .16, sans: true, spacing: 3, color: '#9a7b4a', weight: 500 }, { text: mem.title || '', y: .68, size: .3, italic: true, color: '#1e1b17' }];
+    const cartBg = plane(.38, .16, M.cartel || (M.cartel = new THREE.MeshStandardMaterial({ color: '#fbfaf7', roughness: .8 }))); g.add(cartBg);
+    const cartPos = new THREE.Vector3(); let cart = null, play = null;
+    if (mem.video) { play = plane(.42, .42, new THREE.MeshBasicMaterial({ map: playTexture(), transparent: true, depthWrite: false })); play.position.z = .062; art.add(play); }
+    const fr = { size: 1.5, on: false };
     const layout = (a) => {
       const [pw0, ph0] = frameSize(a); let FW, FH;
       if (vit) { const o = vit(pw0 * .72, ph0 * .72); FW = pw0 * .72 + .62; FH = ph0 * .72 + .67; void o; }
       else { const w = pw0 + 2 * mat, hh = ph0 + 2 * mat; FW = w + 2 * B; FH = hh + 2 * B; fbox.scale.set(FW, FH, 1); matte.scale.set(w, hh, 1); photo.scale.set(pw0, ph0, 1); glass.scale.set(w, hh, 1); }
       halo.scale.set(FW + 1.7, FH + 1.9, 1);
       if (fr.beam) { const r2 = Math.max(FW, FH) / 2 + .2; fr.beam.scale.set(r2, 1, r2); }
-      cartBg.position.set(FW / 2 + .32, -FH / 2 + .25, .006); cart.position.set(FW / 2 + .32, -FH / 2 + .25, .008); fr.size = Math.max(FW, FH);
+      cartBg.position.set(FW / 2 + .32, -FH / 2 + .25, .006); cartPos.set(FW / 2 + .32, -FH / 2 + .25, .008); if (cart) cart.position.copy(cartPos); fr.size = Math.max(FW, FH);
+      if (play) play.scale.setScalar(Math.min(1, Math.min(FW, FH) / 1.1));
     };
     layout(mem.aspect);
     // la photo entière, jamais étirée ni rognée : le cadre prend sa forme réelle
-    if (mem.asset) photoTexture(mem.asset, (t, ia) => { photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia); });
+    fr.load = () => {
+      if (fr.on) return; fr.on = true;
+      cart = textPlane(.36, .14, cartLines, { px: 640 }); cart.position.copy(cartPos); g.add(cart);
+      if (mem.asset) photoTexture(mem.asset, (t, ia) => { if (!fr.on) return; photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia); });
+    };
+    fr.unload = () => {
+      if (!fr.on) return; fr.on = false;
+      if (cart) { g.remove(cart); cart.material.userData.gone = true; if (cart.material.map) cart.material.map.dispose(); cart.material.dispose(); cart.geometry.dispose(); cart = null; }
+      if (photoMat.map !== ph0) { photoMat.map = ph0; photoMat.emissiveMap = ph0; photoMat.needsUpdate = true; }
+      if (mem.asset) releaseTexture(mem.asset);
+    };
     // luminaire au plafond
     const ly = ceilY - y - .1; const fx = box(.1, .14, .1, M.black, 0, ly, 1.3); g.add(fx);
     { const from = new THREE.Vector3(0, ly - .08, 1.3), dir = new THREE.Vector3(0, 0, .06).sub(from), len = dir.length(); const bm = beamCone(len, 1); bm.position.copy(from);
@@ -1444,7 +1480,8 @@
      ════════════════════════════════════════════ */
   const LOOP = { XL: -17.2, XR: 16.3, CW: 7, CH: 6, Z0: -12, BL: 3.4 };
   function buildDynamic() {
-    if (W.dyn) { W.root.remove(W.dyn); W.dyn.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    W.frames.forEach((f) => f.unload && f.unload());
+    if (W.dyn) { W.root.remove(W.dyn); W.dyn.traverse((o) => { if (o.geometry) o.geometry.dispose(); const m = o.material; if (m && m.userData && m.userData.own) { m.userData.gone = true; if (m.map) m.map.dispose(); m.dispose(); } }); }
     dropTag('gallery'); W.frames = []; W.zones = []; W.roomsZ = [];
     const D = W.dyn = new THREE.Group(); W.root.add(D);
     OBST = OBST.filter((o) => !o.dyn);
@@ -1679,6 +1716,17 @@
       if (!r) { sp.intensity = 0; return; }
       const f = r[0]; f.g.localToWorld(sp.position.copy(f.lightLocal)); f.g.localToWorld(sp.target.position.set(0, 0, .05));
       sp.angle = Math.min(.9, Math.atan((f.size / 2 + .45) / f.lightLocal.length())); sp.intensity = 4.5;
+    });
+  }
+
+  /* tableaux proches : photo chargée ; lointains : libérés, et masqués au-delà de la vue utile */
+  function updateFrameLOD(cam) {
+    if (!W.frames.length) return;
+    cam.getWorldPosition(_v1);
+    W.frames.forEach((f) => {
+      f.g.getWorldPosition(_wp); const d = Math.hypot(_wp.x - _v1.x, _wp.z - _v1.z);
+      f.g.visible = d < 46;
+      if (d < 24) f.load && f.load(); else if (d > 34) f.unload && f.unload();
     });
   }
 
@@ -2983,7 +3031,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       this.acc += raw; if (this.acc > .12) { this.acc = 0; updateGuide(cam); }
       this.zoneAcc += raw;
       if (this.zoneAcc > .4) {
-        this.zoneAcc = 0; updateSpots(cam);
+        this.zoneAcc = 0; updateSpots(cam); updateFrameLOD(cam);
         const z = cam.position.z, zname = zoneAt(cam.position.x, z, cam.position.y);
         if (zname && zname !== this.zoneName) { this.zoneName = zname; const bp = $('#brandPlace'); bp.style.opacity = 0; setTimeout(() => { bp.textContent = zname; bp.style.opacity = 1; }, 350); }
         this.target = z > HALL.z0 + 1 ? 0 : 1;
@@ -3056,12 +3104,20 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   function openMemory(mem) {
     const by = h('div', { class: 'by' });
     nameOf(mem.author).then((n) => { if (n) by.textContent = 'Accroché par ' + n; });
-    const img = mem.asset ? imgOf(mem.asset, { alt: mem.title || 'Souvenir' }) : null;
+    let img = mem.asset && !mem.video ? imgOf(mem.asset, { alt: mem.title || 'Souvenir' }) : null;
     if (img) img.addEventListener('error', () => img.remove());
+    if (mem.video) {
+      const ve = h('video', { controls: true, playsinline: true, preload: 'metadata', style: 'width:100%;max-height:62vh;background:#000;border-radius:10px' });
+      ve.setAttribute('playsinline', ''); ve.setAttribute('webkit-playsinline', '');
+      if (mem.asset) mediaSrc(mem.asset).then((u) => { if (u) ve.poster = u; }).catch(() => {});
+      const wait = h('div', { class: 'mini', text: 'Chargement de la vidéo…' });
+      videoSrc(mem.video, (pc) => (wait.textContent = 'Chargement de la vidéo ' + pc + ' %…')).then((u) => { ve.src = u; wait.remove(); ve.play().catch(() => {}); }).catch(() => (wait.textContent = 'Vidéo introuvable'));
+      img = h('div', {}, ve, wait);
+    }
     const actions = S.canWrite ? h('div', { class: 'actions' },
       h('button', { class: 'pbtn', text: 'Modifier', onclick: () => { closeModal(); openAtelier('souvenir', { edit: mem }); } }),
       confirmBtn('Décrocher', 'Confirmer le décrochage', async () => {
-        try { await S.db.doc('memories/' + mem.id).delete(); if (mem.asset) deleteAsset(mem.asset); closeModal(); toast('Souvenir décroché'); }
+        try { await S.db.doc('memories/' + mem.id).delete(); if (mem.asset) deleteAsset(mem.asset); if (mem.video) deleteVideo(mem.video); closeModal(); toast('Souvenir décroché'); }
         catch (e) { toast('Impossible de décrocher ce souvenir'); }
       })) : null;
     const snd = mem.sound && SND.byId(mem.sound);
@@ -3215,14 +3271,17 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   function paneMemory() {
     const edit = tabOpts.edit || null, chapters = sortedChapters();
     let picked = null;
-    const preview = h('div', { class: 'drop', tabindex: 0 }, edit && edit.asset ? imgOf(edit.asset) : h('span', { text: edit ? '📷 Choisir une photo' : '📷 Choisir une ou plusieurs photos' }), h('span', { class: 'mini', text: 'La date et le lieu sont lus dans la photo quand elle les contient' }));
-    const file = h('input', { type: 'file', accept: 'image/*', hidden: true, id: 'memFile', multiple: !edit });
+    const preview = h('div', { class: 'drop', tabindex: 0 }, edit && edit.asset ? imgOf(edit.asset) : h('span', { text: edit ? '📷 Choisir une photo' : '📷 Choisir des photos et des vidéos' }), h('span', { class: 'mini', text: edit ? 'La date et le lieu sont lus dans la photo quand elle les contient' : 'Sélectionne-en autant que tu veux dans ta galerie : chacune aura son propre tableau, rangé à sa date' }));
+    const file = h('input', { type: 'file', accept: edit ? 'image/*' : 'image/*,video/*', hidden: true, id: 'memFile', multiple: !edit });
+    const arrange = h('select', { id: 'memArrange' }, [['mois', 'Un chapitre par mois (automatique)'], ['annee', 'Un chapitre par année (automatique)'], ['choisi', 'Tout dans le chapitre choisi ci-dessous']].map(([v, l]) => h('option', { value: v, text: l })));
+    const arrangeField = field('Rangement', arrange); arrangeField.style.display = 'none';
+    const bar = h('div', { style: 'display:none;height:8px;border-radius:5px;background:rgba(176,141,87,.2);overflow:hidden;margin:10px 0 2px' }, h('div', { style: 'height:100%;width:0;background:linear-gradient(90deg,#c9a25e,#e8c98a);transition:width .3s' }));
     let batch = null;
     preview.addEventListener('click', () => file.click()); preview.addEventListener('keydown', (e) => { if (e.key === 'Enter') file.click(); });
     const infoLine = h('div', { class: 'mini', style: 'margin-top:6px;color:#a3814a' });
     file.addEventListener('change', async () => {
       const fs = [...file.files]; if (!fs.length) return;
-      if (fs.length === 1) {
+      if (fs.length === 1 && !isVideoFile(fs[0])) {
         const f = fs[0]; picked = f; batch = null; const u = URL.createObjectURL(f); preview.replaceChildren(h('img', { src: u, alt: '' }), h('span', { class: 'mini', text: f.name }));
         const info = await readPhotoInfo(f); const got = [];
         if (info.date && !date.value) { date.value = info.date; got.push((info.guess ? 'date approximative ' : 'date ') + frDate(info.date)); }
@@ -3233,17 +3292,33 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         return;
       }
       picked = null; batch = [];
-      const grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;width:100%' });
-      preview.replaceChildren(grid, h('span', { class: 'mini', text: fs.length + ' photos choisies · lecture des dates et des lieux…' }));
-      for (const f of fs.slice(0, 40)) { const info = await readPhotoInfo(f); batch.push({ f, info }); grid.append(h('img', { src: URL.createObjectURL(f), alt: '', style: 'width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;margin:0' })); }
-      batch.sort((a, b) => (a.info.date || '9').localeCompare(b.info.date || '9'));
+      const grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fill,minmax(58px,1fr));gap:5px;width:100%' });
+      const nV = fs.filter(isVideoFile).length, nP = fs.length - nV;
+      preview.replaceChildren(grid, h('span', { class: 'mini', text: countText(nP, nV) + ' · lecture des dates et des lieux…' }));
+      const known = new Set((S.memories || []).map((m) => m.fkey).filter(Boolean));
+      let k = 0, dup = 0;
+      for (const f of fs) {
+        k++; if (k % 8 === 0) preview.lastChild.textContent = `Lecture ${k}/${fs.length}…`;
+        const vid = isVideoFile(f), fkey = fileKey(f);
+        if (known.has(fkey)) { dup++; continue; }
+        const info = vid ? await readVideoInfo(f) : await readPhotoInfo(f);
+        batch.push({ f, info, vid, fkey });
+        if (grid.childElementCount < 23) grid.append(vid ? h('div', { style: 'aspect-ratio:1;border-radius:6px;background:#2a2019;color:#f3e3c4;display:grid;place-items:center;font-size:22px', text: '🎬' }) : h('div', { style: `aspect-ratio:1;border-radius:6px;background:#3a2e26 url("${URL.createObjectURL(f)}") center/cover no-repeat` }));
+      }
+      if (batch.length > 23) grid.append(h('div', { style: 'aspect-ratio:1;border-radius:6px;background:rgba(176,141,87,.18);color:#8a6a32;display:grid;place-items:center;font:500 15px Jost,sans-serif', text: '+' + (batch.length - 23) }));
+      batch.sort((a, b) => ((a.info.date || '9') + (a.info.time || '')).localeCompare((b.info.date || '9') + (b.info.time || '')));
       const withDate = batch.filter((x) => x.info.date && !x.info.guess).length, withPlace = batch.filter((x) => x.info.lat != null).length;
-      preview.lastChild.textContent = `${batch.length} photos${fs.length > 40 ? ' (40 maximum à la fois)' : ''} · ${withDate} avec leur date · ${withPlace} avec leur lieu`;
-      infoLine.textContent = '✨ Chaque photo deviendra un souvenir avec sa propre date et son lieu, rangés dans l\'ordre. Le titre est proposé automatiquement (lieu et date) ; laisse le champ « Titre » vide, ou écris un titre commun.';
-      btn.textContent = 'Accrocher les ' + batch.length + ' photos';
+      const bv = batch.filter((x) => x.vid).length;
+      preview.lastChild.textContent = batch.length ? `${countText(batch.length - bv, bv)} · ${withDate} avec leur date · ${withPlace} avec leur lieu${dup ? ` · ${dup} déjà accrochée${dup > 1 ? 's' : ''} (ignorée${dup > 1 ? 's' : ''})` : ''}` : 'Elles sont toutes déjà accrochées ✨';
+      arrangeField.style.display = batch.length > 1 ? '' : 'none';
+      const syncArr = () => { chapterField.firstChild.textContent = arrange.value === 'choisi' || batch.length < 2 ? 'Chapitre' : 'Chapitre (pour celles sans date)'; }; arrange.onchange = syncArr; setTimeout(syncArr);
+      if (batch.length > 1 && !tabOpts.chapterId) arrange.value = 'mois'; else arrange.value = 'choisi';
+      infoLine.textContent = batch.length ? '✨ Chaque photo et chaque vidéo devient un tableau, avec sa date et son lieu, rangés dans l\'ordre du temps. Les vidéos se lancent en touchant leur tableau. Le titre est proposé tout seul (lieu et date) : laisse « Titre » vide, ou écris un titre commun.' : '';
+      btn.textContent = batch.length ? 'Accrocher les ' + batch.length + ' souvenirs' : 'Rien de nouveau à accrocher';
     });
     const sel = h('select', { id: 'memChapter' }, chapters.map((c) => h('option', { value: c.id || '', text: c.title || 'Sans titre' })));
     sel.value = (edit ? edit.chapterId : tabOpts.chapterId) || (chapters[0].id || '');
+    const chapterField = field('Chapitre', sel);
     const title = h('input', { id: 'memTitle', type: 'text', maxlength: 80, placeholder: 'Notre premier rendez-vous', value: edit ? edit.title || '' : '' });
     const date = h('input', { id: 'memDate', type: 'date', value: edit ? edit.date || '' : '' });
     const label = h('input', { id: 'memLabel', type: 'text', maxlength: 40, placeholder: 'ex. Été 2024', value: edit ? edit.dateLabel || '' : '' });
@@ -3260,21 +3335,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       h('label', {}, h('input', { type: 'radio', name: 'memStyle', value: v, checked: v === style }), h('span', { class: 'swatch', style: 'background:' + c }), l)));
     const btn = h('button', { class: 'gbtn', text: edit ? 'Enregistrer les changements' : 'Accrocher au mur' });
     btn.addEventListener('click', async () => {
-      if (!edit && batch && batch.length) {
-        btn.disabled = true;
-        try {
-          let chapterId = sel.value || null; if (!chapterId) chapterId = await createChapter('Le commencement', 'là où tout a commencé');
-          let k = 0;
-          for (const { f, info } of batch) {
-            k++; btn.textContent = `Accrochage ${k}/${batch.length}…`;
-            const { blob, aspect } = await prepareImage(f), asset = await storeImage(blob);
-            await S.db.collection('memories').doc().set({ chapterId, title: title.value.trim() || autoTitle(info), date: info.date || '', dateLabel: '', place: info.place || '', lat: info.lat != null ? +info.lat.toFixed(3) : null, lon: info.lon != null ? +info.lon.toFixed(3) : null,
-              story: story.value.trim(), style: (document.querySelector('input[name=memStyle]:checked') || {}).value || 'noir', sound: memSound.value || '', asset, aspect, author: S.meId, createdAt: Date.now() + k });
-          }
-          toast(batch.length + ' souvenirs accrochés ✨'); tabOpts = {}; closeAtelier();
-        } catch (e) { toast(errMsg(e)); btn.disabled = false; btn.textContent = 'Accrocher les ' + batch.length + ' photos'; }
-        return;
-      }
+      if (!edit && batch && batch.length) { await hangBatch(batch, { mode: batch.length > 1 ? arrange.value : 'choisi', chapterId: sel.value || null, title: title.value.trim(), story: story.value.trim(), style: (document.querySelector('input[name=memStyle]:checked') || {}).value || 'noir', sound: memSound.value || '', btn, bar }); return; }
+      if (!edit && batch && !batch.length) { toast('Elles sont toutes déjà accrochées'); return; }
       if (!edit && !picked) { toast('Choisis d\'abord une photo'); return; }
       if (!title.value.trim()) { toast('Donne un titre à ce souvenir'); title.focus(); return; }
       btn.disabled = true; btn.textContent = 'Accrochage…';
@@ -3285,8 +3347,9 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         if (picked) {
           const { blob, aspect } = await prepareImage(picked);
           data.asset = await storeImage(blob, (t) => (btn.textContent = t)); data.aspect = aspect;
+          if (edit && edit.video) data.video = '';
         }
-        if (edit) { await S.db.doc('memories/' + edit.id).update(data); if (picked && edit.asset) deleteAsset(edit.asset); toast('Souvenir mis à jour'); }
+        if (edit) { await S.db.doc('memories/' + edit.id).update(data); if (picked && edit.asset) deleteAsset(edit.asset); if (picked && edit.video) deleteVideo(edit.video); toast('Souvenir mis à jour'); }
         else { await S.db.collection('memories').doc().set(Object.assign(data, { author: S.meId, createdAt: Date.now() })); toast('Souvenir accroché ✨'); }
         tabOpts = {}; closeAtelier();
         const ch = W.zones.find((z) => z.name === (sortedChapters().find((c) => c.id === chapterId) || {}).title);
@@ -3297,9 +3360,110 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       }
     });
     return [h('p', { class: 'lead', text: edit ? 'Modifie ce souvenir. Une nouvelle photo remplace l\'ancienne.' : 'Une photo, un titre, une date : le souvenir se range tout seul à sa place dans le chapitre.' }),
-      preview, infoLine, file, field('Chapitre', sel), field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn];
+      preview, infoLine, file, arrangeField, chapterField, field('Titre', title), h('div', { class: 'row2' }, field('Date', date), field('Ou un libellé', label)), field('Lieu (il s\'allumera sur le globe)', placeIn), picker, placeStatus, field('Anecdote', story), field('Son qui l\'accompagne (facultatif)', memSound), field('Cadre', styles), btn, bar];
   }
 
+
+  /* ════ ACCROCHAGE EN GRAND : toute une galerie de photos et de vidéos d'un coup ════ */
+  const isVideoFile = (f) => (f.type ? f.type.startsWith('video/') : /\.(mov|mp4|m4v|webm|3gp|avi|mkv)$/i.test(f.name || ''));
+  const fileKey = (f) => [f.name || '', f.size || 0, f.lastModified || 0].join('|');
+  const countText = (p, v) => [p ? p + ' photo' + (p > 1 ? 's' : '') : '', v ? v + ' vidéo' + (v > 1 ? 's' : '') : ''].filter(Boolean).join(' et ') || 'aucune';
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  /* date et lieu d'une vidéo (iPhone : com.apple.quicktime.creationdate / ISO 6709 ; Android : mvhd) */
+  async function readVideoInfo(file) {
+    const out = { date: '', time: '', lat: null, lon: null };
+    try {
+      const N = 1024 * 1024, head = new Uint8Array(await file.slice(0, N).arrayBuffer()), tail = file.size > N ? new Uint8Array(await file.slice(Math.max(N, file.size - 2 * N)).arrayBuffer()) : new Uint8Array(0);
+      const dec = new TextDecoder('latin1');
+      for (const buf of [head, tail]) {
+        if (!buf.length) continue;
+        const txt = dec.decode(buf);
+        if (!out.date) { const i = txt.indexOf('creationdate'); const m = (i >= 0 ? txt.slice(i) : '').match(/(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/); if (m && +m[1] > 1990) { out.date = `${m[1]}-${m[2]}-${m[3]}`; out.time = `${m[4]}:${m[5]}`; } }
+        if (out.lat == null) { const g = txt.match(/([+-]\d{1,2}\.\d{3,})([+-]\d{1,3}\.\d{3,})(?:[+-]\d+(?:\.\d+)?)?\//); if (g) { const la = +g[1], lo = +g[2]; if (Math.abs(la) <= 90 && Math.abs(lo) <= 180 && (la || lo)) { out.lat = la; out.lon = lo; } } }
+        if (!out.date) { const i = txt.indexOf('mvhd'); if (i >= 0 && i + 16 < buf.length) { const dv = new DataView(buf.buffer, buf.byteOffset + i + 4), v = dv.getUint8(0); const secs = v === 1 ? dv.getUint32(4) * 4294967296 + dv.getUint32(8) : dv.getUint32(4);
+          const ms = (secs - 2082844800) * 1000; if (ms > Date.UTC(2000, 0, 1) && ms < Date.now() + 864e5) { const d = new Date(ms); out.date = iso(d); out.time = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; } } }
+      }
+    } catch (e) {}
+    if (!out.date && file.lastModified && Date.now() - file.lastModified > 2 * 864e5) { out.date = iso(new Date(file.lastModified)); out.guess = true; }
+    if (out.lat != null) { const np = nearestPlace(out.lat, out.lon); if (np) out.place = np.n; }
+    return out;
+  }
+  /* une image de la vidéo pour son tableau */
+  function videoPoster(file) {
+    return new Promise((res) => {
+      const v = document.createElement('video'), u = URL.createObjectURL(file); let done = false;
+      const fallback = () => { const c = cnv(1280, 720, (ctx) => { const g = ctx.createLinearGradient(0, 0, 1280, 720); g.addColorStop(0, '#3a2a22'); g.addColorStop(1, '#16100c'); ctx.fillStyle = g; ctx.fillRect(0, 0, 1280, 720);
+        ctx.fillStyle = '#e8c98a'; ctx.textAlign = 'center'; ctx.font = 'italic 64px "Cormorant Garamond", serif'; ctx.fillText('Une vidéo', 640, 380); }); return c; };
+      const finish = (c, aspect) => { if (done) return; done = true; clearTimeout(to); URL.revokeObjectURL(u); v.removeAttribute('src'); try { v.load(); } catch (e) {} c.toBlob((b) => res({ blob: b, aspect: aspect || 16 / 9, duration: v.duration || 0 }), 'image/jpeg', .84); };
+      const to = setTimeout(() => finish(fallback(), 16 / 9), 12000);
+      v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
+      v.addEventListener('error', () => finish(fallback(), 16 / 9));
+      v.addEventListener('loadeddata', () => { try { v.currentTime = Math.min(1.2, (v.duration || 2) / 3); } catch (e) { grab(); } });
+      const grab = () => { const w0 = v.videoWidth, h0 = v.videoHeight; if (!w0 || !h0) { finish(fallback(), 16 / 9); return; }
+        const k = Math.min(1, 1600 / Math.max(w0, h0)), w = Math.round(w0 * k), hh = Math.round(h0 * k);
+        finish(cnv(w, hh, (ctx) => ctx.drawImage(v, 0, 0, w, hh)), w / hh); };
+      v.addEventListener('seeked', grab, { once: true });
+      v.src = u; v.load();
+    });
+  }
+  const CAP = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  function groupTitle(info, mode) {
+    if (!info.date || mode === 'choisi') return null;
+    const d = new Date(info.date + 'T12:00:00');
+    return mode === 'annee' ? String(d.getFullYear()) : CAP(MONTHS[d.getMonth()]) + ' ' + d.getFullYear();
+  }
+  function bulkBadge(text, frac) {
+    let b = document.getElementById('bulkBadge');
+    if (text == null) { if (b) b.remove(); return; }
+    if (!b) { b = h('div', { id: 'bulkBadge', style: 'position:fixed;z-index:60;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);background:rgba(22,16,12,.88);color:#f3e3c4;font:400 13px Jost,sans-serif;padding:9px 16px 11px;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.35);min-width:220px;text-align:center;pointer-events:none' },
+      h('div', { class: 't' }), h('div', { style: 'height:4px;border-radius:3px;background:rgba(255,255,255,.15);margin-top:7px;overflow:hidden' }, h('div', { class: 'f', style: 'height:100%;width:0;background:#e8c98a;transition:width .3s' }))); document.body.append(b); }
+    b.querySelector('.t').textContent = text; b.querySelector('.f').style.width = Math.round((frac || 0) * 100) + '%';
+  }
+  async function hangBatch(batch, o) {
+    const { btn, bar } = o; btn.disabled = true; S.bulk = true;
+    let lock = null; try { lock = await navigator.wakeLock.request('screen'); } catch (e) {}
+    const fill = bar && bar.firstChild; if (bar) bar.style.display = '';
+    const norm2 = (t) => String(t || '').trim().toLowerCase();
+    const chapterFor = new Map(); S.chapters.forEach((c) => chapterFor.set(norm2(c.title), c.id));
+    // les chapitres d'abord, dans l'ordre du temps, chacun avec le lieu qui revient le plus
+    const groups = new Map();
+    batch.forEach((x) => { const t = groupTitle(x.info, o.mode); x.group = t; if (t) { if (!groups.has(t)) groups.set(t, []); groups.get(t).push(x); } });
+    let fallbackId = o.chapterId;
+    const ensureFallback = async () => fallbackId || (fallbackId = chapterFor.get(norm2('Le commencement')) || await createChapter('Le commencement', 'là où tout a commencé'));
+    let ok = 0, failed = 0, k = 0;
+    try {
+      for (const [t, xs] of groups) {
+        if (chapterFor.has(norm2(t))) continue;
+        const places = new Map(); xs.forEach((x) => x.info.place && places.set(x.info.place, (places.get(x.info.place) || 0) + 1));
+        const top = [...places].sort((a, b) => b[1] - a[1])[0];
+        chapterFor.set(norm2(t), await createChapter(t, top ? 'du côté de ' + top[0] : ''));
+      }
+      for (const x of batch) {
+        k++; const lab = `Accrochage ${k}/${batch.length}`, fr = (k - 1) / batch.length;
+        btn.textContent = lab + '…'; if (fill) fill.style.width = Math.round(fr * 100) + '%'; bulkBadge(lab + (x.vid ? ' · vidéo' : '') + '…', fr);
+        try {
+          const chapterId = x.group ? chapterFor.get(norm2(x.group)) : await ensureFallback();
+          const { info } = x, data = { chapterId, title: o.title || autoTitle(info), date: info.date || '', dateLabel: '', place: info.place || '', lat: info.lat != null ? +info.lat.toFixed(3) : null, lon: info.lon != null ? +info.lon.toFixed(3) : null,
+            story: o.story, style: o.style, sound: x.vid ? '' : o.sound, fkey: x.fkey, author: S.meId, createdAt: Date.now() + k };
+          if (x.vid) {
+            if (x.f.size > VID_MAX) throw { code: 'too_large' };
+            const pst = await videoPoster(x.f);
+            data.video = await storeVideo(x.f, (t2) => bulkBadge(lab + ' · ' + t2.replace(/…$/, '') + '…', fr));
+            data.asset = await storeImage(pst.blob); data.aspect = pst.aspect; if (pst.duration) data.duration = Math.round(pst.duration);
+          } else {
+            const { blob, aspect } = await prepareImage(x.f); data.asset = await storeImage(blob); data.aspect = aspect;
+          }
+          await S.db.collection('memories').doc().set(data); ok++;
+        } catch (e) { failed++; console.warn('accrochage impossible', x.f && x.f.name, e); if (e && e.code === 'quota_exceeded') { toast('Le stockage est plein : accrochage arrêté'); break; } }
+      }
+    } finally {
+      S.bulk = false; if (lock) lock.release().catch(() => {}); bulkBadge(null); scheduleRebuild();
+    }
+    toast(`${ok} souvenir${ok > 1 ? 's' : ''} accroché${ok > 1 ? 's' : ''} ✨${failed ? ` · ${failed} n'${failed > 1 ? 'ont' : 'a'} pas pu l'être` : ''}`);
+    tabOpts = {}; if (S.panel && curTab === 'souvenir') closeAtelier();
+    const firstCh = batch[0] && (batch[0].group ? chapterFor.get(norm2(batch[0].group)) : fallbackId);
+    let tries = 0; const go = () => { const c = sortedChapters().find((c2) => c2.id === firstCh); const z = c && W.zones.find((z2) => z2.name === c.title); if (z) teleport(z.tp[0], z.tp[1], z.tp[2]); else if (++tries < 16) setTimeout(go, 500); }; setTimeout(go, 900);
+  }
 
   /* ════ LES INFORMATIONS CACHÉES DANS LA PHOTO (EXIF) ════
      Date de la prise de vue et position GPS, lues sur l'appareil, sans rien envoyer ailleurs. */
@@ -4687,7 +4851,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       for (const s of S.sounds || []) { j++; say(`Sons ${j}/${(S.sounds || []).length}…`); try { const b = await soundBytes(s); const ext = { 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/wav': 'wav', 'audio/ogg': 'ogg', 'audio/aac': 'aac', 'audio/webm': 'webm', 'audio/flac': 'flac' }[s.mime] || 'mp3';
         const name = String(j).padStart(2, '0') + ' - ' + String(s.title || 'son').replace(/[\\/:*?"<>|]/g, '').slice(0, 60) + '.' + ext; sons.file(name, b); soundFile[s.id] = 'sons/' + name; } catch (e) {} }
       // vidéos (si elles sont dans le stockage de fichiers)
-      const vids = [S.settings.video].concat((S.capsules || []).map((c) => c.video)).filter(Boolean); let vi = 0; const vidFile = {};
+      const vids = [S.settings.video].concat((S.capsules || []).map((c) => c.video), (S.memories || []).map((m) => m.video)).filter(Boolean); let vi = 0; const vidFile = {};
       for (const v of vids) { vi++; say(`Vidéos ${vi}/${vids.length}…`); try { const r = await fetch(await videoSrc(v)); if (r.ok) { const name = 'video-' + vi + '.mp4'; videos.file(name, await r.blob()); vidFile[v] = 'videos/' + name; } } catch (e) {} }
       data.fichiers = { photos: fileOf, sons: soundFile, videos: vidFile };
       zip.file('donnees.json', JSON.stringify(data, null, 2));
@@ -4893,7 +5057,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     if (ae && pane.contains(ae) && ae.tagName !== 'BUTTON') return true;
     return [...pane.querySelectorAll('input,textarea')].some((el) => el.type === 'file' ? !!(el.files && el.files.length) : (el.type === 'radio' || el.type === 'checkbox' || el.type === 'color') ? false : el.value !== el.defaultValue);
   }
-  function scheduleRebuild() { clearTimeout(rebuildT); rebuildT = setTimeout(() => { if (W.root) { buildDynamic(); refreshExtras(); } if (S.panel && curTab !== 'souvenir' && curTab !== 'reglages' && !paneBusy()) renderPane(); }, 250); }
+  function scheduleRebuild() { clearTimeout(rebuildT); if (S.bulk) return; rebuildT = setTimeout(() => { if (W.root) { buildDynamic(); refreshExtras(); } if (S.panel && curTab !== 'souvenir' && curTab !== 'reglages' && !paneBusy()) renderPane(); }, 250); }
 
   async function waitClaude(ms) {
     const t0 = Date.now();
