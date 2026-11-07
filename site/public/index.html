@@ -1400,23 +1400,42 @@
   const TEXCACHE = new Map();
   /* les photos des cadres : chargées seulement quand on s'approche, réduites pour la carte graphique,
      et libérées quand on s'éloigne (des centaines de tableaux tiennent ainsi sur un téléphone) */
-  const TEX_MAX = isMobile ? 1024 : 1600;
-  function photoTexture(assetId, onReady) {
-    if (TEXCACHE.has(assetId)) { const e = TEXCACHE.get(assetId); e.refs++; if (e.tex) onReady(e.tex, e.aspect); else e.waiters.push(onReady); return; }
-    const e = { tex: null, aspect: 1, waiters: [onReady], refs: 1 }; TEXCACHE.set(assetId, e);
-    mediaSrc(assetId).then((src) => new THREE.TextureLoader().load(src, (t) => {
-      const im = t.image, big = Math.max(im.width, im.height);
-      if (big > TEX_MAX) { const k = TEX_MAX / big, c = cnv(Math.round(im.width * k), Math.round(im.height * k), (ctx) => ctx.drawImage(im, 0, 0, Math.round(im.width * k), Math.round(im.height * k))); t.dispose(); t = new THREE.CanvasTexture(c); }
-      srgb(t); t.anisotropy = 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-      const aspect = im.width / im.height;
-      if (TEXCACHE.get(assetId) !== e) { t.dispose(); return; }
-      e.tex = t; e.aspect = aspect; e.waiters.forEach((f) => f(t, aspect)); e.waiters = []; },
-      undefined, () => { if (TEXCACHE.get(assetId) === e) TEXCACHE.delete(assetId); })).catch(() => { if (TEXCACHE.get(assetId) === e) TEXCACHE.delete(assetId); });
+  /* deux tailles : une petite pour les tableaux qu'on voit de loin, une plus fine pour celui qu'on regarde de près ;
+     au plus deux photos décodées à la fois, les plus proches d'abord (sinon le téléphone sature et se fige) */
+  const TEX_LO = isMobile ? 512 : 1024, TEX_HI = isMobile ? 1280 : 1600;
+  const TEXQ = { run: 0, list: [] };
+  function texJob(go, pri) { TEXQ.list.push({ go, pri }); texPump(); }
+  function texPump() {
+    while (TEXQ.run < 2 && TEXQ.list.length) {
+      TEXQ.list.sort((a, b) => a.pri() - b.pri()); const j = TEXQ.list.shift(); TEXQ.run++;
+      Promise.resolve().then(j.go).catch(() => {}).then(() => { TEXQ.run--; setTimeout(texPump, 16); });
+    }
   }
-  function releaseTexture(assetId) {
-    const e = TEXCACHE.get(assetId); if (!e) return;
+  async function decodeTo(src, max) {
+    const b = await (await fetch(src, { credentials: 'same-origin' })).blob();
+    let bmp; try { bmp = await createImageBitmap(b); } catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(b); }); }
+    const w0 = bmp.width, h0 = bmp.height, k = Math.min(1, max / Math.max(w0, h0)), w = Math.max(1, Math.round(w0 * k)), hh = Math.max(1, Math.round(h0 * k));
+    const c = document.createElement('canvas'); c.width = w; c.height = hh; c.getContext('2d').drawImage(bmp, 0, 0, w, hh); if (bmp.close) bmp.close();
+    return { c, aspect: w0 / h0 };
+  }
+  function photoTexture(assetId, onReady, size, pri) {
+    const key = assetId + '@' + (size || TEX_LO);
+    if (TEXCACHE.has(key)) { const e = TEXCACHE.get(key); e.refs++; if (e.tex) onReady(e.tex, e.aspect); else e.waiters.push(onReady); return; }
+    const e = { tex: null, aspect: 1, waiters: [onReady], refs: 1 }; TEXCACHE.set(key, e);
+    texJob(async () => {
+      if (TEXCACHE.get(key) !== e) return;
+      try {
+        const { c, aspect } = await decodeTo(await mediaSrc(assetId), size || TEX_LO);
+        if (TEXCACHE.get(key) !== e) return;
+        const t = srgb(new THREE.CanvasTexture(c)); t.anisotropy = isMobile ? 4 : 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+        e.tex = t; e.aspect = aspect; e.waiters.forEach((f) => f(t, aspect)); e.waiters = [];
+      } catch (er) { if (TEXCACHE.get(key) === e) TEXCACHE.delete(key); }
+    }, pri || (() => 0));
+  }
+  function releaseTexture(assetId, size) {
+    const key = assetId + '@' + (size || TEX_LO), e = TEXCACHE.get(key); if (!e) return;
     if (--e.refs > 0) return;
-    TEXCACHE.delete(assetId); if (e.tex) e.tex.dispose();
+    TEXCACHE.delete(key); if (e.tex) e.tex.dispose();
   }
   let PH_TEX = null;
   const sharedPlaceholder = () => PH_TEX || (PH_TEX = placeholderTexture('…', null, 1.333));
@@ -1435,7 +1454,7 @@
     });
   }
   /* taille de la photo (sans passe-partout) : même surface pour tous, forme exacte de l'image */
-  function frameSize(aspect) { const a = Math.min(4, Math.max(.25, aspect || 1.333)); const pw = 1.3 * Math.sqrt(a), ph = 1.3 / Math.sqrt(a), k = Math.min(1, 1.62 / Math.max(pw, ph)); return [pw * k, ph * k]; }
+  function frameSize(aspect) { const a = Math.min(4, Math.max(.25, aspect || 1.333)); const pw = 2.35 * Math.sqrt(a), ph = 2.35 / Math.sqrt(a), k = Math.min(1, 2.75 / pw, 2.45 / ph); return [pw * k, ph * k]; }
 
   function makeFrame(parent, mem, x, y, z, rotY, ceilY) {
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; parent.add(g);
@@ -1465,22 +1484,34 @@
       else { const w = pw0 + 2 * mat, hh = ph0 + 2 * mat; FW = w + 2 * B; FH = hh + 2 * B; fbox.scale.set(FW, FH, 1); matte.scale.set(w, hh, 1); photo.scale.set(pw0, ph0, 1); glass.scale.set(w, hh, 1); }
       halo.scale.set(FW + 1.7, FH + 1.9, 1);
       if (fr.beam) { const r2 = Math.max(FW, FH) / 2 + .2; fr.beam.scale.set(r2, 1, r2); }
-      cartBg.position.set(FW / 2 + .32, -FH / 2 + .25, .006); cartPos.set(FW / 2 + .32, -FH / 2 + .25, .008); if (cart) cart.position.copy(cartPos); fr.size = Math.max(FW, FH);
+      cartBg.position.set(FW / 2 - .19, -FH / 2 - .16, .006); cartPos.set(FW / 2 - .19, -FH / 2 - .16, .008); if (cart) cart.position.copy(cartPos); fr.size = Math.max(FW, FH);
       if (play) play.scale.setScalar(Math.min(1, Math.min(FW, FH) / 1.1));
     };
     layout(mem.aspect);
     // la photo entière, jamais étirée ni rognée : le cadre prend sa forme réelle
-    fr.load = () => {
-      if (fr.on) return; fr.on = true;
-      cart = textPlane(.36, .14, cartLines, { px: 640 }); cart.position.copy(cartPos); g.add(cart);
-      if (mem.asset) photoTexture(mem.asset, (t, ia) => { if (!fr.on) return; photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia); });
+    /* niveau 0 : rien ; 1 : petite photo (vue de loin) ; 2 : photo fine (vue de près) */
+    fr.level = 0; fr.dist = 99; const held = [];
+    const releaseAll = (keep) => { for (let i = held.length - 1; i >= 0; i--) { const hd = held[i]; if (keep && hd.src === keep.src && hd.size === keep.size) continue; releaseTexture(hd.src, hd.size); held.splice(i, 1); } };
+    fr.setLevel = (lv) => {
+      if (lv === fr.level) return; fr.level = lv; fr.on = lv > 0;
+      if (!lv) {
+        if (cart) { g.remove(cart); cart.material.userData.gone = true; if (cart.material.map) cart.material.map.dispose(); cart.material.dispose(); cart.geometry.dispose(); cart = null; }
+        if (photoMat.map !== ph0) { photoMat.map = ph0; photoMat.emissiveMap = ph0; photoMat.needsUpdate = true; }
+        releaseAll(null); return;
+      }
+      if (!cart) { cart = textPlane(.36, .14, cartLines, { px: 640 }); cart.position.copy(cartPos); g.add(cart); }
+      if (!mem.asset) return;
+      const want = { src: lv === 1 && mem.thumb ? mem.thumb : mem.asset, size: lv === 2 ? TEX_HI : TEX_LO };
+      if (held.some((hd) => hd.src === want.src && hd.size === want.size)) return;
+      held.push(want);
+      photoTexture(want.src, (t, ia) => {
+        if (!held.includes(want)) return;
+        photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia);
+        releaseAll(want);
+      }, want.size, () => fr.dist);
     };
-    fr.unload = () => {
-      if (!fr.on) return; fr.on = false;
-      if (cart) { g.remove(cart); cart.material.userData.gone = true; if (cart.material.map) cart.material.map.dispose(); cart.material.dispose(); cart.geometry.dispose(); cart = null; }
-      if (photoMat.map !== ph0) { photoMat.map = ph0; photoMat.emissiveMap = ph0; photoMat.needsUpdate = true; }
-      if (mem.asset) releaseTexture(mem.asset);
-    };
+    fr.load = () => fr.setLevel(Math.max(1, fr.level));
+    fr.unload = () => fr.setLevel(0);
     // luminaire au plafond
     const ly = ceilY - y - .1; const fx = box(.1, .14, .1, M.black, 0, ly, 1.3); g.add(fx);
     { const from = new THREE.Vector3(0, ly - .08, 1.3), dir = new THREE.Vector3(0, 0, .06).sub(from), len = dir.length(); const bm = beamCone(len, 1); bm.position.copy(from);
@@ -1496,7 +1527,7 @@
   }
   function makeEmptyFrame(parent, chapterId, x, y, z, rotY) {
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; parent.add(g);
-    const p = plane(1.1, 1.35, new THREE.MeshBasicMaterial({ transparent: true, map: textTexture(440, 540, (c, w, hh) => {
+    const p = plane(1.7, 2.1, new THREE.MeshBasicMaterial({ transparent: true, map: textTexture(440, 540, (c, w, hh) => {
       c.clearRect(0, 0, w, hh); c.setLineDash([14, 10]); c.strokeStyle = 'rgba(176,141,87,.85)'; c.lineWidth = 4; c.strokeRect(6, 6, w - 12, hh - 12);
       c.setLineDash([]); c.fillStyle = 'rgba(176,141,87,.95)'; c.textAlign = 'center'; c.font = '300 120px "Jost", sans-serif'; c.fillText('+', w / 2, hh / 2 + 20);
       c.font = 'italic 34px "Cormorant Garamond", serif'; c.fillText('Accrocher', w / 2, hh / 2 + 80); c.fillText('un souvenir', w / 2, hh / 2 + 116);
@@ -1520,7 +1551,7 @@
      LA BOUCLE DES CHAPITRES autour du jardin intérieur
      salle des cartes → aile ouest → galerie du fond → aile est → « Notre avenir » → bibliothèque → rotonde
      ════════════════════════════════════════════ */
-  const LOOP = { XL: -17.2, XR: 16.3, CW: 7, CH: 6, Z0: -12, BL: 3.4 };
+  const LOOP = { XL: -17.2, XR: 16.3, CW: 7, CH: 6, Z0: -12, BL: 4.2 };
   function buildDynamic() {
     W.frames.forEach((f) => f.unload && f.unload());
     if (W.dyn) { W.root.remove(W.dyn); W.dyn.traverse((o) => { if (o.geometry) o.geometry.dispose(); const m = o.material; if (m && m.userData && m.userData.own) { m.userData.gone = true; if (m.map) m.map.dispose(); m.dispose(); } }); }
@@ -1579,7 +1610,7 @@
     };
     const frameAt = (b, side, mem, chId) => {   // side +1 : mur extérieur, -1 : mur du jardin
       const p = at(b.c, b.u, b.o, 0, side * (hw - .005)), ry = Math.atan2(-side * b.o[0], -side * b.o[1]);
-      if (mem) makeFrame(D, mem, p[0], 1.8, p[1], ry, CH); else makeEmptyFrame(D, chId, p[0], 1.8, p[1], ry);
+      if (mem) makeFrame(D, mem, p[0], 2.15, p[1], ry, CH); else makeEmptyFrame(D, chId, p[0], 2.15, p[1], ry);
     };
     const portal = (b, wm, lines) => {   // une arche à l'entrée d'un chapitre, avec sa plaque
       const s = at(b.c, b.u, b.o, -b.bl / 2, 0), ry = rotOf(b.u);
@@ -1767,8 +1798,10 @@
     cam.getWorldPosition(_v1);
     W.frames.forEach((f) => {
       f.g.getWorldPosition(_wp); const d = Math.hypot(_wp.x - _v1.x, _wp.z - _v1.z);
-      f.g.visible = d < 46;
-      if (d < 24) f.load && f.load(); else if (d > 34) f.unload && f.unload();
+      f.g.visible = d < 46; f.dist = d; if (!f.setLevel) return;
+      let lv = f.level;
+      if (d < 5.5) lv = 2; else if (d < 16) lv = f.level === 2 && d < 7.5 ? 2 : 1; else if (d > 22) lv = 0; else if (lv === 2) lv = 1;
+      f.setLevel(lv);
     });
   }
 
@@ -3213,7 +3246,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const actions = S.canWrite ? h('div', { class: 'actions' },
       h('button', { class: 'pbtn', text: 'Modifier', onclick: () => { closeModal(); openAtelier('souvenir', { edit: mem }); } }),
       confirmBtn('Décrocher', 'Confirmer le décrochage', async () => {
-        try { await S.db.doc('memories/' + mem.id).delete(); if (mem.asset) deleteAsset(mem.asset); if (mem.video) deleteVideo(mem.video); closeModal(); toast('Souvenir décroché'); }
+        try { await S.db.doc('memories/' + mem.id).delete(); if (mem.asset) deleteAsset(mem.asset); if (mem.thumb) deleteAsset(mem.thumb); if (mem.video) deleteVideo(mem.video); closeModal(); toast('Souvenir décroché'); }
         catch (e) { toast('Impossible de décrocher ce souvenir'); }
       })) : null;
     const snd = mem.sound && SND.byId(mem.sound);
@@ -3455,9 +3488,10 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         if (picked) {
           const { blob, aspect } = await prepareImage(picked);
           data.asset = await storeImage(blob, (t) => (btn.textContent = t)); data.aspect = aspect;
+          try { data.thumb = await storeImage(await shrinkJpeg(blob, 640, .8)); } catch (e) { data.thumb = ''; }
           if (edit && edit.video) data.video = '';
         }
-        if (edit) { await S.db.doc('memories/' + edit.id).update(data); if (picked && edit.asset) deleteAsset(edit.asset); if (picked && edit.video) deleteVideo(edit.video); toast('Souvenir mis à jour'); }
+        if (edit) { await S.db.doc('memories/' + edit.id).update(data); if (picked && edit.asset) deleteAsset(edit.asset); if (picked && edit.thumb) deleteAsset(edit.thumb); if (picked && edit.video) deleteVideo(edit.video); toast('Souvenir mis à jour'); }
         else { await S.db.collection('memories').doc().set(Object.assign(data, { author: S.meId, createdAt: Date.now() })); toast('Souvenir accroché ✨'); }
         tabOpts = {}; closeAtelier();
         const ch = W.zones.find((z) => z.name === (sortedChapters().find((c) => c.id === chapterId) || {}).title);
@@ -3563,8 +3597,10 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
               const pst = await videoPoster(x.f);
               data.video = await storeVideo(x.f, (t2) => bulkBadge(label() + ' · ' + t2.replace(/…$/, '') + '…', done / batch.length));
               data.asset = await storeImage(pst.blob); data.aspect = pst.aspect; if (pst.duration) data.duration = Math.round(pst.duration);
+              try { data.thumb = await storeImage(await shrinkJpeg(pst.blob, 640, .8)); } catch (e) {}
             } else {
               const { blob, aspect } = await prepareImage(x.f); data.asset = await storeImage(blob); data.aspect = aspect;
+              try { data.thumb = await storeImage(await shrinkJpeg(blob, 640, .8)); } catch (e) {}
             }
             await S.db.collection('memories').doc().set(data); ok++;
           } catch (e) { failed++; console.warn('accrochage impossible', x.f && x.f.name, e); if (e && e.code === 'quota_exceeded') { stop = true; toast('Le stockage est plein : accrochage arrêté'); } }
@@ -3580,6 +3616,22 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     tabOpts = {}; if (S.panel && curTab === 'souvenir') closeAtelier();
     const firstCh = batch[0] && (batch[0].group ? chapterFor.get(norm2(batch[0].group)) : fallbackId);
     let tries = 0; const go = () => { const c = sortedChapters().find((c2) => c2.id === firstCh); const z = c && W.zones.find((z2) => z2.name === c.title); if (z) teleport(z.tp[0], z.tp[1], z.tp[2]); else if (++tries < 16) setTimeout(go, 500); }; setTimeout(go, 900);
+  }
+
+  /* miniatures pour les souvenirs accrochés avant qu'elles existent : fabriquées une à une, en silence, sur l'appareil du gardien */
+  let thumbsBusy = false;
+  async function backfillThumbs() {
+    if (thumbsBusy || !S.isOwner || !S.canWrite || !S.db) return;
+    const todo = (S.memories || []).filter((m) => m.asset && !m.thumb && m.id); if (!todo.length) return;
+    thumbsBusy = true; S.bulk = true; let n = 0;
+    try {
+      for (const m of todo) {
+        if (S.tour) await new Promise((r) => setTimeout(r, 5000));
+        try { const { c } = await decodeTo(await mediaSrc(m.asset), 640); const b = await new Promise((r) => c.toBlob(r, 'image/jpeg', .8)); const id = await storeImage(b);
+          await S.db.doc('memories/' + m.id).update({ thumb: id }); m.thumb = id; n++; } catch (e) { console.warn('miniature', e); }
+        await new Promise((r) => setTimeout(r, 150));
+      }
+    } finally { S.bulk = false; thumbsBusy = false; if (n) scheduleRebuild(); }
   }
 
   /* ════ LES INFORMATIONS CACHÉES DANS LA PHOTO (EXIF) ════
@@ -5449,6 +5501,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       else { setTimeout(() => showNews().catch(() => {}), 900); if (S.isOwner && !ls.get('chateau-owner-tour-hint')) { ls.set('chateau-owner-tour-hint', '1'); setTimeout(() => toast('Astuce : Plan ✦ → ▶ Visite guidée, pour voir ce qu\'elle verra'), 6500); } }
     });
     if (S.canWrite && !S.memories.length) setTimeout(() => toast('Ouvre l\'Atelier ✎ pour accrocher votre premier souvenir'), 4500);
+    setTimeout(() => backfillThumbs().catch(() => {}), 15000);
     const myClues = S.treasures.filter((t) => !t.found && t.author !== S.meId);
     if (myClues.length) setTimeout(() => toast('🗝️ Un trésor est caché pour toi. L\'indice est dans le Plan ✦'), 8000);
     if (FX.cel.fireworks) setTimeout(() => toast('✨ Regarde le ciel du jardin…'), 3800);
