@@ -9,7 +9,8 @@ const DOMAINES = ["hadiatoukaba.fr", "www.hadiatoukaba.fr", "hadiatoukaba.eu", "
 export default async (req: Request, context: { next: () => Promise<Response> }) => {
   const url = new URL(req.url);
   const reste = OUVERTURE - Date.now();
-  if (reste <= 0 || !DOMAINES.includes(url.hostname) || url.searchParams.has("apercu")) return context.next();
+  const cadeau = /^cadeau-/.test(url.searchParams.get("invite") || "");   // le lien du QR code, sur n'importe quelle adresse
+  if (reste <= 0 || !(DOMAINES.includes(url.hostname) || cadeau) || url.searchParams.has("apercu")) return context.next();
   return new Response(page(reste), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
 };
 
