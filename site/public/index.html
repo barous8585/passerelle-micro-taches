@@ -187,6 +187,23 @@
   #story .title.on { opacity: 1; }
   #story .title div { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(30px, 8vw, 54px); line-height: 1.15; }
   #story .title small { display: block; margin-top: 14px; font: 400 11px "Jost", sans-serif; letter-spacing: .4em; text-transform: uppercase; color: rgba(246,239,226,.6); font-style: normal; }
+  #story .film { position: absolute; inset: 0; background: #000; opacity: 0; transition: opacity 1.2s; overflow: hidden; }
+  #story .film.on { opacity: 1; }
+  #story .sl { position: absolute; inset: 0; opacity: 0; transition-property: opacity; transition-duration: .9s; }
+  #story .sl.v { opacity: 1; }
+  #story .sl img { position: absolute; inset: 0; width: 100%; height: 100%; -webkit-user-drag: none; user-select: none; -webkit-touch-callout: none; }
+  #story .sl .bg { object-fit: cover; filter: blur(28px) brightness(.45) saturate(1.2); transform: scale(1.15); }
+  #story .sl .fg { object-fit: contain; padding: 12vh 0 max(27vh, 190px); box-sizing: border-box; transform-origin: 50% 45%; }
+  #story .sl.kb .fg { animation: kb var(--kb, 4s) ease-out both; }
+  #story .sl.kb.alt .fg { animation-name: kb2; }
+  @keyframes kb { from { transform: scale(1); } to { transform: scale(1.07) translate(.6%, -.4%); } }
+  @keyframes kb2 { from { transform: scale(1.07) translate(-.6%, .3%); } to { transform: scale(1); } }
+  #story .film video { position: absolute; inset: 12vh 0 max(27vh, 190px); width: 100%; height: calc(100% - 12vh - max(27vh, 190px)); object-fit: contain; background: #000; opacity: 0; transition: opacity 1s; }
+  #story .film video.v { opacity: 1; }
+  #story .fc { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; opacity: 0; transition: opacity .9s; color: #f3d79a; padding: 0 24px; }
+  #story .fc.v { opacity: 1; }
+  #story .fc .fk { font: 500 11px "Jost", sans-serif; letter-spacing: .38em; text-transform: uppercase; color: rgba(246,239,226,.7); }
+  #story .fc .ft { font-family: "Cormorant Garamond", Georgia, serif; font-style: italic; font-size: clamp(30px, 8vw, 52px); margin-top: 10px; min-height: 0; }
   body.story #tourCap, body.story #benchMsg, body.story #motDuJour, body.story #hintBox { display: none !important; }
   /* les photos restent dans le château : pas d'appui long « Enregistrer l'image », pas de glisser-déposer */
   #modal img, #modal video, #pane img, .drop img { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
@@ -439,7 +456,7 @@
 <div id="benchMsg"></div>
 <div id="toast" role="status"></div>
 <div id="fade"></div>
-<div id="story" aria-live="polite"><div class="bar top"></div><div class="bar bot"></div><div class="tap"></div><div class="cap"><div class="k"></div><div class="t"></div></div><div class="ctl"><button type="button" class="nx">Suivant ›</button><button type="button" class="sk">Passer le conte</button></div><div class="title"><div></div></div></div>
+<div id="story" aria-live="polite"><div class="film"><div class="sl"><img class="bg" alt=""><img class="fg" alt=""></div><div class="sl"><img class="bg" alt=""><img class="fg" alt=""></div><video playsinline webkit-playsinline controlslist="nodownload" disablepictureinpicture></video><div class="fc"></div></div><div class="bar top"></div><div class="bar bot"></div><div class="tap"></div><div class="cap"><div class="k"></div><div class="t"></div></div><div class="ctl"><button type="button" class="nx">Suivant ›</button><button type="button" class="sk">Passer le conte</button></div><div class="title"><div></div></div></div>
 <div id="hearts" aria-hidden="true"></div>
 <div id="tourCap" role="status" aria-live="polite"><div id="tourKicker"></div><div id="tourText"></div><div class="row"><button id="tourNext">Suivant ›</button><button id="tourSkip">Passer la visite</button></div></div>
 <div id="rotateHint" role="status"><span class="ic">📱</span>Tourne ton téléphone<br>pour voir le château en grand</div>
@@ -985,7 +1002,7 @@
      ════════════════════════════════════════════ */
   const W = { root: null, dyn: null, lanterns: null, anim: [], frames: [], spots: [], zones: [], fountainWater: null, heart: null, heartMat: null, flies: null, video: null, namePlate: null, envelopes: null };
   if (location.hostname === 'localhost') window.__W = W;
-  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); }, 0);
+  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); window.__runStory = runStory; }, 0);
 
   function buildSky(root) {
     W.skyCanvas = cnv(4, 512, () => {}); W.skyTex = srgb(new THREE.CanvasTexture(W.skyCanvas));
@@ -3847,7 +3864,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const save = h('button', { class: 'gbtn', text: 'Ranger dans le phonographe', disabled: true });
     const onPick = (inp, kind) => () => {
       const f = inp.files[0]; if (!f) return;
-      if (f.size > 15 * 1024 * 1024) { toast('Fichier trop lourd : 15 Mo maximum'); inp.value = ''; return; }
+      const maxMo = window.__chateauNetlify ? 30 : 15; if (f.size > maxMo * 1024 * 1024) { toast('Fichier trop lourd : ' + maxMo + ' Mo maximum'); inp.value = ''; return; }
       picked = f; save.disabled = false;
       if (kind) { const r = document.querySelector('input[name=sndKind][value=' + kind + ']'); if (r) r.checked = true; }
       if (!title.value) title.value = f.name.replace(/\.[^.]+$/, '').slice(0, 60);
@@ -4985,11 +5002,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     { key: 'debut', where: 'jardin', kicker: 'Il était une fois…', def: '…une princesse nommée {elle}. Elle ne le savait pas encore, mais quelque part, un royaume l\'attendait.' },
     { key: 'garcon', where: 'fontaine', kicker: 'Un garçon', def: 'Dans ce même monde vivait un garçon nommé {lui}. Il gardait un secret : il voulait lui offrir un endroit où rien de ce qu\'ils vivent ne se perdrait jamais.' },
     { key: 'chateau', where: 'chateau', kicker: 'Le château', def: 'Alors, pierre après pierre, il bâtit un château. Pas un château de pierre… un château de souvenirs.' },
-    { key: 'coeur', where: 'hall', kicker: 'Le cœur', def: 'Au centre, sous la coupole, il plaça un cœur. Il bat pour chaque raison qu\'ils ont de s\'aimer. Touche-le, et il t\'en murmurera une.' },
-    { key: 'jardin', where: 'cour', kicker: 'Le jardin secret', def: 'Au milieu du château, il cacha un jardin que seuls eux deux connaissent.' },
-    { key: 'mots', where: 'bibliotheque', kicker: 'Les mots', def: 'Dans la bibliothèque dorment leurs lettres, leurs mots doux et leurs chansons. Certaines lettres ne s\'ouvriront qu\'au bon moment.' },
-    { key: 'monde', where: 'cartes', kicker: 'Le monde', def: 'Sur un globe, il alluma chaque endroit où leur histoire est passée{lieux}.' },
-    { key: 'chapitres', where: 'chapitres', kicker: 'Leur histoire', def: 'Et le long des galeries, leur histoire s\'écrit, chapitre après chapitre.' },
+    { key: 'coeur', where: 'hall', kicker: 'Le cœur du royaume', def: 'Et pour que rien ne se perde jamais, il y garda chaque instant de leur histoire. Regarde…' },
+    { key: 'film', where: 'film', kicker: 'Leur histoire', def: '{souvenirs} souvenirs' },
     { key: 'avenir', where: 'avenir', kicker: 'L\'avenir', def: 'Mais l\'histoire n\'est pas finie. Ici commence la salle de leur avenir, encore vide… parce que c\'est ensemble qu\'ils l\'écriront.' },
     { key: 'fin', where: 'banc', kicker: '', def: 'Ce royaume est le tien, {elle}. Bienvenue chez toi. ♥' },
   ];
@@ -5004,7 +5018,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   function storyWait(ms) { return new Promise((r) => { const t = setTimeout(done, ms); function done() { clearTimeout(t); ST.next = null; r(); } ST.next = done; }); }
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   async function storyPage(kicker, text, minMs) {
-    const el = $('#story'), k = el.querySelector('.k'), t = el.querySelector('.t');
+    const el = $('#story'), k = el.querySelector('.cap .k'), t = el.querySelector('.cap .t');
     k.classList.remove('v'); t.querySelectorAll('span').forEach((s2) => s2.classList.remove('v')); await sleep(700);
     if (ST.abort) return;
     k.textContent = kicker || ''; t.replaceChildren(...text.split(/(?<=[.…!?:;])\s+/).map((ph) => h('span', { text: ph + ' ' })));
@@ -5013,7 +5027,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     for (const sp of spans) { if (ST.abort) return; sp.classList.add('v'); await sleep(Math.min(2600, 500 + sp.textContent.split(/\s+/).length * 150)); }
     await storyWait(Math.max(minMs || 0, 1800 + text.split(/\s+/).length * 230));
   }
-  async function storyClear() { const el = $('#story'); el.querySelector('.k').classList.remove('v'); el.querySelectorAll('.t span').forEach((s2) => s2.classList.remove('v')); await sleep(600); }
+  async function storyClear() { const el = $('#story'); el.querySelector('.cap .k').classList.remove('v'); el.querySelectorAll('.cap .t span').forEach((s2) => s2.classList.remove('v')); await sleep(600); }
   async function storyTitle(main, sub, ms) {
     const tl = $('#story .title'); tl.firstChild.replaceChildren(document.createTextNode(main), sub ? h('small', { text: sub }) : '');
     tl.classList.add('on'); await sleep(ms); tl.classList.remove('on'); await sleep(1800);
@@ -5040,10 +5054,11 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         if (ST.abort) break;
         if (sc.where !== 'jardin') await storyClear();
         if (sc.where === 'chapitres') { await storyChapters(sc, page, move); continue; }
+        if (sc.where === 'film') { await storyFilm(cfg, storyFill((texts.film || '').trim() || sc.def), snd); continue; }
         if (sc.where === 'avenir') {
-          const LP = W.loopPath || [], last = LP[LP.length - 1];
-          if (last) await move(last[0], last[1], null, 0, 2.6);
-          if (W.bench) { const at = [W.bench.x + 2.2, W.bench.z]; await move(at[0], at[1]); await glideP(at[0], at[1], yawTo(at[0], at[1], W.bench.x - 10, W.bench.z), 0, 1400); }
+          if (W.bench) { const at = [W.bench.x + 2.6, W.bench.z], yaw = yawTo(at[0], at[1], W.bench.x - 10, W.bench.z);
+            $('#fade').classList.add('on'); await sleep(700); { const pl = $('#player'); pl.object3D.position.set(at[0], EYE, at[1]); if (pl.components.bounds) pl.components.bounds.last.set(at[0], EYE, at[1]); look().yawObject.rotation.y = yaw; look().pitchObject.rotation.x = 0; } cx = at[0]; cz = at[1];
+            await sleep(300); $('#fade').classList.remove('on'); await sleep(600); }
           await page(sc); continue;
         }
         if (sc.where === 'banc') { if (W.bench) { sitDown(); await sleep(2200); } await page(sc, 3000); continue; }
@@ -5061,11 +5076,64 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       if (!ST.abort) await storyTitle('Fin…', 'ou plutôt, le début', 3200);
     } catch (e) { console.error('conte', e); }
     // retour au royaume
-    el.classList.remove('on'); el.querySelector('.title').classList.remove('on'); el.querySelector('.k').classList.remove('v'); el.querySelector('.t').replaceChildren();
+    el.classList.remove('on'); el.querySelector('.title').classList.remove('on'); el.querySelector('.cap .k').classList.remove('v'); el.querySelector('.cap .t').replaceChildren();
     if (!snd) Music.setStory(false); else if (ST.abort && SND.playing) SND.stop();
     document.body.classList.remove('touring', 'story'); S.tour = false;
     if (!S.seated) controls(true);
     markStorySeen();
+  }
+  /* LE FILM : la vidéo de l'entrée, puis toutes leurs photos, chapitre après chapitre, en fondu enchaîné */
+  async function storyFilm(cfg, intro, snd) {
+    const el = $('#story'), film = el.querySelector('.film'), L = [...film.querySelectorAll('.sl')], card = film.querySelector('.fc'), vid = film.querySelector('video');
+    const skip = () => ST.abort || film.dataset.skip === '1';
+    film.dataset.skip = ''; film.classList.add('on'); L.forEach((l) => l.classList.remove('v')); await sleep(1300);
+    const setCard = async (k, t, ms) => { card.replaceChildren(h('div', { class: 'fk', text: k }), h('div', { class: 'ft', text: t })); card.classList.add('v'); await storyWait(ms); card.classList.remove('v'); await sleep(700); };
+    const bgVol = (v) => { try { if (SND.P && SND.P.el) SND.P.el.volume = v; } catch (e) {} };
+    const vol0 = (SND.P && SND.P.el && SND.P.el.volume) || 1;
+    // 1. la vidéo de l'entrée (la rétrospective), si elle existe
+    if (cfg.filmVideo !== false && S.settings.video && !ST.abort) {
+      try {
+        const u = await videoSrc(S.settings.video); vid.src = u; vid.currentTime = 0; vid.classList.add('v');
+        bgVol(.06); Music.setDuck(true);
+        await new Promise((r) => { let done = false; const fin = () => { if (done) return; done = true; vid.removeEventListener('ended', fin); ST.next = null; r(); }; vid.addEventListener('ended', fin); ST.next = fin; vid.play().catch(fin); });
+        vid.pause(); vid.classList.remove('v'); Music.setDuck(false); bgVol(vol0); await sleep(900);
+      } catch (e) { vid.classList.remove('v'); Music.setDuck(false); bgVol(vol0); }
+    }
+    if (ST.abort) { film.classList.remove('on'); return; }
+    // 2. la musique du film, si elle est choisie
+    const fs = cfg.filmSound && SND.byId(cfg.filmSound);
+    if (fs && !SND.isPlaying(fs)) SND.toggle(fs);
+    // 3. toutes les photos
+    const chs = sortedChapters(), items = [];
+    chs.forEach((c, i) => { const ms = memoriesOf(c.id, chs).filter((m) => m.asset || m.thumb); if (!ms.length) return; items.push({ card: true, k: 'Chapitre ' + romanNum(i + 1), t: c.title || '' }); ms.forEach((m) => items.push({ m, ch: c.title || '' })); });
+    const photos = items.filter((x) => x.m), n = photos.length;
+    if (!n) { film.classList.remove('on'); return; }
+    await setCard('Leur histoire', intro, 2600);
+    const T = { court: 90, moyen: 150, long: 240 }[cfg.filmLen || 'moyen'] || 150, cards = items.length - n, slowN = Math.min(5, n);
+    const per = Math.max(.42, Math.min(3.2, (T - cards * 1.9 - slowN * 3.4) / Math.max(1, n - slowN)));
+    const urls = new Map();
+    const load = (k) => { const it = items[k]; if (!it || !it.m) return Promise.resolve(null); if (urls.has(k)) return urls.get(k);
+      const slow = photos.indexOf(it) < slowN || per >= 2.2, id = slow ? it.m.asset || it.m.thumb : it.m.thumb || it.m.asset;
+      const p = mediaSrc(id).then((u) => new Promise((res) => { const im = new Image(); im.onload = () => res(u); im.onerror = () => res(null); im.src = u; })).catch(() => null); urls.set(k, p); return p; };
+    let cur = 0, pi = 0;
+    for (let k = 0; k < items.length; k++) {
+      if (skip()) break;
+      for (let a = 1; a <= 6; a++) load(k + a);
+      const it = items[k];
+      if (it.card) { L.forEach((l) => l.classList.remove('v')); await sleep(500); await setCard(it.k, it.t, 1500); continue; }
+      const dur = (pi < slowN ? 3.4 : per) * 1000; pi++;
+      const u = await Promise.race([load(k), sleep(2500).then(() => null)]); if (!u) continue;
+      const nx = L[cur ^ 1]; cur ^= 1;
+      nx.querySelectorAll('img').forEach((im) => (im.src = u));
+      nx.style.setProperty('--kb', (dur / 1000 + 1.2) + 's'); nx.classList.toggle('alt', pi % 2 === 0);
+      nx.style.transitionDuration = Math.min(1.1, dur / 1000 * .55) + 's'; L[cur ^ 1].style.transitionDuration = nx.style.transitionDuration;
+      nx.classList.remove('kb'); void nx.offsetWidth; nx.classList.add('kb', 'v'); L[cur ^ 1].classList.remove('v');
+      el.querySelector('.cap .k').textContent = it.ch; el.querySelector('.cap .k').classList.add('v');
+      await storyWait(dur);
+    }
+    el.querySelector('.cap .k').classList.remove('v');
+    L.forEach((l) => l.classList.remove('v')); await sleep(900); film.classList.remove('on'); await sleep(1200);
+    if (fs && snd && !ST.abort) { if (!SND.isPlaying(snd)) SND.toggle(snd); }
   }
   /* la traversée des chapitres, le long de la boucle */
   async function storyChapters(sc, page, move) {
@@ -5384,16 +5452,22 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     const her = h('input', { type: 'text', id: 'storyHer', maxlength: 30, placeholder: 'Hadiatou', value: cfg.her || '' });
     const title = h('input', { type: 'text', id: 'storyTitle', maxlength: 60, placeholder: 'Le royaume de {elle}', value: cfg.title || '' });
     const music = soundSelect('storySound', cfg.sound || '');
+    const filmLen = h('select', { id: 'storyFilmLen' }, [['court', 'Court (~1 min 30)'], ['moyen', 'Moyen (~2 min 30)'], ['long', 'Long (~4 min)']].map(([v, l]) => h('option', { value: v, text: l })));
+    filmLen.value = cfg.filmLen || 'moyen';
+    const filmSnd = soundSelect('storyFilmSound', cfg.filmSound || '');
+    const filmVid = h('input', { type: 'checkbox', id: 'storyFilmVideo', checked: cfg.filmVideo !== false });
     const blocks = STORY.map((sc) => {
+      if (sc.key === 'film') return h('div', { class: 'chap', style: 'grid-template-columns:1fr' }, h('div', { class: 'mini', text: '🎞️ Le film : la vidéo de l\'entrée, puis toutes vos photos, chapitre par chapitre (' + ((S.memories || []).length) + ' souvenirs)' }),
+        h('label', { class: 'check' }, filmVid, 'Commencer par la vidéo de l\'entrée (Réglages → rétrospective)'), field('Durée du film', filmLen), field('Musique du film (sinon celle du conte continue)', filmSnd));
       const ta = h('textarea', { id: 'story-' + sc.key, maxlength: 600, placeholder: sc.def }); ta.value = texts[sc.key] || ''; ta.style.minHeight = '74px';
       rows[sc.key] = ta;
-      return h('div', { class: 'chap', style: 'grid-template-columns:1fr' }, h('div', { class: 'mini', text: (sc.kicker || 'La dernière page') + (sc.key === 'chapitres' ? ' (puis chaque chapitre défile avec son titre)' : '') }), ta);
+      return h('div', { class: 'chap', style: 'grid-template-columns:1fr' }, h('div', { class: 'mini', text: (sc.kicker || 'La dernière page') + (sc.key === 'chapitresX' ? ' (puis chaque chapitre défile avec son titre)' : '') }), ta);
     });
     const save = h('button', { class: 'gbtn', text: 'Enregistrer le conte' });
-    const collect = () => { const t = {}; Object.entries(rows).forEach(([k, ta]) => { if (ta.value.trim()) t[k] = ta.value.trim(); }); return { auto: auto.checked, her: her.value.trim(), title: title.value.trim(), sound: music.value || '', texts: t }; };
+    const collect = () => { const t = {}; Object.entries(rows).forEach(([k, ta]) => { if (ta.value.trim()) t[k] = ta.value.trim(); }); return { filmLen: filmLen.value, filmSound: filmSnd.value || '', filmVideo: filmVid.checked, auto: auto.checked, her: her.value.trim(), title: title.value.trim(), sound: music.value || '', texts: t }; };
     save.addEventListener('click', async () => { save.disabled = true; try { await saveSettings({ story: collect() }); toast('Conte enregistré 📖'); } catch (e) { toast('Enregistrement impossible'); } save.disabled = false; });
     const prev = h('button', { class: 'ghost', text: '▶ Voir le conte comme elle le verra', onclick: async () => { try { await saveSettings({ story: collect() }); } catch (e) {} closeAtelier(); setTimeout(runStory, 400); } });
-    return [h('p', { class: 'lead', text: 'À sa première connexion, après sa lettre, le royaume se raconte comme un conte : la caméra traverse chaque lieu, les phrases apparaissent une à une, et la musique du conte joue. Réécris chaque page à ta façon. {elle} et {lui} sont remplacés par vos prénoms, {lieux} par les lieux de vos photos.' }),
+    return [h('p', { class: 'lead', text: 'À sa première connexion, après sa lettre, le royaume se raconte comme un conte : quelques lieux du château, puis le film de votre histoire (la vidéo de l\'entrée, puis toutes vos photos en fondu, chapitre par chapitre), et le banc de l\'avenir. Réécris chaque page à ta façon : {elle} et {lui} deviennent vos prénoms, {souvenirs} le nombre de vos souvenirs. Ajoute tes musiques dans l\'onglet Sons, puis choisis-les ici.' }),
       h('label', { class: 'check' }, auto, 'Raconter le conte automatiquement à sa première connexion'), prev,
       h('div', { class: 'row2' }, field('Son prénom dans le conte', her), field('Titre du conte', title)),
       field('Musique (sinon la musique du conte, composée en direct)', music), ...blocks, save];
