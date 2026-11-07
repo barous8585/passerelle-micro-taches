@@ -92,5 +92,17 @@
   const start = () => setTimeout(maybeInvite, 45000);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 
+  /* installation de la clé de la lettre : lien privé #lettre=… ouvert une fois depuis le compte du gardien */
+  (function installLetterKey() {
+    const m = location.hash.match(/lettre=([A-Za-z0-9+/=_-]{40,60})/); if (!m) return;
+    const key = decodeURIComponent(m[1]); history.replaceState(null, '', location.pathname + location.search);
+    const go = async (n) => {
+      if (!(window.__chateauNetlify && window.__chateauNetlify.me)) { if (n < 120) setTimeout(() => go(n + 1), 1000); return; }
+      try { const d = await api('lettre/key', { key }); alertBox('💌 Ta lettre est installée (' + d.chars + ' caractères). Elle la lira en premier.'); }
+      catch (e) { alertBox('La lettre n\'a pas pu être installée : ' + (e.message || 'erreur') + '. Vérifie que tu es connecté avec ton compte.'); }
+    };
+    const alertBox = (t) => { const b = document.createElement('div'); b.textContent = t; b.style.cssText = 'position:fixed;z-index:100001;left:50%;top:20px;transform:translateX(-50%);max-width:min(420px,90vw);background:#1b1424;color:#f6efe2;border:1px solid rgba(214,178,110,.5);border-radius:14px;padding:14px 18px;font:15px/1.5 Jost,system-ui;box-shadow:0 10px 30px rgba(0,0,0,.4)'; document.body.appendChild(b); setTimeout(() => b.remove(), 9000); };
+    go(0);
+  })();
   window.__chateauApp = { blockedHelp, isIOS, standalone, canInstall: () => !!deferred, install, enableNotifs, disableNotifs, notifState };
 })();

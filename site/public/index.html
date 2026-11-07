@@ -1227,7 +1227,7 @@
     const glass = box(.5, .55, .5, new THREE.MeshStandardMaterial({ color: '#fff', transparent: true, opacity: .1, roughness: .05, depthWrite: false }), 0, 1.3, hz); root.add(glass);
     const hlg = glowSprite('#ff8fa8', 1.6, .55); hlg.position.set(0, 1.35, hz); root.add(hlg);
     const hit = new THREE.Group(); hit.add(ped.clone(), glass.clone()); hit.children.forEach((c) => { c.material = new THREE.MeshBasicMaterial({ visible: false }); }); root.add(hit);
-    interactive(hit, { range: 3.6, near: { type: 'hint', text: () => '💗 Toucher le cœur : une raison de s\'aimer' }, click: openHeart });
+    interactive(hit, { range: 3.6, near: { type: 'hint', text: () => '💗 Toucher le cœur' }, click: openHeart });
     OBST.push([-.3 - R, .3 + R, hz - .3 - R, hz + .3 + R]);
     W.anim.push((t, dt) => { heart.rotation.y += dt * .6; const b = 1 + Math.max(0, Math.sin(t * 3.2)) * .06; heart.scale.setScalar(b); heart.position.y = 1.3 + Math.sin(t * 1.2) * .02; W.heartMat.emissiveIntensity = .35 + (Math.sin(t * 2) + 1) * .2; });
 
@@ -1803,11 +1803,11 @@
 
     // ── « Notre avenir » : les deux dernières travées, le banc, et le mur du fond
     const av = bays.slice(bays.length - 2), awm = wallMat('plaster', BL, CH, '#2c4775');
-    portal(av[0], awm, [{ text: 'NOTRE AVENIR', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 'tout ce qu\'il nous reste à vivre', y: .7, size: .32, italic: true, color: '#3b3226' }]);
+    portal(av[0], awm, [{ text: 'TOUJOURS ICI', y: .3, size: .24, sans: true, spacing: 12, color: '#b08d57' }, { text: 'un lieu à toi, intemporel et secret', y: .7, size: .32, italic: true, color: '#3b3226' }]);
     av.forEach((b) => buildBay(b, awm, true));
     { const b = av[1], endP = at(b.c, b.u, b.o, b.bl / 2 + .15, 0), ry = rotOf(b.u);
       const ew = box(CW + .6, CH, .3, awm, endP[0], CH / 2, endP[1]); ew.rotation.y = ry; D.add(ew);
-      const q = textPlane(6.4, .5, [{ text: S.settings.quote || '« Si c\'était à refaire, je te choisirais encore. »', y: .5, size: .62, italic: true, color: '#e8d6ad' }]);
+      const q = textPlane(6.4, .5, [{ text: S.settings.quote || '« Sois heureuse, continue de sourire. »', y: .5, size: .62, italic: true, color: '#e8d6ad' }]);
       const qp = at(b.c, b.u, b.o, b.bl / 2 - .02, 0); q.position.set(qp[0], 4.2, qp[1]); q.rotation.y = Math.atan2(-b.u[0], -b.u[1]); D.add(q);
       for (let k = 0; k < 30; k++) { const st = glowSprite('#ffe9b8', .18 + Math.random() * .2, .7), sp = at(b.c, b.u, b.o, b.bl / 2 - .08, (Math.random() - .5) * (CW - 1)); st.position.set(sp[0], 1 + Math.random() * 4.6, sp[1]); D.add(st); } }
     // le banc, face au mur du fond étoilé
@@ -1820,7 +1820,7 @@
     interactive(bHit, { range: 4.5, near: { type: 'hint', text: () => '🪑 Toucher le banc pour t\'asseoir' }, click: () => { if (!S.seated) sitDown(); } }, 'gallery');
     dyn(rectAt(bc, av[1].u, .3, 1.3));
     W.bench = { x: bc[0], z: bc[1], yaw: byaw };
-    W.zones.push({ name: 'Notre avenir', tp: [...at(av[0].c, av[0].u, av[0].o, -1.4, 0), Math.atan2(-av[0].u[0], -av[0].u[1])], bays: av });
+    W.zones.push({ name: 'Toujours ici', tp: [...at(av[0].c, av[0].u, av[0].o, -1.4, 0), Math.atan2(-av[0].u[0], -av[0].u[1])], bays: av });
 
     // ── trajet de la caméra le long des allées (décalé pour éviter les bancs et les pupitres)
     const off = 1.8; W.loopPath = [[0, zE + 1.5], [off, zE - 1]];
@@ -3347,7 +3347,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   function openHeart() {
     const list = S.reasons;
     let body;
-    if (!list.length) body = [h('div', { class: 'k', text: 'Le cœur' }), h('h2', { text: 'Il attend vos premières raisons' }), h('div', { class: 'body', text: 'Chaque raison que vous écrivez ici s\'y glisse. Ensuite, à chaque fois qu\'on le touche, il en murmure une.' })];
+    if (!list.length) body = [h('div', { class: 'k', text: 'Le cœur' }), h('h2', { text: 'Toujours là' }), h('div', { class: 'body', text: 'Ici battra toujours un peu de vous deux.' })];
     else {
       let i = Math.floor(Math.random() * list.length); if (list.length > 1 && i === lastReason) i = (i + 1) % list.length; lastReason = i;
       const r = list[i], by = h('div', { class: 'by' }); nameOf(r.author).then((n) => { if (n) by.textContent = 'Écrit par ' + n; });
@@ -3453,7 +3453,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   /* ════════════════════════════════════════════
      L'ATELIER
      ════════════════════════════════════════════ */
-  const TABS = [['souvenir', 'Souvenir'], ['chapitres', 'Chapitres'], ['conte', 'Le conte'], ['sons', 'Sons'], ['lettres', 'Lettres'], ['raisons', 'Raisons'], ['reglages', 'Réglages']];
+  const TABS = [['souvenir', 'Souvenirs'], ['chapitres', 'Chapitres'], ['conte', 'Le conte'], ['sons', 'Sons'], ['reglages', 'Réglages']];
   let curTab = 'souvenir', tabOpts = {};
   function openAtelier(tab, opts) {
     if (!S.canWrite) return;
@@ -3926,7 +3926,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const cF = h('input', { id: 'setCF', type: 'color', value: st.flowerColor || '#e7a6bd' }), cC = h('input', { id: 'setCC', type: 'color', value: st.carpetColor || '#6a1222' }), cL = h('input', { id: 'setCL', type: 'color', value: st.lanternColor || '#ffb466' });
     const bSnd = soundSelect('setBenchSnd', st.benchSound || '');
     const wl = h('textarea', { id: 'setWelcome', maxlength: 15000, rows: 14, placeholder: 'La lettre qu\'elle lira en entrant pour la première fois' }); wl.value = st.welcome || WELCOME_DEF;
-    const wfx = h('input', { type: 'checkbox', id: 'setWelcomeFx', checked: st.welcomeFx !== false });
+    const wfx = h('input', { type: 'checkbox', id: 'setWelcomeFx', checked: st.welcomeFx === true });
     const ws = h('input', { id: 'setWelcomeSign', type: 'text', maxlength: 40, value: st.welcomeSign || 'Ousmane', placeholder: 'Ta signature' });
     const wPrev = h('button', { class: 'ghost', text: 'Voir son accueil (aperçu)' });
     wPrev.addEventListener('click', async () => { const keep = { welcome: st.welcome, welcomeSign: st.welcomeSign }; st.welcome = wl.value; st.welcomeSign = ws.value; closeModal(); await showWelcome(); Object.assign(st, keep); });
@@ -3981,11 +3981,9 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       h('button', { class: 'ghost', text: 'Se déconnecter', style: 'margin-top:8px', onclick: () => NF.logout() })) : null;
     const backup = !S.isOwner ? null : h('div', { class: 'field' }, h('div', { text: 'Sauvegarde complète', style: 'margin-bottom:6px' }), h('div', { class: 'mini', text: 'Un fichier .zip avec toutes vos photos, sons, vidéos, lettres et un album qui s\'ouvre sur n\'importe quel ordinateur, même dans 40 ans. À refaire de temps en temps et à garder précieusement.' }), h('button', { class: 'ghost', text: '💾 Télécharger la sauvegarde', style: 'margin-top:8px', onclick: (e) => exportArchive(e.currentTarget) }));
     return [h('p', { class: 'lead', text: '💌 Ta lettre : elle la lit en tout premier, juste après être entrée, avant le conte.' }), field('Sa lettre d\'accueil', wl), field('Ta signature', ws), h('label', { class: 'check' }, wfx, 'Feux d\'artifice pendant la lettre'), wPrev, h('div', { class: 'sep' }),
-      field('Vos prénoms', names), field('Ensemble depuis le', since), field('Son anniversaire (feu d\'artifice ce jour-là)', bday), field('Citation du Belvédère', quote), field('Message du banc', bench), field('Notre chanson, jouée sur le banc', bSnd),
-      h('div', { class: 'row2' }, field('Sa fleur préférée', fav), field('Couleur des fleurs', cF)), h('div', { class: 'row2' }, field('Couleur du tapis', cC), field('Couleur des lanternes', cL)), save,
-      h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'La rétrospective vidéo du Grand Hall.' }), vbtn, vfile,
-      h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'Le code secret demandé à l\'entrée.' }), c1, cbtn,
-      h('p', { class: 'mini', text: 'Ce code est un rituel d\'entrée. La vraie protection, c\'est le partage : ce château n\'est visible que par les personnes avec qui tu le partages.' }), account, backup];
+      field('Vos prénoms (en haut de l\'écran)', names), field('La phrase sur le mur du fond, au banc', quote), field('Message quand on s\'assoit sur le banc', bench), field('Chanson jouée sur le banc', bSnd), save,
+      h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'La vidéo de l\'entrée (elle ouvre aussi le film du conte).' }), vbtn, vfile,
+      ...(window.__chateauNetlify ? [] : [h('div', { class: 'sep' }), h('p', { class: 'lead', text: 'Le code secret demandé à l\'entrée.' }), c1, cbtn]), account, backup];
   }
   async function saveSettings(patch) {
     const ref = S.db.doc('settings/main');
@@ -4965,13 +4963,13 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
      (caméra de cinéma, bandes noires, texte page après page, musique du conte)
      ════════════════════════════════════════════ */
   const STORY = [
-    { key: 'debut', where: 'jardin', kicker: 'Il était une fois…', def: '…une princesse nommée {elle}. Elle ne le savait pas encore, mais quelque part, un royaume l\'attendait.' },
-    { key: 'garcon', where: 'fontaine', kicker: 'Un garçon', def: 'Dans ce même monde vivait un garçon nommé {lui}. Il gardait un secret : il voulait lui offrir un endroit où rien de ce qu\'ils vivent ne se perdrait jamais.' },
-    { key: 'chateau', where: 'chateau', kicker: 'Le château', def: 'Alors, pierre après pierre, il bâtit un château. Pas un château de pierre… un château de souvenirs.' },
-    { key: 'coeur', where: 'hall', kicker: 'Le cœur du royaume', def: 'Et pour que rien ne se perde jamais, il y garda chaque instant de leur histoire. Regarde…' },
-    { key: 'film', where: 'film', kicker: 'Leur histoire', def: '{souvenirs} souvenirs' },
-    { key: 'avenir', where: 'avenir', kicker: 'L\'avenir', def: 'Mais l\'histoire n\'est pas finie. Ici commence la salle de leur avenir, encore vide… parce que c\'est ensemble qu\'ils l\'écriront.' },
-    { key: 'fin', where: 'banc', kicker: '', def: 'Ce royaume est le tien, {elle}. Bienvenue chez toi. ♥' },
+    { key: 'debut', where: 'jardin', kicker: 'Il était une fois…', def: '…une fille nommée {elle}, qui a illuminé la vie d\'un garçon sans même le savoir.' },
+    { key: 'garcon', where: 'fontaine', kicker: 'Un garçon', def: 'Lui, prudent et méfiant, avait oublié ce que c\'était d\'aimer. Elle le lui a rappelé.' },
+    { key: 'chateau', where: 'chateau', kicker: 'Le château', def: 'Alors il a bâti un endroit où rien de ce qu\'ils ont vécu ne se perdrait jamais.' },
+    { key: 'coeur', where: 'hall', kicker: 'Le cœur du royaume', def: 'Ici sont gardés tous vos instants. Regarde…' },
+    { key: 'film', where: 'film', kicker: 'Votre histoire', def: '{souvenirs} souvenirs' },
+    { key: 'avenir', where: 'avenir', kicker: 'Toujours ici', def: 'Ce lieu reste ouvert, intemporel et secret. Tu pourras toujours y revenir.' },
+    { key: 'fin', where: 'banc', kicker: '', def: 'Sois heureuse, {elle}. Continue de briller.' },
   ];
   const storyCfg = () => S.settings.story || {};
   function storyFill(t) {
@@ -5048,7 +5046,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
         const pan = drift(yaw + .12, stop.pitch || 0, 9000);
         await page(sc); await pan;
       }
-      if (!ST.abort) await storyTitle('Fin…', 'ou plutôt, le début', 3200);
+      if (!ST.abort) await storyTitle('Fin', 'merci pour chaque instant', 3200);
     } catch (e) { console.error('conte', e); }
     // retour au royaume
     el.classList.remove('on'); el.querySelector('.title').classList.remove('on'); el.querySelector('.cap .k').classList.remove('v'); el.querySelector('.cap .t').replaceChildren();
@@ -5083,7 +5081,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     chs.forEach((c, i) => { const ms = memoriesOf(c.id, chs).filter((m) => m.asset || m.thumb); if (!ms.length) return; items.push({ card: true, k: 'Chapitre ' + romanNum(i + 1), t: c.title || '' }); ms.forEach((m) => items.push({ m, ch: c.title || '' })); });
     const photos = items.filter((x) => x.m), n = photos.length;
     if (!n) { film.classList.remove('on'); return; }
-    await setCard('Leur histoire', intro, 2600);
+    await setCard('Votre histoire', intro, 2600);
     const T = { court: 90, moyen: 150, long: 240 }[cfg.filmLen || 'moyen'] || 150, cards = items.length - n, slowN = Math.min(5, n);
     const per = Math.max(.42, Math.min(3.2, (T - cards * 1.9 - slowN * 3.4) / Math.max(1, n - slowN)));
     const urls = new Map();
@@ -5646,7 +5644,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       S.entered = true; controls(true);
       // à sa première venue : l'histoire commence tout de suite (ta voix, puis le conte), et sa lettre l'attend à la fin
       // à sa première venue : ta lettre d'abord, puis l'histoire
-      if (await welcomeDue().catch(() => false)) { saveUserState({ welcomeSeen: Date.now() }); await showWelcome(); }
+      if (await welcomeDue().catch(() => false)) { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
       const storyAuto = storyCfg().auto !== false && !S.isOwner && !!S.db;
       if (storyAuto && !(await storySeen().catch(() => true))) { markTourSeen(); await sleep(600); await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }); }
       setTimeout(() => showNews().catch(() => {}), 900);
@@ -5692,15 +5690,19 @@ Je t'aime.`;
       const st = S.settings;
       if (!document.getElementById('welcomeCss')) { const c = document.createElement('style'); c.id = 'welcomeCss'; c.textContent = welcomeCss; document.head.appendChild(c); }
       // le ciel s'illumine au-dessus du château pendant la lecture
-      if (st.welcomeFx !== false) { const was = FX.cel.fireworks; FX.cel.fireworks = true; FX.next = 0;
+      if (st.welcomeFx === true) { const was = FX.cel.fireworks; FX.cel.fireworks = true; FX.next = 0;
         setTimeout(() => { FX.cel.fireworks = was || celebrationsToday().fireworks; }, 70000); }
       const el = document.createElement('div'); el.id = 'welcome';
       const sign = esc(st.welcomeSign || 'Ousmane');
+      const isDraft = !st.welcome || st.welcome.trim() === WELCOME_DEF.trim();
       el.innerHTML = `<div class="env"><div class="flap"></div><div class="seal">${esc((sign[0] || '♥'))}</div><div class="to">Pour Hadiatou</div><div class="tap">Touche l'enveloppe</div></div>
-        <div class="letter"><p>${esc(st.welcome || WELCOME_DEF)}</p><div class="sign">${sign} ♥</div><button type="button">${esc(st.welcomeBtn || 'Continuer')}</button></div>`;
-      setTimeout(() => { document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('on')); }, 4200);
+        <div class="letter"><p>${esc(isDraft ? '…' : st.welcome)}</p><div class="sign">${sign} ♥</div><button type="button">${esc(st.welcomeBtn || 'Continuer')}</button></div>`;
+      // la lettre gardée chiffrée côté serveur (version en ligne) remplace le brouillon
+      const letterReady = (isDraft && window.__chateauNetlify ? fetch('/api/lettre', { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : Promise.resolve(null))
+        .then((d) => { const t = d && d.text ? d.text : (isDraft ? (window.__chateauNetlify ? '' : WELCOME_DEF) : st.welcome); el.querySelector('.letter p').textContent = t; return !!t; });
+      setTimeout(() => { letterReady.then((ok) => { if (!ok) { done(false); return; } document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('on')); }); }, st.welcomeFx === true ? 4200 : 1200);
       el.querySelector('.env').addEventListener('click', () => { el.classList.add('open'); try { SND && SND.click && SND.click(); } catch (e) {} });
-      el.querySelector('.letter button').addEventListener('click', () => { el.classList.remove('on'); setTimeout(() => { el.remove(); done(); }, 1200); });
+      el.querySelector('.letter button').addEventListener('click', () => { el.classList.remove('on'); setTimeout(() => { el.remove(); done(true); }, 1200); });
     });
   }
   async function welcomeDue() {
