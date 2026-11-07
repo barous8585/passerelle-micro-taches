@@ -21,7 +21,11 @@ export default async (req: Request, context: { next: () => Promise<Response>; de
     const p = fetch("https://ntfy.sh/", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
       topic: NTFY_TOPIC, title: avant ? "💐 Le QR code vient d'être scanné !" : "🏰 Hadiatou entre dans le château",
       message: `${avant ? "La page d'attente s'est ouverte" : "Le musée s'est ouvert"} à ${heure}, sur ${appareil}${lieu}.`, tags: ["heart"], priority: 5, click: "https://hadiatoukaba.fr/?apercu=1" }) }).catch(() => {});
-    if (context.waitUntil) context.waitUntil(p); else await p;
+    // et on l'inscrit dans le journal des scans (hadiatoukaba.fr/api/journal)
+    const j = fetch(new URL("/api/scan", url.origin).toString(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({
+      appareil: appareil.replace(/^un /, ""), ville: (context.geo && context.geo.city) || "", pays: (context.geo && context.geo.country && context.geo.country.name) || "", moment: avant ? "page d'attente" : "musée" }) }).catch(() => {});
+    const both = Promise.all([p, j]);
+    if (context.waitUntil) context.waitUntil(both); else await both;
   }
   if (reste <= 0 || !(DOMAINES.includes(url.hostname) || cadeau) || url.searchParams.has("apercu")) return context.next();
   return new Response(page(reste, (context.deploy && context.deploy.id) || "local"), { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });

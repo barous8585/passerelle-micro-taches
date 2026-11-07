@@ -101,8 +101,31 @@ export default async (req: Request, context: Context) => {
     }
     if (route === "logout") return json({ ok: true }, 200, { "set-cookie": sessionCookie("", 0) });
 
+    /* journal des scans du QR code : la page d'attente y inscrit chaque ouverture du lien */
+    if (route === "scan" && m === "POST") {
+      const b = (await req.json().catch(() => ({}))) as any, clip = (v: unknown) => String(v || "").slice(0, 60);
+      const t = Date.now();
+      await store("chateau-scans").setJSON(`scan/${t}-${Math.random().toString(36).slice(2, 7)}`, { t, appareil: clip(b.appareil), ville: clip(b.ville), pays: clip(b.pays), moment: clip(b.moment) });
+      return json({ ok: true });
+    }
+
     /* tout le reste demande une connexion */
     const me = await currentUser(req);
+    if (route === "journal" && m === "GET") {
+      if (!me || !me.isOwner) return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;background:#140c1c;color:#f6efe2;padding:24px"><h2>Journal des scans</h2><p>Connecte-toi d'abord avec ton compte de gardien sur <a style="color:#f3d79a" href="/?apercu=1">hadiatoukaba.fr/?apercu=1</a>, puis reviens sur cette page.</p>`, { status: 401, headers: { "content-type": "text/html; charset=utf-8" } });
+      const st = store("chateau-scans"), { blobs } = await st.list({ prefix: "scan/" });
+      const rows = (await Promise.all(blobs.map((b) => st.get(b.key, { type: "json" })))).filter(Boolean).sort((a: any, b: any) => b.t - a.t) as any[];
+      const fmt = (t: number) => new Date(t).toLocaleString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      const esc = (v: string) => v.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" } as any)[c]);
+      const lignes = rows.map((r) => `<tr><td>${fmt(r.t)}</td><td>${esc(r.appareil)}</td><td>${esc([r.ville, r.pays].filter(Boolean).join(", ") || "—")}</td><td>${esc(r.moment)}</td></tr>`).join("");
+      return new Response(`<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Journal des scans</title>
+<style>body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:#140c1c;color:#f6efe2;padding:22px 16px}h1{font-family:Georgia,serif;font-style:italic;font-weight:500;font-size:28px;margin:0 0 4px}p{color:rgba(246,239,226,.65);margin:0 0 18px;font-size:14px}
+table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;color:#d6ad62;font-weight:500;font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid rgba(214,173,98,.4)}td{padding:10px 6px;border-bottom:1px solid rgba(255,255,255,.08);vertical-align:top}td:first-child{white-space:nowrap;color:#f3d79a}
+.vide{padding:30px 0;text-align:center;color:rgba(246,239,226,.5)}</style></head><body>
+<h1>Journal des scans</h1><p>${rows.length} ouverture${rows.length > 1 ? "s" : ""} du lien du QR code · heure de Paris · la page se met à jour toute seule</p>
+<table><thead><tr><th>Quand</th><th>Appareil</th><th>Où</th><th>Page</th></tr></thead><tbody>${lignes || `<tr><td colspan="4" class="vide">Personne n'a encore scanné le QR code.</td></tr>`}</tbody></table>
+<script>setTimeout(()=>location.reload(),30000)</script></body></html>`, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+    }
     if (!me) return err("unauthenticated", 401, "Connexion requise");
 
     if (route === "me") return json({ user: publicUser(me) });
