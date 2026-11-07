@@ -1482,9 +1482,10 @@
     });
   }
   /* taille de la photo (sans passe-partout) : même surface pour tous, forme exacte de l'image */
-  function frameSize(aspect) { const a = Math.min(4, Math.max(.25, aspect || 1.333)); const pw = 2.35 * Math.sqrt(a), ph = 2.35 / Math.sqrt(a), k = Math.min(1, 2.75 / pw, 2.45 / ph); return [pw * k, ph * k]; }
+  function frameSize(aspect, box2) { const a = Math.min(4, Math.max(.25, aspect || 1.333)), mw = box2 ? box2[0] : 3, mh = box2 ? box2[1] : 2.45; const pw = 2.6 * Math.sqrt(a), ph = 2.6 / Math.sqrt(a), k = Math.min(1, mw / pw, mh / ph); return [pw * k, ph * k]; }
 
-  function makeFrame(parent, mem, x, y, z, rotY, ceilY) {
+  function makeFrame(parent, mem, x, y, z, rotY, ceilY, fopt) {
+    fopt = fopt || {};
     const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rotY; parent.add(g);
     const B = .045, mat = .1;
     const halo = plane(1, 1, M.halo); halo.position.set(0, .15, .006); g.add(halo);
@@ -1507,7 +1508,7 @@
     if (mem.video) { play = plane(.42, .42, new THREE.MeshBasicMaterial({ map: playTexture(), transparent: true, depthWrite: false })); play.position.z = .062; art.add(play); }
     const fr = { size: 1.5, on: false };
     const layout = (a) => {
-      const [pw0, ph0] = frameSize(a); let FW, FH;
+      const [pw0, ph0] = frameSize(a, fopt.box); let FW, FH;
       if (vit) { const o = vit(pw0 * .72, ph0 * .72); FW = pw0 * .72 + .62; FH = ph0 * .72 + .67; void o; }
       else { const w = pw0 + 2 * mat, hh = ph0 + 2 * mat; FW = w + 2 * B; FH = hh + 2 * B; fbox.scale.set(FW, FH, 1); matte.scale.set(w, hh, 1); photo.scale.set(pw0, ph0, 1); glass.scale.set(w, hh, 1); }
       halo.scale.set(FW + 1.7, FH + 1.9, 1);
@@ -1541,9 +1542,11 @@
     fr.load = () => fr.setLevel(Math.max(1, fr.level));
     fr.unload = () => fr.setLevel(0);
     // luminaire au plafond
-    const ly = ceilY - y - .1; const fx = box(.1, .14, .1, M.black, 0, ly, 1.3); g.add(fx);
-    { const from = new THREE.Vector3(0, ly - .08, 1.3), dir = new THREE.Vector3(0, 0, .06).sub(from), len = dir.length(); const bm = beamCone(len, 1); bm.position.copy(from);
+    const ly = ceilY - y - .1;
+    if (!fopt.noLight) { const fx = box(.1, .14, .1, M.black, 0, ly, 1.3); g.add(fx);
+    const from = new THREE.Vector3(0, ly - .08, 1.3), dir = new THREE.Vector3(0, 0, .06).sub(from), len = dir.length(); const bm = beamCone(len, 1); bm.position.copy(from);
       bm.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir.normalize()); g.add(bm); fr.beam = bm; const r2 = fr.size / 2 + .2; bm.scale.set(r2, 1, r2); }
+    if (fopt.noLight) halo.visible = false;
     const state = { focus: false, s: 1 };
     W.frames.push(Object.assign(fr, { g, art, halo, state, lightLocal: new THREE.Vector3(0, ly - .1, 1.3) }));
     interactive(art, {
@@ -1571,9 +1574,9 @@
   }
   /* au mur : jusqu'à 6 grands tableaux par chapitre (ceux marqués ⭐ d'abord, puis répartis dans le temps) ;
      tous les autres se feuillettent dans l'album du chapitre */
-  const WALL_MAX = 6;
+  const WALL_MAX = 6, WALL_ALL = true;   // toutes les photos aux murs
   function wallOf(mems) {
-    if (mems.length <= WALL_MAX) return mems.slice();
+    if (WALL_ALL || mems.length <= WALL_MAX) return mems.slice();
     const fav = mems.filter((m) => m.wall === true).slice(0, WALL_MAX), rest = mems.filter((m) => m.wall !== true && m.wall !== false), pick = new Set(fav);
     const need = WALL_MAX - pick.size;
     for (let i = 0; i < need && rest.length; i++) pick.add(rest[Math.round(i * (rest.length - 1) / Math.max(1, need - 1))]);
@@ -1663,7 +1666,7 @@
 
     // ── combien de travées ? chaque travée porte deux cadres (mur extérieur + mur sur le jardin)
     const chapters = sortedChapters();
-    const info = chapters.map((ch) => { const all = memoriesOf(ch.id, chapters), mems = wallOf(all), album = all.length > mems.length; const slots = mems.length + (S.canWrite && !album ? 1 : 0); return { ch, mems, all, album, slots, bays: Math.max(2, Math.ceil(slots / 2)) }; });
+    const info = chapters.map((ch) => { const all = memoriesOf(ch.id, chapters), mems = wallOf(all), album = all.length > mems.length; const slots = mems.length + (S.canWrite ? 1 : 0), dense = slots > 4; return { ch, mems, all, album: all.length > 12, slots, dense, bays: Math.max(2, Math.ceil(slots / (dense ? 4 : 2))) }; });
     const need = info.reduce((a, c) => a + c.bays, 0) + 1;
     const n = Math.max(5, Math.ceil((need - 4) / 2)), zc = Z0 - n * BL;   // zc : bord nord du jardin intérieur
     const topBL = ((XR - hw) - (XL + hw)) / 7;
@@ -1681,10 +1684,16 @@
     const floorM = new THREE.MeshStandardMaterial({ map: tex('floor', 2, 2), roughness: .18, metalness: .05 });
     const glassM = (w, hh) => glassPane(w, hh);
     // une travée : murs, verrière haute sur le jardin, plafond
-    const buildBay = (b, wm) => {
+    const buildBay = (b, wm, solid) => {
       const ry = rotOf(b.u), { c, u, o, bl } = b;
       const add = (m, p, y) => { m.position.set(p[0], y, p[1]); m.rotation.y = ry; D.add(m); return m; };
       add(box(.3, CH, bl + .02, wm), at(c, u, o, 0, hw + .15), CH / 2);                 // mur extérieur
+      if (solid) {   // salle dense : mur du jardin plein, pour la rangée haute de tableaux
+        add(box(.3, CH, bl + .02, wm), at(c, u, o, 0, -hw - .15), CH / 2); add(box(.06, CH, bl + .02, facadeM), at(c, u, o, 0, -hw - .33), CH / 2);
+        add(box(CW + .6, .05, bl + .02, M.ceiling), c, CH + .02); add(box(CW, .04, bl + .02, floorM), c, 0);
+        add(box(.03, .03, bl - .2, M.warm), at(c, u, o, 0, hw - .03), CH - .08); add(box(.03, .03, bl - .2, M.warm), at(c, u, o, 0, -hw + .03), CH - .08);
+        return;
+      }
       add(box(.3, 3.6, bl + .02, wm), at(c, u, o, 0, -hw - .15), 1.8);                  // mur sur le jardin
       add(box(.3, .6, bl + .02, wm), at(c, u, o, 0, -hw - .15), CH - .3);
       add(box(.06, 3.6, bl + .02, facadeM), at(c, u, o, 0, -hw - .33), 1.8);           // son parement côté jardin
@@ -1696,9 +1705,10 @@
       add(box(CW, .04, bl + .02, floorM), c, 0);
       add(box(.03, .03, bl - .2, M.warm), at(c, u, o, 0, hw - .03), CH - .08);         // bandeau lumineux
     };
-    const frameAt = (b, side, mem, chId) => {   // side +1 : mur extérieur, -1 : mur du jardin
+    const frameAt = (b, side, mem, chId, row) => {   // side +1 : mur extérieur, -1 : mur du jardin ; row : rangée basse (0) ou haute (1) des salles denses
       const p = at(b.c, b.u, b.o, 0, side * (hw - .005)), ry = Math.atan2(-side * b.o[0], -side * b.o[1]);
-      if (mem) makeFrame(D, mem, p[0], 2.15, p[1], ry, CH); else makeEmptyFrame(D, chId, p[0], 2.15, p[1], ry);
+      const y = row == null ? 2.15 : row ? 4.3 : 1.92, fo = row == null ? null : { box: [b.bl - 1.1, 1.66], noLight: row === 1 };
+      if (mem) makeFrame(D, mem, p[0], y, p[1], ry, CH, fo); else makeEmptyFrame(D, chId, p[0], y, p[1], ry);
     };
     const portal = (b, wm, lines) => {   // une arche à l'entrée d'un chapitre, avec sa plaque
       const s = at(b.c, b.u, b.o, -b.bl / 2, 0), ry = rotOf(b.u);
@@ -1724,7 +1734,7 @@
     };
     // ── les chapitres, travée après travée
     let bi = 0; const tour = [];
-    info.forEach(({ ch, mems, all, album, slots, bays: nb }, i) => {
+    info.forEach(({ ch, mems, all, album, slots, dense, bays: nb }, i) => {
       const wm = wallMat('plaster', BL, CH, wallColorOf(ch)), first = bays[bi];
       portal(first, wm, [
         { text: 'CHAPITRE ' + romanNum(i + 1), y: .2, size: .2, sans: true, spacing: 10, color: '#b08d57' },
@@ -1732,8 +1742,9 @@
         { text: ch.subtitle || '', y: .86, size: .19, italic: true, weight: 400, color: '#8a7350' },
       ]);
       for (let k = 0; k < nb; k++) {
-        const b = bays[bi + k]; buildBay(b, wm);
-        [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
+        const b = bays[bi + k]; buildBay(b, wm, dense);
+        if (!dense) [1, -1].forEach((side, j) => { const s = k * 2 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id); });
+        else [[1, 0], [-1, 0], [1, 1], [-1, 1]].forEach(([side, row], j) => { const s = k * 4 + j; if (s < slots) frameAt(b, side, s < mems.length ? mems[s] : null, ch.id, row); });
       }
       if (album) albumLectern(D, bays[bi + Math.floor(nb / 2)], ch, all.length, dyn, rotOf);
       else if (nb >= 3) { const b = bays[bi + Math.floor(nb / 2)]; museumBench(D, b.c[0], b.c[1], 2.4, rotOf(b.u)); dyn(rectAt(b.c, b.u, 1.2, .31)); }
@@ -3243,7 +3254,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       if (this.adaptDpr) this.adaptDpr(raw);
       W.anim.forEach((f) => f(this.t, dt));
       if (W.lanterns) W.lanterns.children.forEach((g) => { g.position.y = g.userData.base + Math.sin(this.t * .6 + g.userData.seed) * .35; g.rotation.y += dt * .2; });
-      W.frames.forEach((f) => { const tg = f.state.focus ? 1.055 : 1; f.state.s += (tg - f.state.s) * Math.min(1, dt * 6); f.art.scale.setScalar(f.state.s); f.art.position.z = (f.state.s - 1) * .6; });
+      W.frames.forEach((f) => { const tg = f.state.focus ? 1.055 : 1; if (Math.abs(tg - f.state.s) < .0005) { if (f.state.s !== tg) { f.state.s = tg; f.art.scale.setScalar(tg); f.art.position.z = (tg - 1) * .6; } return; } f.state.s += (tg - f.state.s) * Math.min(1, dt * 6); f.art.scale.setScalar(f.state.s); f.art.position.z = (f.state.s - 1) * .6; });
       const cam = this.el.camera && this.el.camera.el && this.el.camera.el.object3D; if (!cam) return; W.camPos = cam.position;
       updateSteps(cam);
       this.acc += raw; if (this.acc > .12) { this.acc = 0; updateGuide(cam); }
@@ -5074,8 +5085,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const n = zones.length, quick = n > 8;
     for (const it of items) {
       if (ST.abort) return;
-      if (it.corner) { await move(it.p[0], it.p[1], null, 0, 3); continue; }
-      await storyClear(); await move(it.p[0], it.p[1], null, 0, 2.6);
+      if (it.corner) { await move(it.p[0], it.p[1], null, 0, Math.max(3, acc / 70)); continue; }
+      await storyClear(); await move(it.p[0], it.p[1], null, 0, Math.max(2.6, acc / 70));
       { const $p = $('#player').object3D.position; await glideP($p.x, $p.z, it.z.tp[2], -.02, 1100); }
       const ch = it.ch || {}, cnt = memoriesOf(ch.id, chs).length;
       await storyPage('Chapitre ' + romanNum(it.z.chapter), (ch.title || it.z.name) + (ch.subtitle ? ' — ' + ch.subtitle : '') + (cnt ? ' · ' + cnt + ' souvenir' + (cnt > 1 ? 's' : '') : ''), quick ? 0 : 1200);
