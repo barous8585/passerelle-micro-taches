@@ -230,6 +230,10 @@
   #album .lbb .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   #album .lbb .ghost { background: rgba(255,255,255,.08); color: #f6efe2; border: 1px solid rgba(255,255,255,.16); border-radius: 999px; padding: 9px 14px; font: inherit; font-size: 13px; cursor: pointer; }
   /* ── le mode visite : elle regarde, elle ne manipule rien ── */
+  #introVid { position: fixed; inset: 0; z-index: 58; background: rgba(0,0,0,.92); display: grid; place-items: center; opacity: 0; transition: opacity .9s; }
+  #introVid.on { opacity: 1; }
+  #introVid video { max-width: 100%; max-height: 100%; width: auto; height: 100vh; object-fit: contain; }
+  #introVid .skip { position: absolute; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.12); color: #f6efe2; border: 1px solid rgba(255,255,255,.2); border-radius: 999px; padding: 8px 16px; font: 400 13px "Jost", sans-serif; }
   #visitShield { position: fixed; inset: 0; z-index: 25; display: none; }
   body.visit #visitShield { display: block; }
   body.visit #toolbar, body.visit #joy, body.visit #joyOpts, body.visit #standBtn, body.visit #hintBox, body.visit #tooltip, body.visit #pill, body.visit #rotateHint, body.visit #motDuJour, body.visit #benchMsg, body.visit #tourCap { display: none !important; }
@@ -1375,6 +1379,7 @@
   const VIDURL = new Map();
   function videoSrc(id, progress) {
     if (!id) return Promise.resolve('');
+    if (id === 'intro') return Promise.resolve('/api/intro-video');
     if (!isChunkedVideo(id)) return Promise.resolve('/_blob/' + id);
     if (VIDURL.has(id)) return VIDURL.get(id);
     const p = (async () => {
@@ -3223,7 +3228,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       buildSky(root); buildGarden(root); buildPavilion(root); buildFrenchGarden(root); buildFauna(root); buildHall(root); buildUpperWindows(root);  initSpotPool(root); initFX(root);
       W.peerGroup = new THREE.Group(); root.add(W.peerGroup);
       buildDust(root);
-      buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(S.settings.video || null);
+      buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(window.__chateauNetlify ? 'intro' : (S.settings.video || null));
       realify(root); mergeStatic(root);
       { const snap0 = snapStatic(root); setTimeout(() => { try { deepMerge(root, snap0); } catch (e) { console.warn('regroupement', e); } }, 2500); }
       const envUp = () => { try { buildEnvironment(this.el); } catch (e) { console.warn('environnement', e); } };
@@ -5274,6 +5279,29 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     else { VS.token++; S.visiting = false; S.tour = false; controls(true); }
   }
   function visitCap(k, t) { const c = $('#visitShield .cap'); if (!k && !t) { c.classList.remove('v'); return; } c.querySelector('.k').textContent = k || ''; c.querySelector('.t').textContent = t || ''; c.classList.add('v'); }
+  /* la vidéo de l'entrée, jouée en grand dans le hall avant la balade (débloquée par son geste sur « Continuer ») */
+  const IV = { el: null, unlocked: false };
+  function introEl() {
+    if (IV.el) return IV.el;
+    const v = document.createElement('video'); v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.preload = 'auto';
+    v.setAttribute('controlslist', 'nodownload noremoteplayback'); v.disablePictureInPicture = true;
+    if (window.__chateauNetlify) v.src = '/api/intro-video';
+    IV.el = v; return v;
+  }
+  function introUnlock() { const v = introEl(); if (!v.src || IV.unlocked) return; try { const p = v.play(); if (p) p.then(() => { if (!IV.playing) v.pause(); IV.unlocked = true; }).catch(() => {}); } catch (e) {} }
+  async function playIntro() {
+    const v = introEl(); if (!v.src) return;
+    const ov = document.createElement('div'); ov.id = 'introVid';
+    ov.innerHTML = '<button type="button" class="skip">Passer ›</button>'; ov.prepend(v); document.body.appendChild(ov);
+    requestAnimationFrame(() => ov.classList.add('on'));
+    Music.setDuck(true); const sv = SND.P && SND.P.el; const vol0 = sv ? sv.volume : 1; if (sv) sv.volume = .05;
+    IV.playing = true;
+    await new Promise((r) => { let done = false; const fin = () => { if (done) return; done = true; r(); };
+      v.onended = fin; v.onerror = fin; ov.querySelector('.skip').onclick = fin; setTimeout(() => { if (v.paused && v.currentTime < .1) { v.muted = true; v.play().catch(fin); } }, 2500);
+      try { v.currentTime = 0; } catch (e) {} v.muted = false; v.play().catch(() => { v.muted = true; v.play().catch(fin); }); });
+    IV.playing = false; v.pause(); ov.classList.remove('on'); await new Promise((r) => setTimeout(r, 900)); ov.remove();
+    Music.setDuck(false); if (sv) sv.volume = vol0;
+  }
   async function autoVisit(once) {
     const my = ++VS.token; S.visiting = true; S.tour = true; controls(false);
     const cfg = storyCfg(), snd = cfg.sound && SND.byId(cfg.sound);
@@ -5290,6 +5318,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const moveMs = per * 420, holdMs = per * 580, transit = per < 3 ? 3.2 : 1.6;
     while (alive()) {
       await fadeTo(0, 3.5, 0); if (!alive()) break;
+      if (once && window.__chateauNetlify) { const vp = rotAt(-2.45, 3.4), sp = rotAt(-2.45, 8.3); await glideP(vp.x, vp.z, yawTo(vp.x, vp.z, sp.x, sp.z), .12, 1600); await playIntro(); if (!alive()) break; }
       visitCap(storyFill(cfg.title || 'Le royaume de {elle}'), 'une balade dans vos souvenirs'); await wait(4000);
       await move(0, (W.entryZ || -14.3) - 1.2, null, 0, transit); visitCap('', '');
       let leg = 0, lastCh = null;
@@ -5632,7 +5661,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
     const onErr = (e) => { if (e && e.code === 'revoked') { S.canWrite = false; $('#atelierBtn').hidden = true; } };
     db.doc('settings/main').onSnapshot((d) => {
       const was = !!S.ready.settings; S.settings = d.exists ? Object.assign({}, d.data()) : {}; S.ready.settings = true;
-      refreshPlates(); setVideo(S.settings.video || null); updateIntro(); BG.sync(); applyStyle(); FX.cel = celebrationsToday(); scheduleRebuild(); if (!was) loaded(); else if (!S.entered) maybeReady();
+      refreshPlates(); setVideo(window.__chateauNetlify ? 'intro' : (S.settings.video || null)); updateIntro(); BG.sync(); applyStyle(); FX.cel = celebrationsToday(); scheduleRebuild(); if (!was) loaded(); else if (!S.entered) maybeReady();
     }, onErr);
     const coll = (name, key) => { let got = false; db.collection(name).onSnapshot((s) => { S[key] = s.docs.map((d) => Object.assign({ id: d.id }, d.data())); scheduleRebuild(); if (!got) { got = true; loaded(); } }, onErr); };
     coll('chapters', 'chapters'); coll('memories', 'memories'); coll('letters', 'letters'); coll('reasons', 'reasons'); coll('wishes', 'wishes');
@@ -5784,7 +5813,7 @@ Je t'aime.`;
         .then((d) => { const t = d && d.text ? d.text : (isDraft ? (window.__chateauNetlify ? '' : WELCOME_DEF) : st.welcome); el.querySelector('.letter p').textContent = t; return !!t; });
       setTimeout(() => { letterReady.then((ok) => { if (!ok) { done(false); return; } document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('on')); }); }, st.welcomeFx === true ? 4200 : 1200);
       el.querySelector('.env').addEventListener('click', () => { el.classList.add('open'); try { SND && SND.click && SND.click(); } catch (e) {} });
-      el.querySelector('.letter button').addEventListener('click', () => { el.classList.remove('on'); setTimeout(() => { el.remove(); done(true); }, 1200); });
+      el.querySelector('.letter button').addEventListener('click', () => { introUnlock(); el.classList.remove('on'); setTimeout(() => { el.remove(); done(true); }, 1200); });
     });
   }
   async function welcomeDue() {
