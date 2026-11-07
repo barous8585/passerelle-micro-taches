@@ -40,14 +40,17 @@ const page = (reste: number, version: string) => `<!doctype html>
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0a0710">
 <title>Pour toi, Hadiatou</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,400;1,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0}
-  html,body{height:100%;overflow:hidden;overscroll-behavior:none;position:fixed;inset:0;width:100%;touch-action:none;-webkit-user-select:none;user-select:none}
+  html{height:100%;background:#0a0710;color-scheme:dark;overflow:hidden;overscroll-behavior:none}
+  body{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;overscroll-behavior:none;touch-action:none;-webkit-user-select:none;user-select:none}
   body{background:radial-gradient(120% 90% at 50% 0%,#2a1730 0%,#140c1c 55%,#0a0710 100%);color:#f6efe2;font-family:'Cormorant Garamond',Georgia,serif;display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow:hidden;text-align:center}
-  canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+  canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;background:transparent}
   main{position:relative;z-index:2;max-width:520px;width:100%}
   .fond{position:fixed;top:0;left:0;width:100%;height:100vh;height:100lvh;z-index:0;opacity:0;pointer-events:none}
   .fond.on{opacity:1}
