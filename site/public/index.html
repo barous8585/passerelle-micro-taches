@@ -1002,7 +1002,7 @@
      ════════════════════════════════════════════ */
   const W = { root: null, dyn: null, lanterns: null, anim: [], frames: [], spots: [], zones: [], fountainWater: null, heart: null, heartMat: null, flies: null, video: null, namePlate: null, envelopes: null };
   if (location.hostname === 'localhost') window.__W = W;
-  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); window.__runStory = runStory; }, 0);
+  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); window.__runStory = runStory; window.__playArrival = playArrival; }, 0);
 
   function buildSky(root) {
     W.skyCanvas = cnv(4, 512, () => {}); W.skyTex = srgb(new THREE.CanvasTexture(W.skyCanvas));
@@ -3422,7 +3422,8 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const clues = S.treasures.filter((t) => !t.found && t.author !== S.meId), found = S.treasures.filter((t) => t.found && t.author !== S.meId);
     if (clues.length) body.push(h('h3', { text: '🗝️ Chasse au trésor' }), h('div', { class: 'list', style: 'margin-top:0' }, clues.map((t) => h('div', { class: 'item' }, h('div', { class: 't', text: 'Indice : ' + t.clue }), h('div', { class: 's', text: 'Un trésor est caché pour toi quelque part…' })))));
     body.push(h('div', { class: 'actions', style: 'margin-top:14px' },
-      h('button', { class: 'pbtn', text: '📖 Le conte', onclick: () => { closeModal(); setTimeout(runStory, 350); } }),
+      h('button', { class: 'pbtn', text: '▶ Vivre son arrivée (lettre + conte)', onclick: () => { closeModal(); setTimeout(playArrival, 350); } }),
+      h('button', { class: 'pbtn', text: '📖 Le conte seul', onclick: () => { closeModal(); setTimeout(runStory, 350); } }),
 
       h('button', { class: 'pbtn', text: '📖 Notre livre souvenir (PDF)', onclick: (e) => exportBook(e.currentTarget) }),
       h('button', { class: 'pbtn', text: '💾 Tout sauvegarder (.zip)', onclick: (e) => exportArchive(e.currentTarget) })));
@@ -3439,7 +3440,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const bs = S.settings.benchSound && SND.byId(S.settings.benchSound); if (bs && !SND.isPlaying(bs)) SND.toggle(bs);
     const by = W.bench.yaw || 0, sd = S.seat === 'L' ? -.5 : .5;
     glide(new THREE.Vector3(W.bench.x + Math.cos(by) * sd, SEAT, W.bench.z - Math.sin(by) * sd), by, .16, 1800, () => {
-      const m = $('#benchMsg'); m.textContent = (S.settings.bench || 'Reste un peu ici avec moi.\nRegarde tout le chemin parcouru…\net tout ce qu\'il nous reste à vivre.') + (other ? '\n\n' + (other.name || 'Ton amour') + ' est assis(e) à côté de toi 💞' : '');
+      const m = $('#benchMsg'); m.textContent = (S.settings.bench || 'Reste ici autant que tu veux.\nCe lieu est le tien, pour toujours.') + (other ? '\n\n' + (other.name || 'Ton amour') + ' est assis(e) à côté de toi 💞' : '');
       setTimeout(() => m.classList.add('show'), 500);
     });
   }
@@ -5252,6 +5253,12 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const line = total ? h('div', { class: 'by', style: 'margin-top:12px' }, `Ce château a été bâti à deux : ${plural(total, 'trace')} en tout, dont ${mine} de toi.`) : null;
     return [box, line];
   }
+  async function playArrival() {
+    if (S.tour) return;
+    await showWelcome();
+    await sleep(600);
+    await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); });
+  }
   async function showNews(quiet) {
     const st = await loadUserState(), now = Date.now(), last = st.lastSeen || 0;
     const visits = (st.visits || 0) + 1, days = new Set(st.days || []); days.add(dayKey(now));
@@ -5647,7 +5654,8 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       if (await welcomeDue().catch(() => false)) { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
       const storyAuto = storyCfg().auto !== false && !S.isOwner && !!S.db;
       if (storyAuto && !(await storySeen().catch(() => true))) { markTourSeen(); await sleep(600); await runStory().catch((e) => { console.error('conte', e); S.tour = false; document.body.classList.remove('touring', 'story'); controls(true); }); }
-      setTimeout(() => showNews().catch(() => {}), 900);
+      // aperçu du gardien : ?scenario=1 rejoue exactement son arrivée (lettre, puis conte), sans rien marquer comme vu
+      if (/[?&]scenario=1/.test(location.search)) { await sleep(500); await playArrival(); }
     });
     if (S.canWrite && !S.memories.length) setTimeout(() => toast('Ouvre l\'Atelier ✎ pour accrocher votre premier souvenir'), 4500);
     setTimeout(() => backfillThumbs().catch(() => {}), 15000);
