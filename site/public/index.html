@@ -489,7 +489,7 @@
      TEXTURES PROCÉDURALES (aucun fichier requis)
      ════════════════════════════════════════════ */
   const CANVAS = {};
-  function cnv(w, hgt, draw) { const c = document.createElement('canvas'); c.width = w; c.height = hgt; draw(c.getContext('2d'), w, hgt); return c; }
+  function cnv(w, hgt, draw) { const c = document.createElement('canvas'); c.width = w; c.height = hgt; draw(c.getContext('2d', { willReadFrequently: true }), w, hgt); return c; }
   function noise(ctx, w, hgt, amp) { const img = ctx.getImageData(0, 0, w, hgt); for (let i = 0; i < img.data.length; i += 4) { const n = (Math.random() - .5) * amp; img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n; } ctx.putImageData(img, 0, 0); }
   function blobs(ctx, s, count, rgb, alpha, rmin, rmax) {
     for (let i = 0; i < count; i++) {
@@ -1002,7 +1002,7 @@
       const tip = new THREE.Mesh(new THREE.CylinderGeometry(.06, .1, .45, 12), stoneM); tip.position.set(0, 1.75, fz); root.add(tip); }
     const orb = new THREE.Mesh(new THREE.SphereGeometry(.16, 20, 12), new THREE.MeshBasicMaterial({ color: '#ffe7b3' })); orb.position.set(0, 2.1, fz); root.add(orb);
     const og = glowSprite('#ffcf7a', 3, .8); og.position.copy(orb.position); root.add(og);
-    const fl = new THREE.PointLight('#8fb6ff', 6, 12, 1.4); fl.position.set(0, 1.2, fz); root.add(fl);
+    if (!isMobile) { const fl = new THREE.PointLight('#8fb6ff', 6, 12, 1.4); fl.position.set(0, 1.2, fz); root.add(fl); }
     W.anim.push((t) => { water.material.emissiveIntensity = .5 + Math.sin(t * 1.6) * .15; orb.position.y = 2.1 + Math.sin(t * 1.2) * .04; og.position.y = orb.position.y; });
     { const r = 2.35 + R; [[r * .5, r], [r, r * .5], [r * .8, r * .8]].forEach(([ex, ez]) => OBST.push([-ex, ex, fz - ez, fz + ez])); }   // bassin rond : trois rectangles
     const fhit = new THREE.Group(); fhit.add(basin.clone(), col.clone()); fhit.visible = true; fhit.children.forEach((c) => { c.material = new THREE.MeshBasicMaterial({ visible: false }); });
@@ -1841,21 +1841,60 @@
   }
   /* Allègement : les blocs immobiles qui partagent la même matière sont fusionnés en un seul objet
      (des centaines d'appels de dessin en moins à chaque image, surtout sur téléphone). */
-  function mergeStatic(parent) {
+  /* deux matières identiques (même couleur, même texture…) comptent pour une seule */
+  const MAPKEYS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'bumpMap', 'emissiveMap', 'alphaMap'];
+  /* répétition commune des textures d'une matière (pour l'inscrire dans la forme et fusionner des murs de tailles différentes) */
+  function uvRep(m) {
+    if (m.aoMap || m.lightMap || m.displacementMap) return null;
+    let r = null;
+    for (const key of MAPKEYS) { const x = m[key]; if (!x) continue; if (x.rotation || x.wrapS !== THREE.RepeatWrapping || x.wrapT !== THREE.RepeatWrapping || x.matrixAutoUpdate === false) return null;
+      const v = [x.repeat.x, x.repeat.y, x.offset.x, x.offset.y]; if (!r) r = v; else if (v.some((a, i) => Math.abs(a - r[i]) > 1e-6)) return null; }
+    return r;
+  }
+  const BAKED = new Map();
+  function bakedMat(k, m) {
+    if (BAKED.has(k)) return BAKED.get(k);
+    const c = m.clone(); c.onBeforeCompile = m.onBeforeCompile; c.customProgramCacheKey = m.customProgramCacheKey; MAPKEYS.forEach((key) => { if (m[key]) { const t = m[key].clone(); t.repeat.set(1, 1); t.offset.set(0, 0); t.needsUpdate = true; c[key] = t; } });
+    BAKED.set(k, c); return c;
+  }
+  const matSig = (m, bake) => { const noRep = bake && uvRep(m); const t = (x) => (x ? (x.image && (x.image.uuid || (x.image.__id || (x.image.__id = Math.random().toString(36).slice(2))))) + (noRep ? ':B' : ':' + x.repeat.x.toFixed(3) + ':' + x.repeat.y.toFixed(3) + ':' + x.offset.x.toFixed(3) + ':' + x.offset.y.toFixed(3) + ':' + x.rotation) : '-');
+    return [m.type, m.color && m.color.getHexString(), m.emissive && m.emissive.getHexString(), m.emissiveIntensity, m.roughness, m.metalness, m.opacity, m.side, m.flatShading, m.envMapIntensity, t(m.map), t(m.normalMap), t(m.roughnessMap), t(m.bumpMap), m.bumpScale, t(m.emissiveMap), m.envMap ? m.envMap.uuid : '-', m.fog, m.toneMapped, m.vertexColors, m.customProgramCacheKey ? m.customProgramCacheKey() : ''].join('|'); };
+  const MERGE_TYPES = new Set(['BoxGeometry', 'CylinderGeometry', 'SphereGeometry', 'TorusGeometry', 'ConeGeometry', 'PlaneGeometry', 'CircleGeometry', 'LatheGeometry', 'ExtrudeGeometry', 'IcosahedronGeometry', 'RingGeometry', 'ShapeGeometry', 'TubeGeometry']);
+  function mergeStatic(parent, opt) {
+    opt = opt || {};
     parent.updateMatrixWorld(true);
     const inv = new THREE.Matrix4().copy(parent.matrixWorld).invert(), groups = new Map(), mm = new THREE.Matrix4();
     parent.children.forEach((o) => {
-      if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.children.length || o.userData.act || o.userData.keep || !o.visible) return;
-      if (!o.geometry || o.geometry.type !== 'BoxGeometry' || Array.isArray(o.material) || o.material.visible === false || o.material.transparent) return;
-      const k = o.material.uuid; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o);
+      if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || o.children.length || o.userData.act || o.userData.keep || o.userData.merged || !o.visible) return;
+      if (!o.geometry || Array.isArray(o.material) || o.material.visible === false || o.material.transparent || o.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender) return;
+      if (opt.all ? !MERGE_TYPES.has(o.geometry.type) : o.geometry.type !== 'BoxGeometry') return;
+      if (opt.moved && opt.moved.has(o)) return;
+      const ga = o.geometry.attributes; if (!ga.position || !ga.normal || !ga.uv || o.geometry.morphAttributes.position) return;
+      if (o.material.onBeforeCompile && o.material.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile && !(opt.all && o.material.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey && /^wallAO/.test(o.material.customProgramCacheKey()))) return;
+      const k = opt.all ? matSig(o.material, true) : o.material.uuid; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(o);
     });
-    groups.forEach((list) => {
+    groups.forEach((list, k) => {
       if (list.length < 2) return;
-      const geos = list.map((o) => { const g = o.geometry.clone(); g.applyMatrix4(mm.multiplyMatrices(inv, o.matrixWorld)); return g; });
-      const m = new THREE.Mesh(mergeGeos(geos), list[0].material); m.userData.merged = true;
+      const bake = opt.all && uvRep(list[0].material);
+      const geos = list.map((o) => { const g = o.geometry.clone(); g.applyMatrix4(mm.multiplyMatrices(inv, o.matrixWorld));
+        if (bake) { const r = uvRep(o.material), uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * r[0] + r[2], uv.getY(i) * r[1] + r[3]); }
+        return g; });
+      const m = new THREE.Mesh(mergeGeos(geos), bake ? bakedMat(k, list[0].material) : list[0].material); m.userData.merged = true;
       list.forEach((o) => { parent.remove(o); o.geometry.dispose(); }); geos.forEach((g) => g.dispose());
       parent.add(m);
     });
+  }
+  /* regroupe le décor immobile (toutes formes), groupe par groupe : bien moins d'appels de dessin à chaque image.
+     Ce qui a bougé pendant l'observation (animaux, portes, lanternes…) est laissé tel quel. */
+  function snapStatic(root) { const m = new Map(); root.traverse((o) => { if (o.isMesh) m.set(o, o.position.x + o.position.y * 7 + o.position.z * 13 + o.rotation.x * 17 + o.rotation.y * 19 + o.rotation.z * 23 + o.scale.x * 29 + o.scale.y * 31 + o.scale.z * 37 + (o.visible ? 0 : 41)); }); return m; }
+  function deepMerge(root, before) {
+    const after = snapStatic(root), moved = new Set();
+    after.forEach((v, o) => { if (!before.has(o) || Math.abs(before.get(o) - v) > 1e-6) moved.add(o); });
+    const parents = []; root.traverse((o) => { if (o.children && o.children.length > 1 && !o.isSkinnedMesh && !o.isBone) parents.push(o); });
+    let n0 = 0; root.traverse((o) => { if (o.isMesh) n0++; });
+    parents.forEach((p) => { try { mergeStatic(p, { all: true, moved }); } catch (e) {} });
+    let n1 = 0; root.traverse((o) => { if (o.isMesh) n1++; });
+    console.log('décor regroupé :', n0, '→', n1, 'objets');
   }
   function realify(root) { root.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) realifyMaterial(o); else if (o.isInstancedMesh) realifyMaterial(o); }); }
 
@@ -3011,9 +3050,10 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       buildDust(root);
       buildDynamic(); refreshExtras(); applyStyle(); refreshPlates(); setVideo(S.settings.video || null);
       realify(root); mergeStatic(root);
+      { const snap0 = snapStatic(root); setTimeout(() => { try { deepMerge(root, snap0); } catch (e) { console.warn('regroupement', e); } }, 2500); }
       const envUp = () => { try { buildEnvironment(this.el); } catch (e) { console.warn('environnement', e); } };
       if (this.el.renderer) envUp(); else this.el.addEventListener('renderstart', envUp, { once: true });
-      const capDpr = () => { try { this.el.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.75 : 2)); } catch (e) {} };
+      const capDpr = () => { try { this.el.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isMobile ? 1.3 : 2)); } catch (e) {} };
       if (this.el.renderer) capDpr(); else this.el.addEventListener('renderstart', capDpr, { once: true });
       window.addEventListener('resize', () => setTimeout(capDpr, 60));
       this.skyAcc = 0; this.liveAcc = 0; this.togAcc = 0;
@@ -3744,10 +3784,11 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       for (let lat = -60; lat <= 60; lat += 30) { const y = (90 - lat) / 180 * Hd; c.beginPath(); c.moveTo(0, y); c.lineTo(Wd, y); c.stroke(); }
       if (!landImg) return;
       c.globalCompositeOperation = 'screen'; c.globalAlpha = .16; c.drawImage(landImg, 0, 0, Wd, Hd); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over';
-      const step = 7, gw = Math.floor(Wd / step), gh = Math.floor(Hd / step);
+      const step = Math.max(4, Math.round(7 * Wd / 2048)), gw = Math.floor(Wd / step), gh = Math.floor(Hd / step);
       const px = cnv(gw, gh, (t) => t.drawImage(landImg, 0, 0, gw, gh)).getContext('2d').getImageData(0, 0, gw, gh).data;
-      c.fillStyle = '#ecc77e';
-      for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) if (px[(j * gw + i) * 4] > 100) { c.beginPath(); c.arc(i * step + step / 2, j * step + step / 2, 2.3, 0, 7); c.fill(); }
+      c.fillStyle = '#ecc77e'; c.beginPath(); const rr = 2.3 * Wd / 2048;
+      for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) if (px[(j * gw + i) * 4] > 100) { const x = i * step + step / 2, y = j * step + step / 2; c.moveTo(x + rr, y); c.arc(x, y, rr, 0, 7); }
+      c.fill();
     });
   }
   function mapPicker(init, onPick) {
@@ -3870,7 +3911,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const gm = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: .45, metalness: .1, emissive: '#ffffff', emissiveIntensity: .35 });
     const globe = new THREE.Mesh(new THREE.SphereGeometry(1.6, 64, 32), gm); tilt.add(globe);
     W.globe = globe; W.pins = new THREE.Group(); globe.add(W.pins);
-    landReady.then(() => { const t = srgb(new THREE.CanvasTexture(globeCanvas(2048, 1024))); t.anisotropy = 8; gm.map = t; gm.emissiveMap = t; gm.needsUpdate = true; });
+    landReady.then(() => new Promise((r) => (window.requestIdleCallback ? requestIdleCallback(r, { timeout: 4000 }) : setTimeout(r, 1500)))).then(() => { const t = srgb(new THREE.CanvasTexture(isMobile ? globeCanvas(1024, 512) : globeCanvas(2048, 1024))); t.anisotropy = 8; gm.map = t; gm.emissiveMap = t; gm.needsUpdate = true; });
     W.anim.push((t, dt) => { if (!W.globeHold) globe.rotation.y += dt * .07; });
     const hl = glowSprite('#9fc2ff', 7, .22); hl.position.set(cx, 2.65, cz); root.add(hl);
     const rose = plane(5.4, 5.4, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: textTexture(512, 512, (c, s) => {
