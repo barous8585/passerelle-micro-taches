@@ -32,22 +32,17 @@ const page = (reste: number, version: string) => `<!doctype html>
   body{background:radial-gradient(120% 90% at 50% 0%,#2a1730 0%,#140c1c 55%,#0a0710 100%);color:#f6efe2;font-family:'Cormorant Garamond',Georgia,serif;display:flex;align-items:center;justify-content:center;padding:24px 16px;overflow:hidden;text-align:center}
   canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
   main{position:relative;z-index:2;max-width:520px;width:100%}
-  .fond{position:fixed;left:0;right:0;top:0;height:66%;z-index:0;opacity:0;transition:opacity 1.8s ease;overflow:hidden}
+  .fond{position:fixed;inset:0;z-index:0;opacity:0}
   .fond.on{opacity:1}
-  .fond img{width:100%;height:100%;object-fit:cover;object-position:56% 50%;animation:respire 20s ease-in-out infinite alternate}
-  @keyframes respire{to{transform:scale(1.06)}}
-  .fond::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,16,.1) 0%,rgba(10,6,16,0) 55%,rgba(10,6,16,.7) 85%,#0d0914 100%)}
+  .fond img{width:100%;height:100%;object-fit:cover;object-position:52% 38%}
+  .fond::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,6,16,.15) 0%,rgba(10,6,16,0) 30%,rgba(10,6,16,.55) 55%,rgba(10,6,16,.92) 78%,#0a0710 100%)}
   body.photo-on{align-items:flex-end;padding-bottom:max(26px,env(safe-area-inset-bottom));background:#0d0914}
-  body.photo-on .coeur{font-size:34px}
-  @media (max-height:720px){.fond{height:58%} body.photo-on .coeur{font-size:28px} body.photo-on p{margin-top:8px} .cpt{margin:14px 0 4px}}
-  body.photo-on h1{font-size:clamp(34px,8.5vw,52px)}
-  body.photo-on .k{margin-top:8px}
-  body.photo-on canvas{opacity:.35}
+
+  body.photo-on canvas{display:none}
   body.photo-on h1,body.photo-on p,body.photo-on .bas{text-shadow:0 2px 14px rgba(0,0,0,.65)}
   body.photo-on .cpt div{background:rgba(10,6,16,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .sans .coeur{font-size:44px}
-  .coeur{font-size:44px;color:#e2486a;animation:bat 1.6s ease-in-out infinite;text-shadow:0 0 24px rgba(226,72,106,.6);will-change:transform}
-  @keyframes bat{0%,100%{transform:scale(1)}15%{transform:scale(1.18)}30%{transform:scale(1)}45%{transform:scale(1.12)}}
+  .coeur{font-size:44px;color:#e2486a;text-shadow:0 0 24px rgba(226,72,106,.6);will-change:transform}
   .k{font-family:Inter,sans-serif;font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:#d6ad62;margin:30px 0 8px}
   .sans .k{margin-top:18px}
   h1{font-weight:500;font-style:italic;font-size:clamp(38px,9vw,56px);line-height:1.05}
@@ -59,7 +54,7 @@ const page = (reste: number, version: string) => `<!doctype html>
   .h{font-variant-numeric:lining-nums;font-feature-settings:'lnum' 1;font-style:normal;font-weight:500;color:#f3d79a}
   .bas{font-size:16.5px;margin-top:18px;color:rgba(246,239,226,.6)}
 </style></head><body>
-<canvas id="c"></canvas><canvas id="c2"></canvas>
+<canvas id="c"></canvas>
 <div class="fond" id="ph"><img id="im" alt="Nous deux"></div>
 <main class="sans">
   <div class="coeur" id="c0">♥</div>
@@ -101,21 +96,18 @@ const page = (reste: number, version: string) => `<!doctype html>
       const key = await crypto.subtle.importKey('raw', await crypto.subtle.digest('SHA-256', new TextEncoder().encode(tok)), 'AES-GCM', false, ['decrypt']);
       const jpg = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: buf.slice(0, 12) }, key, buf.slice(12));
       const im = document.getElementById('im'), ph = document.getElementById('ph');
-      im.onload = () => { document.body.classList.add('photo-on'); requestAnimationFrame(() => ph.classList.add('on')); };
+      im.onload = () => { document.body.classList.add('photo-on'); ph.classList.add('on'); };
       im.src = URL.createObjectURL(new Blob([jpg], { type: 'image/jpeg' }));
     } catch (e) { console.warn('photo', e); }
   })();
-  // un ciel d'étoiles : dessiné une seule fois ; seules quelques étoiles scintillent, 12 fois par seconde
-  const c = document.getElementById('c'), c2 = document.getElementById('c2'), x = c.getContext('2d'), x2 = c2.getContext('2d');
-  const R = Math.min(devicePixelRatio || 1, 1.5); let W, H, T = [];
+  // un ciel d'étoiles fixe (affiché seulement quand la photo n'est pas là)
+  const c = document.getElementById('c'), x = c.getContext('2d');
+  const R = Math.min(devicePixelRatio || 1, 1.5); let W, H;
   const taille = () => {
-    W = c.width = c2.width = Math.round(innerWidth * R); H = c.height = c2.height = Math.round(innerHeight * R);
+    W = c.width = Math.round(innerWidth * R); H = c.height = Math.round(innerHeight * R);
     x.clearRect(0, 0, W, H); x.fillStyle = '#fff4dc';
     for (let i = 0; i < 120; i++) { x.globalAlpha = .25 + Math.random() * .6; x.beginPath(); x.arc(Math.random() * W, Math.random() * H, (Math.random() * 1.2 + .3) * R, 0, 7); x.fill(); }
-    T = Array.from({ length: 22 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (Math.random() * 1.1 + .7) * R, p: Math.random() * 6.28 }));
   };
   addEventListener('resize', taille); taille();
-  const scint = () => { const t = performance.now(); x2.clearRect(0, 0, W, H); x2.fillStyle = '#fff4dc'; T.forEach((e) => { x2.globalAlpha = Math.abs(Math.sin(t / 900 + e.p)); x2.beginPath(); x2.arc(e.x, e.y, e.r, 0, 7); x2.fill(); }); };
-  scint(); setInterval(() => { if (!document.hidden) scint(); }, 85);
 </script>
 </body></html>`;
