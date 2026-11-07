@@ -5290,7 +5290,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   }
   function introUnlock() { const v = introEl(); if (!v.src || IV.unlocked) return; try { const p = v.play(); if (p) p.then(() => { if (!IV.playing) v.pause(); IV.unlocked = true; }).catch(() => {}); } catch (e) {} }
   async function playIntro() {
-    const v = introEl(); if (!v.src) return;
+    const v = introEl(); if (!v.src && window.__chateauNetlify) v.src = '/api/intro-video'; if (!v.src) return;
     const ov = document.createElement('div'); ov.id = 'introVid';
     ov.innerHTML = '<button type="button" class="skip">Passer ›</button>'; ov.prepend(v); document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add('on'));
@@ -5310,30 +5310,35 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const pos = () => $('#player').object3D.position;
     const fadeTo = async (x, z, yaw) => { $('#fade').classList.add('on'); await wait(650); const pl = $('#player'); pl.object3D.position.set(x, EYE, z); if (pl.components.bounds) pl.components.bounds.last.set(x, EYE, z); look().yawObject.rotation.y = yaw; look().pitchObject.rotation.x = 0; await wait(250); $('#fade').classList.remove('on'); await wait(500); };
-    const move = (x, z, yaw, pitch, speed) => { const p = pos(), d = Math.hypot(x - p.x, z - p.z); return glideP(x, z, yaw == null ? yawTo(p.x, p.z, x, z) : yaw, pitch || 0, Math.max(1500, d / (speed || 1.25) * 1000)); };
+    const curYaw = () => look().yawObject.rotation.y;
+    const turnMs = (y) => { let d = y - curYaw(); d = Math.abs(Math.atan2(Math.sin(d), Math.cos(d))); return d / (Math.PI / 4) * 1000; };   // 45°/s au plus : jamais de tournis
+    const move = (x, z, yaw, pitch, speed, minMs) => { const p = pos(), d = Math.hypot(x - p.x, z - p.z), y = yaw == null ? (d > .05 ? yawTo(p.x, p.z, x, z) : curYaw()) : yaw;
+      return glideP(x, z, y, pitch || 0, Math.max(minMs || 1200, d / (speed || 1.25) * 1000, turnMs(y))); };
     if (S.seated) { S.seated = false; S.seat = null; document.body.classList.remove('seated'); $('#benchMsg').classList.remove('show'); }
     const chs = sortedChapters();
     /* durée totale visée : 8 minutes, quel que soit le nombre de photos (arrêts plus courts et pas plus rapide s'il y en a beaucoup) */
-    const views = (W.visitBays || []).filter((v) => v.n).length * 2, per = Math.max(1.6, Math.min(6.5, (480 - 40) / Math.max(1, views)));
+    const nLegs = new Set((W.visitBays || []).map((v) => v.leg)).size, views = (W.visitBays || []).filter((v) => v.n).length * 2, per = Math.max(1.6, Math.min(6.5, (480 - 40 - nLegs * 20) / Math.max(1, views)));
     const moveMs = per * 420, holdMs = per * 580, transit = per < 3 ? 3.2 : 1.6;
     while (alive()) {
       await fadeTo(0, 3.5, 0); if (!alive()) break;
-      if (once && window.__chateauNetlify) { const vp = rotAt(-2.45, 3.4), sp = rotAt(-2.45, 8.3); await glideP(vp.x, vp.z, yawTo(vp.x, vp.z, sp.x, sp.z), .12, 1600); await playIntro(); if (!alive()) break; }
+      if (once && window.__chateauNetlify) { const vp = rotAt(-2.45, 3.4), sp = rotAt(-2.45, 8.3); await move(vp.x, vp.z, yawTo(vp.x, vp.z, sp.x, sp.z), .12, 1.25, 1600); await playIntro(); if (!alive()) break; }
       visitCap(storyFill(cfg.title || 'Le royaume de {elle}'), 'une balade dans vos souvenirs'); await wait(4000);
       await move(0, (W.entryZ || -14.3) - 1.2, null, 0, transit); visitCap('', '');
+      // allée par allée : on longe un mur en glissant de côté (face aux tableaux), demi-tour lent, puis l'autre mur
+      const groups = []; (W.visitBays || []).forEach((vb) => { const g = groups[groups.length - 1]; if (g && g.leg === vb.leg) g.list.push(vb); else groups.push({ leg: vb.leg, list: [vb] }); });
       let leg = 0, lastCh = null;
-      for (const vb of W.visitBays || []) {
+      const showCh = (b) => { const z = W.zones.find((zn) => zn.chapter && zn.bays && zn.bays.includes(b)); if (z && z !== lastCh) { lastCh = z; visitCap('Chapitre ' + romanNum(z.chapter), z.name); setTimeout(() => { if (lastCh === z) visitCap('', ''); }, Math.max(2500, per * 1600)); } };
+      const view = async (vb, sd) => { const b = vb.b; showCh(b); const px = b.c[0] - b.o[0] * sd * 1.3, pz = b.c[1] - b.o[1] * sd * 1.3, yaw = Math.atan2(-b.o[0] * sd, -b.o[1] * sd);
+        await move(px, pz, yaw, vb.dense ? .1 : .02, 1.25, moveMs); if (alive()) await wait(holdMs); };
+      for (const g of groups) {
         if (!alive()) break;
-        while (leg < vb.leg && alive()) { for (const [x, z] of W.turns[leg] || []) { if (!alive()) break; await move(x, z, null, 0, transit); } leg++; }
-        const b = vb.b, z = W.zones.find((zn) => zn.chapter && zn.bays && zn.bays.includes(b));
-        if (z && z !== lastCh) { lastCh = z; visitCap('Chapitre ' + romanNum(z.chapter), z.name); setTimeout(() => { if (lastCh === z) visitCap('', ''); }, Math.max(2500, per * 1600)); }
-        if (!vb.n) continue;
-        for (const sd of [1, -1]) {
-          if (!alive()) break;
-          const px = b.c[0] - b.o[0] * sd * 1.3, pz = b.c[1] - b.o[1] * sd * 1.3, yaw = Math.atan2(-b.o[0] * sd, -b.o[1] * sd);
-          await glideP(px, pz, yaw, vb.dense ? .1 : .02, moveMs);
-          await wait(holdMs);
-        }
+        while (leg < g.leg && alive()) { for (const [x, z] of W.turns[leg] || []) { if (!alive()) break; await move(x, z, null, 0, transit); } leg++; }
+        const L = g.list.filter((vb) => vb.n); if (!L.length) continue;
+        for (const vb of L) { if (!alive()) break; await view(vb, 1); }          // le mur extérieur, en avançant
+        for (const vb of L.slice().reverse()) { if (!alive()) break; await view(vb, -1); }   // demi-tour lent, puis l'autre mur en revenant
+        if (!alive()) break;
+        const last = g.list[g.list.length - 1].b, e = [last.c[0] + last.u[0] * last.bl / 2, last.c[1] + last.u[1] * last.bl / 2];
+        await move(e[0], e[1], Math.atan2(-last.u[0], -last.u[1]), 0, transit);   // et on file au bout de l'allée, face à la route
       }
       if (!alive()) break;
       if (once) {   // fin de la balade : la dernière salle, puis elle est libre
