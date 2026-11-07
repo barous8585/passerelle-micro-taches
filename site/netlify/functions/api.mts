@@ -143,8 +143,16 @@ export default async (req: Request, context: Context) => {
     }
     if (route === "login" && m === "POST") {
       const { email, password } = await req.json();
+      /* contre ceux qui essaieraient de deviner un mot de passe : après 5 erreurs, la porte se ferme un moment */
+      const fk = "fail/" + createHash("sha256").update(String(email || "").toLowerCase().trim()).digest("hex").slice(0, 32), now = Date.now();
+      const fail = ((await auth().get(fk, { type: "json" })) as any) || { n: 0, until: 0 };
+      if (fail.until > now) return err("too_many", 429, `Trop d'essais. Réessaie dans ${Math.ceil((fail.until - now) / 60000)} min.`);
       const u = email && (await userByEmail(email));
-      if (!u || hashPw(String(password || ""), u.salt) !== u.hash) return err("bad_login", 401, "E-mail ou mot de passe incorrect");
+      if (!u || hashPw(String(password || ""), u.salt) !== u.hash) {
+        const n = fail.n + 1; await auth().setJSON(fk, { n, until: n >= 5 ? now + Math.min(24 * 3600e3, 15 * 60e3 * 2 ** (n - 5)) : 0 });
+        return err("bad_login", 401, n >= 5 ? "Trop d'essais : la porte se ferme 15 minutes" : "E-mail ou mot de passe incorrect");
+      }
+      if (fail.n) await auth().delete(fk);
       const ttl = 60 * 60 * 24 * 90;
       return json({ user: publicUser(u) }, 200, { "set-cookie": sessionCookie(await sign({ email: u.email, exp: Date.now() + ttl * 1000 }), ttl) });
     }
@@ -191,7 +199,10 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
     }
     if (route === "password" && m === "POST") {
       const { current, next } = await req.json();
-      if (hashPw(String(current || ""), me.salt) !== me.hash) return err("bad_login", 401, "Mot de passe actuel incorrect");
+      const pk = "failpw/" + me.id, pf = ((await auth().get(pk, { type: "json" })) as any) || { n: 0, until: 0 };
+      if (pf.until > Date.now()) return err("too_many", 429, "Trop d'essais. Réessaie plus tard.");
+      if (hashPw(String(current || ""), me.salt) !== me.hash) { const n = pf.n + 1; await auth().setJSON(pk, { n, until: n >= 5 ? Date.now() + 30 * 60e3 : 0 }); return err("bad_login", 401, "Mot de passe actuel incorrect"); }
+      if (pf.n) await auth().delete(pk);
       if (!next || String(next).length < 8) return err("weak_password", 400, "Le mot de passe doit faire au moins 8 caractères");
       const salt = randomBytes(16).toString("hex");
       await auth().setJSON("user/" + me.email, { ...me, salt, hash: hashPw(String(next), salt) });
