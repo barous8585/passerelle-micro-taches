@@ -2,8 +2,8 @@
    À l'heure dite, la même adresse ouvre le musée — sans rien changer au papier.
    thaka.fr n'est pas concerné. Pour vérifier le musée avant l'heure : ajouter ?apercu=1 à l'adresse. */
 
-// 00h30, heure de Paris (UTC+1 en hiver)
-const OUVERTURE = Date.parse("2026-11-08T00:30:00+01:00");
+// 01h00, heure de Paris (UTC+1 en hiver)
+const OUVERTURE = Date.parse("2026-11-08T01:00:00+01:00");
 // notification sur le téléphone de Barous (application ntfy) quand le lien du QR code est ouvert
 const NTFY_TOPIC = "chateau-hk-pv3csotc9llge1";
 const DOMAINES = ["hadiatoukaba.fr", "www.hadiatoukaba.fr", "hadiatoukaba.eu", "www.hadiatoukaba.eu"];
@@ -80,7 +80,7 @@ const page = (reste: number, version: string) => `<!doctype html>
 <main class="sans">
   <div class="k">Un cadeau pour toi</div>
   <h1>Hadiatou,<br>patience…</h1>
-  <p>Ce QR code s'ouvrira à minuit et demi.<br>Reviens le scanner à <span class="h">00h30</span> : quelque chose t'attend.</p>
+  <p>Ce QR code s'ouvrira à une heure du matin.<br>Reviens le scanner à <span class="h">01h00</span> : quelque chose t'attend.</p>
   <div class="cpt"><div><b id="h">--</b><span>heures</span></div><div><b id="m">--</b><span>minutes</span></div><div><b id="s">--</b><span>secondes</span></div></div>
   <div class="bas">Garde-le précieusement : il ne s'ouvrira que pour toi, et pour toujours.</div>
 </main>
