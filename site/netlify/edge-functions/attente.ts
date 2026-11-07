@@ -57,7 +57,6 @@ const page = (reste: number, version: string) => `<!doctype html>
 <canvas id="c"></canvas>
 <div class="fond" id="ph"><img id="im" alt="Nous deux"></div>
 <main class="sans">
-  <div class="coeur" id="c0">♥</div>
   <div class="k">Un cadeau pour toi</div>
   <h1>Hadiatou,<br>patience…</h1>
   <p>Ce QR code s'ouvrira à minuit.<br>Reviens le scanner à <span class="h">00h00</span> : quelque chose t'attend.</p>
