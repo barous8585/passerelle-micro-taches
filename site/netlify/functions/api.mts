@@ -120,13 +120,14 @@ async function lettre(): Promise<string> {
 }
 
 /* la vidéo de l'entrée : chiffrée avec la même clé que la lettre, déchiffrée ici pour les personnes connectées seulement */
-let INTRO: Buffer | null = null;
-async function introVideo(origin: string): Promise<Buffer | null> {
-  if (INTRO) return INTRO;
+const MEDIA_FILES: Record<string, string> = { intro: "video/mp4", son1: "audio/mp4", son2: "audio/mp4" };
+const MEDIA_CACHE: Record<string, Buffer> = {};
+async function privateMedia(origin: string, name: string): Promise<Buffer | null> {
+  if (MEDIA_CACHE[name]) return MEDIA_CACHE[name];
   const k = Netlify.env.get("LETTRE_KEY") || ((await auth().get("meta/lettre_key")) as string | null); if (!k) return null;
-  try { const r = await fetch(origin + "/intro.enc"); if (!r.ok) return null; const b = Buffer.from(await r.arrayBuffer());
+  try { const r = await fetch(origin + "/" + name + ".enc"); if (!r.ok) return null; const b = Buffer.from(await r.arrayBuffer());
     const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
-    INTRO = Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]); return INTRO; } catch { return null; }
+    return (MEDIA_CACHE[name] = Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()])); } catch { return null; }
 }
 
 /* ── la fonction ── */
@@ -205,11 +206,13 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 
     if (route === "me") return json({ user: publicUser(me) });
     if (route === "lettre" && m === "GET") return json({ text: await lettre() });
-    if (route === "intro-video" && m === "GET") {
-      const v = await introVideo(url.origin); if (!v) return err("not_found", 404);
-      const size = v.length, range = req.headers.get("range"), base = { "content-type": "video/mp4", "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-robots-tag": "noindex" };
+    const mr = route.match(/^(?:intro-video|media\/(intro|son1|son2))$/);
+    if (mr && m === "GET") {
+      const name = mr[1] || "intro", v = await privateMedia(url.origin, name); if (!v) return err("not_found", 404);
+      const size = v.length, range = req.headers.get("range"), base = { "content-type": MEDIA_FILES[name], "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-robots-tag": "noindex" };
       const mm = range && range.match(/bytes=(\d*)-(\d*)/);
       if (mm) { let a = mm[1] === "" ? Math.max(0, size - Number(mm[2])) : Number(mm[1]), e = mm[1] !== "" && mm[2] !== "" ? Math.min(size - 1, Number(mm[2])) : size - 1;
+        e = Math.min(e, a + 4 * 1024 * 1024 - 1);
         if (a >= size || a > e) return new Response(null, { status: 416, headers: { "content-range": `bytes */${size}` } });
         return new Response(v.subarray(a, e + 1), { status: 206, headers: { ...base, "content-range": `bytes ${a}-${e}/${size}`, "content-length": String(e - a + 1) } }); }
       return new Response(v, { status: 200, headers: { ...base, "content-length": String(size) } });
