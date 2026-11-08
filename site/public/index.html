@@ -898,7 +898,7 @@
       const notes = ch.map((f) => f * 2).concat(ch.map((f) => f * 4).slice(0, 2));
       for (let i = 0; i < 6; i++) if (Math.random() < .62) this.pluck(notes[Math.floor(Math.random() * notes.length)], t + .4 + i * 1.1 + Math.random() * .2);
     },
-    toggle() { this.on = !this.on; if (this.on && this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); if (this.on && BG.active && !BG.playing) BG.next(); this.level(.8); $('#musicBtn').classList.toggle('off', !this.on); },
+    toggle() { this.on = !this.on; if (this.on && this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); if (BG.active) { if (!this.on) BG.P.el.pause(); else if (!BG.playing) { if (BG.last && BG.P.el.src) BG.P.el.play().catch(() => BG.next(true)); else BG.next(); } } this.level(.8); $('#musicBtn').classList.toggle('off', !this.on); },
     setDuck(on) { this.duck = Math.max(0, this.duck + (on ? 1 : -1)); this.level(.7); }
   };
   $('#musicBtn').addEventListener('click', () => Music.toggle());
@@ -928,9 +928,9 @@
     P.el.addEventListener('ended', () => { P.playing = false; onStop(true); });
     P.setVol = (v) => { P.vol = v; P.el.volume = Math.max(0, Math.min(1, v)); if (P.gain) P.gain.gain.value = v; };
     P.stop = () => { if (P.src) { const x = P.src; P.src = null; try { x.onended = null; x.stop(); } catch (e) {} if (P.playing) { P.playing = false; onStop(false); } } if (!P.el.paused) P.el.pause(); };
-    P.play = async (s) => {
+    P.play = async (s, t0) => {
       P.stop();
-      if (s.url) { P.el.src = s.url; P.el.volume = P.vol; await P.el.play(); return; }
+      if (s.url) { P.el.src = s.url; P.el.volume = P.vol; if (t0 > 0) P.el.addEventListener('loadedmetadata', () => { try { if (t0 < (P.el.duration || 0) - 5) P.el.currentTime = t0; } catch (e) {} }, { once: true }); await P.el.play(); return; }
       const bytes = await soundBytes(s), key = s.asset || s.id;
       if (!P.useWA) {
         try {
@@ -979,16 +979,28 @@
       this.active = want; Music.level(1.2);
       if (want) { if (S.entered && Music.on) this.next(); } else this.P.stop();
     },
-    async next() {
+    async next(ended) {
       const l = this.list(); if (!this.active || !l.length) return;
-      if (this.fixed().length) { const i = l.findIndex((x) => x.id === this.last), s = l[(i + 1) % l.length]; this.last = s.id; try { this.vol(); await this.P.play(s); } catch (e) { setTimeout(() => this.next(), 4000); } return; }
+      if (this.fixed().length) {
+        /* une seule chanson à la fois : on ignore les appels en double pendant qu'une chanson démarre */
+        const now = Date.now(); if (!ended && (this.loading || now - (this.nAt || 0) < 1500)) return; this.nAt = now;
+        let s = null, t0 = 0;
+        /* première chanson de la visite : on reprend là où la musique s'était arrêtée la dernière fois */
+        if (!this.last) { let sv = null; try { sv = JSON.parse(localStorage.getItem('chateau-bg') || 'null'); } catch (e) {} const i = sv ? l.findIndex((x) => x.id === sv.id) : -1; if (i >= 0) { s = l[i]; t0 = Math.max(0, (sv.t || 0) - 2); } }
+        if (!s) { const i = l.findIndex((x) => x.id === this.last); s = l[(i + 1) % l.length]; }
+        this.last = s.id; this.loading = true;
+        try { this.vol(); await this.P.play(s, t0); } catch (e) { this.nAt = 0; setTimeout(() => this.next(true), 4000); } finally { this.loading = false; }
+        return;
+      }
       let s = l[Math.floor(Math.random() * l.length)]; if (l.length > 1 && s.id === this.last) s = l[(l.indexOf(s) + 1) % l.length];
       this.last = s.id;
       try { this.vol(); await this.P.play(s); } catch (e) { setTimeout(() => this.next(), 4000); }
     },
     vol() { this.P.setVol(this.active && Music.on ? (Music.duck ? .07 : .6) : 0); },
   };
-  BG.P = makePlayer(() => {}, (ended) => { if (ended) BG.next(); });
+  BG.P = makePlayer(() => {}, (ended) => { if (ended) BG.next(true); });
+  /* on retient où en est la musique, pour reprendre au même endroit à la prochaine ouverture */
+  setInterval(() => { if (BG.active && BG.last && BG.P.playing && BG.fixed().length) { try { localStorage.setItem('chateau-bg', JSON.stringify({ id: BG.last, t: BG.P.el.currentTime || 0 })); } catch (e) {} } }, 4000);
   /* Débloque la lecture audio sur iPhone : un court silence joué pendant le geste d'entrée */
   function unlockAudio() {
     const n = 800, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
