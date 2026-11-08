@@ -1302,7 +1302,7 @@
     const w = 6.2, hh = w * 9 / 16;
     g.add(box(w + .18, hh + .18, .06, M.black, 0, 0, .03));
     const gl = plane(w + 2.4, hh + 2, M.halo.clone()); gl.position.z = .004; gl.material.opacity = .45; g.add(gl);
-    const mat = new THREE.MeshBasicMaterial({ color: '#ffffff' }); const scr = plane(w, hh, mat); scr.position.z = .065; g.add(scr);
+    const mat = new THREE.MeshBasicMaterial({ color: '#ffffff', toneMapped: false }); const scr = plane(w, hh, mat); scr.position.z = .065; g.add(scr);
     g.add(box(w, hh, .002, new THREE.MeshBasicMaterial({ color: '#050505' }), 0, 0, .061));
     const play = plane(.8, .8, new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, map: textTexture(256, 256, (c, s) => { c.fillStyle = 'rgba(10,10,10,.45)'; c.beginPath(); c.arc(s / 2, s / 2, s * .42, 0, 7); c.fill(); c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 4; c.stroke(); c.fillStyle = '#fff'; c.beginPath(); c.moveTo(s * .42, s * .32); c.lineTo(s * .42, s * .68); c.lineTo(s * .7, s * .5); c.fill(); }) }));
     play.position.z = .075; g.add(play);
@@ -1469,11 +1469,13 @@
      et libérées quand on s'éloigne (des centaines de tableaux tiennent ainsi sur un téléphone) */
   /* deux tailles : une petite pour les tableaux qu'on voit de loin, une plus fine pour celui qu'on regarde de près ;
      au plus deux photos décodées à la fois, les plus proches d'abord (sinon le téléphone sature et se fige) */
-  const TEX_LO = isMobile ? 512 : 1024, TEX_HI = isMobile ? 1280 : 1600;
+  /* netteté des photos : de près, la photo à sa vraie finesse (2048 px, la taille enregistrée) */
+  const TEX_LO = isMobile ? 768 : 1280, TEX_HI = isMobile ? 1600 : 2048;
+  let MAXANISO = 0; const maxAniso = () => { if (!MAXANISO) { try { MAXANISO = document.querySelector('a-scene').renderer.capabilities.getMaxAnisotropy() || 8; } catch (e) { return 8; } } return MAXANISO; };
   const TEXQ = { run: 0, list: [] };
   function texJob(go, pri) { TEXQ.list.push({ go, pri }); texPump(); }
   function texPump() {
-    while (TEXQ.run < 2 && TEXQ.list.length) {
+    while (TEXQ.run < 3 && TEXQ.list.length) {
       TEXQ.list.sort((a, b) => a.pri() - b.pri()); const j = TEXQ.list.shift(); TEXQ.run++;
       Promise.resolve().then(j.go).catch(() => {}).then(() => { TEXQ.run--; setTimeout(texPump, 16); });
     }
@@ -1482,7 +1484,10 @@
     const b = await (await fetch(src, { credentials: 'same-origin' })).blob();
     let bmp; try { bmp = await createImageBitmap(b); } catch (e) { bmp = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(b); }); }
     const w0 = bmp.width, h0 = bmp.height, k = Math.min(1, max / Math.max(w0, h0)), w = Math.max(1, Math.round(w0 * k)), hh = Math.max(1, Math.round(h0 * k));
-    const c = document.createElement('canvas'); c.width = w; c.height = hh; c.getContext('2d').drawImage(bmp, 0, 0, w, hh); if (bmp.close) bmp.close();
+    /* réduction en douceur (par moitiés, lissage haute qualité) : une photo nette, sans crénelage ni flou */
+    let cur = bmp, sw = w0, sh = h0;
+    while (sw / 2 >= w * 1.05 && sh / 2 >= hh * 1.05) { const t = document.createElement('canvas'); t.width = Math.round(sw / 2); t.height = Math.round(sh / 2); const tc = t.getContext('2d'); tc.imageSmoothingEnabled = true; tc.imageSmoothingQuality = 'high'; tc.drawImage(cur, 0, 0, t.width, t.height); if (cur !== bmp && cur.width) { cur.width = 0; } cur = t; sw = t.width; sh = t.height; }
+    const c = document.createElement('canvas'); c.width = w; c.height = hh; const cx = c.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high'; cx.drawImage(cur, 0, 0, w, hh); if (bmp.close) bmp.close(); if (cur !== bmp) cur.width = 0;
     return { c, aspect: w0 / h0 };
   }
   function photoTexture(assetId, onReady, size, pri) {
@@ -1494,7 +1499,7 @@
       try {
         const { c, aspect } = await decodeTo(await mediaSrc(assetId), size || TEX_LO);
         if (TEXCACHE.get(key) !== e) return;
-        const t = srgb(new THREE.CanvasTexture(c)); t.anisotropy = isMobile ? 4 : 8; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+        const t = srgb(new THREE.CanvasTexture(c)); t.anisotropy = maxAniso(); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
         e.tex = t; e.aspect = aspect; e.waiters.forEach((f) => f(t, aspect)); e.waiters = [];
       } catch (er) { if (TEXCACHE.get(key) === e) TEXCACHE.delete(key); }
     }, pri || (() => 0));
@@ -1531,14 +1536,15 @@
     const art = new THREE.Group(); g.add(art);
     const fm = mem.style === 'bois' ? M.frameBois : mem.style === 'or' ? M.frameOr : M.frameNoir;
     const ph0 = sharedPlaceholder();
-    const photoMat = new THREE.MeshStandardMaterial({ roughness: .5, map: ph0, emissive: '#ffffff', emissiveMap: ph0, emissiveIntensity: .5 });
+    /* la photo telle qu'elle est : couleurs exactes, sans voile de lumière ni de reflet */
+    const photoMat = new THREE.MeshBasicMaterial({ map: ph0, toneMapped: false });
     const vit = mem.style === 'vitrine' ? vitrineParts(art, mem, photoMat) : null;
     let fbox, matte, photo, glass;
     if (!vit) {
       fbox = box(1, 1, .05, fm, 0, 0, .025); art.add(fbox);
       matte = plane(1, 1, M.matte); matte.position.z = .0505; art.add(matte);
       photo = plane(1, 1, photoMat); photo.position.z = .052; art.add(photo);
-      glass = glassPane(1, 1); glass.position.z = .057; art.add(glass);
+      glass = glassPane(1, 1); glass.position.z = .057; glass.visible = false; art.add(glass);
     }
     // cartel (son texte n'est dessiné que lorsqu'on approche)
     const cartLines = [{ text: dateText(mem).toUpperCase(), y: .3, size: .16, sans: true, spacing: 3, color: '#9a7b4a', weight: 500 }, { text: mem.title || '', y: .68, size: .3, italic: true, color: '#1e1b17' }];
@@ -1564,7 +1570,7 @@
       if (lv === fr.level) return; fr.level = lv; fr.on = lv > 0;
       if (!lv) {
         if (cart) { g.remove(cart); cart.material.userData.gone = true; if (cart.material.map) cart.material.map.dispose(); cart.material.dispose(); cart.geometry.dispose(); cart = null; }
-        if (photoMat.map !== ph0) { photoMat.map = ph0; photoMat.emissiveMap = ph0; photoMat.needsUpdate = true; }
+        if (photoMat.map !== ph0) { photoMat.map = ph0; photoMat.needsUpdate = true; }
         releaseAll(null); return;
       }
       if (!cart) { cart = textPlane(.36, .14, cartLines, { px: 640 }); cart.position.copy(cartPos); g.add(cart); }
@@ -1574,7 +1580,7 @@
       held.push(want);
       photoTexture(want.src, (t, ia) => {
         if (!held.includes(want)) return;
-        photoMat.map = t; photoMat.emissiveMap = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia);
+        photoMat.map = t; photoMat.needsUpdate = true; if (Math.abs(ia - (mem.aspect || 0)) > .005) layout(ia);
         releaseAll(want);
       }, want.size, () => fr.dist);
     };
@@ -1910,7 +1916,7 @@
       f.g.getWorldPosition(_wp); const d = Math.hypot(_wp.x - _v1.x, _wp.z - _v1.z);
       f.g.visible = d < 46; f.dist = d; if (!f.setLevel) return;
       let lv = f.level;
-      if (d < 5.5) lv = 2; else if (d < 16) lv = f.level === 2 && d < 7.5 ? 2 : 1; else if (d > 22) lv = 0; else if (lv === 2) lv = 1;
+      if (d < 8.5) lv = 2; else if (d < 16) lv = f.level === 2 && d < 10.5 ? 2 : 1; else if (d > 22) lv = 0; else if (lv === 2) lv = 1;
       f.setLevel(lv);
     });
   }
@@ -3241,7 +3247,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
       /* netteté adaptative : on vise haut (écrans très fins des iPhone Pro / Galaxy Ultra),
          et on ne baisse que si les images par seconde chutent ; on remonte quand ça redevient fluide */
       const DPR_MAX = Math.min(window.devicePixelRatio || 1, 2);
-      this.dpr = isMobile ? Math.min(DPR_MAX, 1.75) : DPR_MAX; this.fpsAcc = 0; this.fpsN = 0; this.fpsCool = 4;
+      this.dpr = DPR_MAX; this.fpsAcc = 0; this.fpsN = 0; this.fpsCool = 4;
       const capDpr = () => { try { this.el.renderer.setPixelRatio(this.dpr); } catch (e) {} };
       this.adaptDpr = (raw) => {
         if (document.hidden || raw > .5) return;
