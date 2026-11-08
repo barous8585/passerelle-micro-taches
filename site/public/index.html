@@ -1344,7 +1344,8 @@
     V.asset = assetId; V.el = null; V.tex = null; V.play.visible = true; V.userPaused = false; V.armAt = 0;
     if (!assetId) { V.poster(false); return; }
     const v = document.createElement('video'); v.playsInline = true; v.setAttribute('playsinline', ''); v.preload = 'auto';
-    if (!isChunkedVideo(assetId)) v.src = '/_blob/' + assetId;
+    if (assetId === 'intro') { v.src = '/api/intro-video'; v.setAttribute('controlslist', 'nodownload noremoteplayback'); v.disablePictureInPicture = true; }
+    else if (!isChunkedVideo(assetId)) v.src = '/_blob/' + assetId;
     v.addEventListener('play', () => { V.play.visible = false; if (!V.tex) { V.tex = srgb(new THREE.VideoTexture(v)); V.mat.map = V.tex; V.mat.needsUpdate = true; } if (v.videoWidth) V.fit(v.videoWidth / v.videoHeight); Music.setDuck(true); });
     v.addEventListener('pause', () => {
       if (v.ended) return;
@@ -5286,14 +5287,30 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   /* la vidéo de l'entrée, jouée en grand dans le hall avant la balade (débloquée par son geste sur « Continuer ») */
   const IV = { el: null, unlocked: false };
   function introEl() {
+    if (W.video && W.video.el && W.video.asset === 'intro') return W.video.el;
     if (IV.el) return IV.el;
     const v = document.createElement('video'); v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.preload = 'auto';
     v.setAttribute('controlslist', 'nodownload noremoteplayback'); v.disablePictureInPicture = true;
     if (window.__chateauNetlify) v.src = '/api/intro-video';
     IV.el = v; return v;
   }
-  function introUnlock() { const v = introEl(); if (!v.src || IV.unlocked) return; try { const p = v.play(); if (p) p.then(() => { if (!IV.playing) v.pause(); IV.unlocked = true; }).catch(() => {}); } catch (e) {} }
+  function introUnlock() { const v = introEl(); if (!v.src || IV.unlocked) return; const scr = W.video && W.video.el === v; try { if (scr) W.video.userPaused = true; const p = v.play(); if (p) p.then(() => { if (!IV.playing) { if (scr) W.video.userPaused = true; v.pause(); } IV.unlocked = true; }).catch(() => {}); } catch (e) {} }
+  /* la vidéo de l'entrée jouée directement dans le grand cadre de la rotonde */
+  async function playIntroScreen() {
+    const V = W.video, v = V.el;
+    const bgWas = BG.active && BG.P.playing; if (bgWas) BG.P.el.pause();
+    const sk = document.createElement('button'); sk.type = 'button'; sk.textContent = 'Passer ›'; sk.style.cssText = 'position:fixed;z-index:30;top:calc(16px + env(safe-area-inset-top));right:14px;background:rgba(14,10,20,.55);color:#f3e3c4;border:1px solid rgba(214,178,110,.35);border-radius:999px;padding:8px 14px;font:400 12.5px Jost,sans-serif;cursor:pointer';
+    document.body.appendChild(sk); IV.playing = true; V.userPaused = false;
+    await new Promise((r) => { let done = false; const fin = () => { if (done) return; done = true; v.removeEventListener('ended', fin); v.removeEventListener('error', fin); r(); };
+      v.addEventListener('ended', fin); v.addEventListener('error', fin); sk.onclick = fin;
+      const cap = () => { if (v.duration && isFinite(v.duration)) setTimeout(fin, (v.duration + 4) * 1000); }; if (v.readyState >= 1) cap(); else v.addEventListener('loadedmetadata', cap, { once: true });
+      setTimeout(() => { if (v.paused && v.currentTime < .1) { v.muted = true; v.play().catch(fin); } }, 2500); setTimeout(fin, 240000);
+      try { v.currentTime = 0; } catch (e) {} v.muted = false; v.play().catch(() => { v.muted = true; v.play().catch(fin); }); });
+    IV.playing = false; sk.remove(); if (!v.ended) { V.userPaused = true; v.pause(); } v.muted = false;
+    if (BG.active && Music.on) { const p = bgWas && BG.last ? BG.P.el.play() : BG.next(); if (p && p.catch) p.catch(() => BG.next()); }
+  }
   async function playIntro() {
+    if (W.video && W.video.el && W.video.asset === 'intro') return playIntroScreen();
     const v = introEl(); if (!v.src && window.__chateauNetlify) v.src = '/api/intro-video'; if (!v.src) return;
     const ov = document.createElement('div'); ov.id = 'introVid';
     ov.innerHTML = '<button type="button" class="skip">Passer ›</button>'; ov.prepend(v); document.body.appendChild(ov);
