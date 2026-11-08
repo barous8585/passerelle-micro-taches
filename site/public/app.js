@@ -104,5 +104,14 @@
     const alertBox = (t) => { const b = document.createElement('div'); b.textContent = t; b.style.cssText = 'position:fixed;z-index:100001;left:50%;top:20px;transform:translateX(-50%);max-width:min(420px,90vw);background:#1b1424;color:#f6efe2;border:1px solid rgba(214,178,110,.5);border-radius:14px;padding:14px 18px;font:15px/1.5 Jost,system-ui;box-shadow:0 10px 30px rgba(0,0,0,.4)'; document.body.appendChild(b); setTimeout(() => b.remove(), 9000); };
     go(0);
   })();
+  /* chaque entrée dans le château (QR code, app installée ou site) s'inscrit dans le journal — le serveur ignore le gardien */
+  (function logEntry() {
+    const via = /[?&]invite=cadeau-/.test(location.search) ? 'qr' : standalone() ? 'app' : 'web';
+    if (/[?&]apercu=1/.test(location.search)) return;
+    let sent = false;
+    const send = () => { if (sent || !document.body || !document.body.classList.contains('entered')) return; sent = true; fetch('/api/entree', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ via }) }).catch(() => { sent = false; }); };
+    const start = () => { send(); new MutationObserver(send).observe(document.body, { attributes: true, attributeFilter: ['class'] }); };
+    if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+  })();
   window.__chateauApp = { blockedHelp, isIOS, standalone, canInstall: () => !!deferred, install, enableNotifs, disableNotifs, notifState };
 })();

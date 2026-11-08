@@ -187,6 +187,17 @@ export default async (req: Request, context: Context) => {
 
     /* tout le reste demande une connexion */
     const me = await currentUser(req);
+    /* elle entre dans le château (QR code, app installée ou site) : une ligne dans le journal */
+    if (route === "entree" && m === "POST") {
+      if (!me) return err("auth", 401);
+      if (me.isOwner) return json({ ok: true, skipped: true });
+      const b = (await req.json().catch(() => ({}))) as any, ua = req.headers.get("user-agent") || "";
+      const appareil = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "téléphone Android" : /Macintosh/.test(ua) ? "Mac" : /Windows/.test(ua) ? "PC Windows" : "appareil";
+      const via = ({ qr: "QR code", app: "app installée", web: "site web" } as Record<string, string>)[String(b.via)] || "site web";
+      const g = (context as any)?.geo || {}, t = Date.now();
+      await store("chateau-scans").setJSON(`scan/${t}-${Math.random().toString(36).slice(2, 7)}`, { t, appareil, ville: String(g.city || "").slice(0, 60), pays: String((g.country && g.country.name) || "").slice(0, 60), moment: "entrée dans le château · " + via });
+      return json({ ok: true });
+    }
     if (route === "journal" && m === "GET") {
       if (!me || !me.isOwner) return new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:system-ui;background:#140c1c;color:#f6efe2;padding:24px"><h2>Journal des scans</h2><p>Connecte-toi d'abord avec ton compte de gardien sur <a style="color:#f3d79a" href="/?apercu=1">hadiatoukaba.fr/?apercu=1</a>, puis reviens sur cette page.</p>`, { status: 401, headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex, nofollow, noarchive, nosnippet, noimageindex" } });
       const st = store("chateau-scans"), { blobs } = await st.list({ prefix: "scan/" });
