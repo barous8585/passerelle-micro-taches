@@ -5778,7 +5778,8 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       S.entered = true; controls(true);
       // à sa première venue : l'histoire commence tout de suite (ta voix, puis le conte), et sa lettre l'attend à la fin
       // elle, à sa première venue : ta lettre, puis la balade automatique dans les galeries ; ensuite elle circule librement
-      const firstTime = !S.isOwner && !!S.db && !(await storySeen().catch(() => true));
+      /* pour elle, la balade se relance à chaque ouverture (la lettre, elle, ne s'affiche qu'une fois) */
+      const firstTime = !S.isOwner && !!S.db;
       if (firstTime) {
         setVisit(true, false); markTourSeen();
         if (await welcomeDue().catch(() => false)) { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
