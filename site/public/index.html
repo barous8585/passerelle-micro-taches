@@ -5784,7 +5784,8 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       const firstTime = !!S.db && !scen;
       if (firstTime) {
         setVisit(true, S.isOwner); markTourSeen();
-        if (!S.isOwner && await welcomeDue().catch(() => false)) { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
+        /* la lettre ouvre chaque visite, avant la promenade */
+        { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
         await sleep(600); markStorySeen(); await autoVisit(true);
       }
       // aperçu du gardien : ?scenario=1 rejoue exactement son arrivée (lettre, puis conte), sans rien marquer comme vu
