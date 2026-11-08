@@ -971,7 +971,7 @@
     active: false, last: null,
     get playing() { return BG.P.playing; },
     /* les deux chansons choisies par le gardien : chiffrées sur le serveur, jouées l'une après l'autre, en boucle */
-    fixed() { return window.__chateauNetlify ? [{ id: 'son1', url: '/api/media/son1' }, { id: 'son2', url: '/api/media/son2' }] : []; },
+    fixed() { return window.__chateauNetlify ? ['son1', 'son2', 'son3', 'son4'].map((id) => ({ id, url: '/api/media/' + id })) : []; },
     list() { const f = this.fixed(); return f.length ? f : S.sounds.filter((x) => x.kind === 'musique'); },
     sync() {
       const want = this.fixed().length > 0 || (S.settings.musicMode === 'playlist' && this.list().length > 0);

@@ -120,7 +120,7 @@ async function lettre(): Promise<string> {
 }
 
 /* la vidéo de l'entrée : chiffrée avec la même clé que la lettre, déchiffrée ici pour les personnes connectées seulement */
-const MEDIA_FILES: Record<string, string> = { intro: "video/mp4", son1: "audio/mp4", son2: "audio/mp4" };
+const MEDIA_FILES: Record<string, string> = { intro: "video/mp4", son1: "audio/mp4", son2: "audio/mp4", son3: "audio/mp4", son4: "audio/mp4" };
 const MEDIA_CACHE: Record<string, Buffer> = {};
 async function privateMedia(origin: string, name: string): Promise<Buffer | null> {
   if (MEDIA_CACHE[name]) return MEDIA_CACHE[name];
@@ -206,7 +206,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th{text-align:left;colo
 
     if (route === "me") return json({ user: publicUser(me) });
     if (route === "lettre" && m === "GET") return json({ text: await lettre() });
-    const mr = route.match(/^(?:intro-video|media\/(intro|son1|son2))$/);
+    const mr = route.match(/^(?:intro-video|media\/(intro|son[1-4]))$/);
     if (mr && m === "GET") {
       const name = mr[1] || "intro", v = await privateMedia(url.origin, name); if (!v) return err("not_found", 404);
       const size = v.length, range = req.headers.get("range"), base = { "content-type": MEDIA_FILES[name], "accept-ranges": "bytes", "cache-control": "private, max-age=86400", "x-robots-tag": "noindex" };
