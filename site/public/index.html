@@ -930,6 +930,7 @@
     P.stop = () => { if (P.src) { const x = P.src; P.src = null; try { x.onended = null; x.stop(); } catch (e) {} if (P.playing) { P.playing = false; onStop(false); } } if (!P.el.paused) P.el.pause(); };
     P.play = async (s) => {
       P.stop();
+      if (s.url) { P.el.src = s.url; P.el.volume = P.vol; await P.el.play(); return; }
       const bytes = await soundBytes(s), key = s.asset || s.id;
       if (!P.useWA) {
         try {
@@ -969,15 +970,18 @@
   const BG = {
     active: false, last: null,
     get playing() { return BG.P.playing; },
-    list() { return S.sounds.filter((x) => x.kind === 'musique'); },
+    /* les deux chansons choisies par le gardien : chiffrées sur le serveur, jouées l'une après l'autre, en boucle */
+    fixed() { return window.__chateauNetlify ? [{ id: 'son1', url: '/api/media/son1' }, { id: 'son2', url: '/api/media/son2' }] : []; },
+    list() { const f = this.fixed(); return f.length ? f : S.sounds.filter((x) => x.kind === 'musique'); },
     sync() {
-      const want = S.settings.musicMode === 'playlist' && this.list().length > 0;
+      const want = this.fixed().length > 0 || (S.settings.musicMode === 'playlist' && this.list().length > 0);
       if (want === this.active) return;
       this.active = want; Music.level(1.2);
       if (want) { if (S.entered && Music.on) this.next(); } else this.P.stop();
     },
     async next() {
       const l = this.list(); if (!this.active || !l.length) return;
+      if (this.fixed().length) { const i = l.findIndex((x) => x.id === this.last), s = l[(i + 1) % l.length]; this.last = s.id; try { this.vol(); await this.P.play(s); } catch (e) { setTimeout(() => this.next(), 4000); } return; }
       let s = l[Math.floor(Math.random() * l.length)]; if (l.length > 1 && s.id === this.last) s = l[(l.indexOf(s) + 1) % l.length];
       this.last = s.id;
       try { this.vol(); await this.P.play(s); } catch (e) { setTimeout(() => this.next(), 4000); }
@@ -5295,12 +5299,14 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
     ov.innerHTML = '<button type="button" class="skip">Passer ›</button>'; ov.prepend(v); document.body.appendChild(ov);
     requestAnimationFrame(() => ov.classList.add('on'));
     Music.setDuck(true); const sv = SND.P && SND.P.el; const vol0 = sv ? sv.volume : 1; if (sv) sv.volume = .05;
+    const bgWas = BG.active && BG.P.playing; if (bgWas) BG.P.el.pause();
     IV.playing = true;
     await new Promise((r) => { let done = false; const fin = () => { if (done) return; done = true; r(); };
       v.onended = fin; v.onerror = fin; ov.querySelector('.skip').onclick = fin; setTimeout(() => { if (v.paused && v.currentTime < .1) { v.muted = true; v.play().catch(fin); } }, 2500);
       try { v.currentTime = 0; } catch (e) {} v.muted = false; v.play().catch(() => { v.muted = true; v.play().catch(fin); }); });
     IV.playing = false; v.pause(); ov.classList.remove('on'); await new Promise((r) => setTimeout(r, 900)); ov.remove();
     Music.setDuck(false); if (sv) sv.volume = vol0;
+    if (BG.active && Music.on) { if (bgWas || !BG.last) { const p = BG.last ? BG.P.el.play() : BG.next(); if (p && p.catch) p.catch(() => BG.next()); } }
   }
   async function autoVisit(once) {
     const my = ++VS.token; S.visiting = true; S.tour = true; controls(false);
@@ -5744,7 +5750,7 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
   $('#codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryEnter(); });
 
   function enter() {
-    unlockAudio(); Music.start();
+    unlockAudio(); Music.start(); BG.sync();
     if (BG.active) setTimeout(() => BG.next(), 400);
     $('#intro').classList.add('gone'); document.body.classList.add('entered');
     const hint = $('#hintBox');
@@ -5818,7 +5824,7 @@ Je t'aime.`;
         .then((d) => { const t = d && d.text ? d.text : (isDraft ? (window.__chateauNetlify ? '' : WELCOME_DEF) : st.welcome); el.querySelector('.letter p').textContent = t; return !!t; });
       setTimeout(() => { letterReady.then((ok) => { if (!ok) { done(false); return; } document.body.appendChild(el); requestAnimationFrame(() => el.classList.add('on')); }); }, st.welcomeFx === true ? 4200 : 1200);
       el.querySelector('.env').addEventListener('click', () => { el.classList.add('open'); try { SND && SND.click && SND.click(); } catch (e) {} });
-      el.querySelector('.letter button').addEventListener('click', () => { introUnlock(); el.classList.remove('on'); setTimeout(() => { el.remove(); done(true); }, 1200); });
+      el.querySelector('.letter button').addEventListener('click', () => { introUnlock(); if (BG.active && Music.on && !BG.P.playing) BG.next(); el.classList.remove('on'); setTimeout(() => { el.remove(); done(true); }, 1200); });
     });
   }
   async function welcomeDue() {
