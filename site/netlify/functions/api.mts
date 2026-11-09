@@ -128,7 +128,7 @@ async function journalPasse(): Promise<any[]> {
     return JSON.parse(Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString("utf8")); } catch { return []; }
 }
 /* l'énigme du château (chiffrée, comme la lettre) */
-const ENIGME_ENC = "BD4upHept6dexC+N6kP/H3JF4LUHbgQ80iguF5hFjF85mZYs8LNgw75Qzf0mOa6e7NN7SHMJS4upzp22ktIzZfRbqHTthKKI5KiKg4kvZ9qwVToWwQZvHS14FjIxEJ+CqgGAM9iCCf3xrfqaDSXFkONKNnqEUYXjNoCffeB727YsZn5OYb1vAmK9hQnLsM/Gn7jQHmsURKt9P+vGGIOL2HLbQqrkdk26MnZ+T718SR9CdqNaJUJA1oP+cFt7WmiUMdDeLozSDS1hNZ6YNUVPq4y1N6zgg2CCsrG2LgYWFUZx/kWxmKiX1IAF1Gi5k+qzhIAfA7X3rmiWRLj2P68tBPVLvDGqgNJ9p4P8VO4hmxfXPjcWOZNvWx50Rbb6TrJ7hQhh3k4iyK2yz9xWRIb+nCCf1uWrfdgGuHom7uWyR3zwNuzwZiNDOkC5oNN/kwZcWL8wG2nUvVlhezt9jVNBnVj8BVRuAFpgRrQVEu0TJEpqOR6UyzQ3v0PrMcEYc3J6QaaC707aMCS42Ld/jZHpiW6bSLouWBh+LjiDEtn+507t/ux29hnIRFhBwL723S2xYJdk4doUuuzpyBdMJ+b/15PQIdZY7OuGFbdbXaqqccD8nWTndbxP5KmKc2+N6U03Mhm76LWme/1fymfovLtKUuoWwBcjp3ihnX2lnEm3kfSCywtkOQXTSPu9ja9r4ncxwceqObVvkcGRJuLh6+ig73ZORK0rHBZ2sSFnKI+lR30Ms/++d0fCgJkufw0eYR8PIxM+RZjl1L4X12xOm7r0FRyfBVJ+7FTnaV0EMZ99tG68Z+kS0KN062CvDSXHgnd3AXSYyxZIVwAKHGloow==";
+const ENIGME_ENC = "5FYIkNj1tWyTn1nNYn5Fx65z3nIQ6+REXbWfAatjhY6yoYW0zHN8g81fBBpyEp15/MK9yD/oTANiuQzr8OVCtpxdWH0TD9qLkkhfLDJ3qNL2ykJWp4L5JjHPZ9W/GKT5mmdl5XBkNxnmHj8b9XSDIPtaFL5RLOs1KqC0xSd+OgxrYIArSkYJc2dvVQk2TZs7Iz63Tz92uUY39+jRm5j4Z0Pt4M08jlZ4Ye1KfXjlWxV9VnDWhrpLS0xV1/vZWBrR0ZqK2CtwPfjpaFEFFYS5yNNNau9Ktomyyj0QuyNtOBkXXLrMk6HlRYirs/hkgdJXzOXsyo0OLJ7eLxBHIHuTekcg+TdlQYP3WMhyrleGq+Cqgay3PQD26pNC9LC70DP2GJtuz358MEgP2zck1dLbbdmvI/3lEVWTfkZNPJelBO2f3Vx0ttltCTTZWoQE6zAbItZmTcCrUG22SrMyewTvT+XB0c7JylpcDnahVxQFpZYiIrQVwYse8ebkDnHW250z0WvZeiph9LO99v2AaLjKSfhQ1BLbEfOwk9x0t3Gp8Oom7K/ZIlCu8YNZZ2YVoEJEZiJOpizKmhFZ20XiWoTJcrLD0/EHKL4maJHAU7+iT5yAB13IPtNvXrxi+BEyZ3yfKpobwRtuuBYHFHkMNWt/ptW7lVHuIYkxsHtA19uoBF/RqI9XVi0v1b1LTLbJXk5CLgXofNBfYiW/GO6y5TeHwfJAHHkEWv5pieF2eIBTp6gbxab1DlUvXKBd0OovuBO4lC9YAqcQEogkj92FAiPoBz04Ad2cI0rYfNdTlAlU/K9wZ5lTWidOkfhw0C/m/Fkr4dRuN/h1NsDgwRjqWxUlm0PD7tpOZIG42QGkSnZX4pgENTuDFX3fWMedV7Ollk6Fy59/y4W6PVLluo8ylVNAmz9josWWRYLU3vNL+Yq1Z6yzmN1ewIdU2bWLHkSXfjByPR9rSMfup0qdX0iJFEbtmEZpH6V4JgvRme8tATI6v4NsM9I=";
 async function enigme(): Promise<any | null> {
   const k = Netlify.env.get("LETTRE_KEY") || ((await auth().get("meta/lettre_key")) as string | null); if (!k) return null;
   try { const b = Buffer.from(ENIGME_ENC, "base64"); const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
@@ -207,7 +207,7 @@ export default async (req: Request, context: Context) => {
       if (!me) return err("auth", 401);
       const E = await enigme(); if (!E) return json({ active: false });
       const on = (await auth().get("meta/enigme_on")) === E.id, solved = !!(await auth().get(`enigme/solved/${E.id}/${me.id}`));
-      return json({ active: me.isOwner ? true : on && !solved, on, solved, id: E.id, q: E.q, hints: E.hints });
+      return json({ active: me.isOwner ? true : on && !solved, on, solved, id: E.id, q: E.q, hints: E.hints, choices: E.choices || [] });
     }
     if (route === "enigme" && m === "POST") {
       if (!me) return err("auth", 401);

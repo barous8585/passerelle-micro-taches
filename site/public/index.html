@@ -5845,11 +5845,16 @@ Je t'aime.`;
 #enig .go{background:linear-gradient(135deg,#f3c66b,#d6a24e);color:#2a1a10}#enig .ghost{background:rgba(255,255,255,.08);color:rgba(246,239,226,.85)}
 #enig .msg{min-height:22px;margin-top:12px;font-size:14.5px;color:#f3d79a}#enig .later{margin-top:10px;background:none;color:rgba(246,239,226,.55);font-size:13px;flex:none;padding:6px}
 #enig .shake{animation:enigShake .45s}@keyframes enigShake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+#enig .ch{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 0 4px}#enig .pick{flex:none;display:block;width:100%;white-space:nowrap;text-align:center;padding:12px 8px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(214,178,110,.35);color:#f6efe2;font-size:15.5px;transition:transform .15s,background .2s}
+#enig .pick:active{transform:scale(.96)}#enig .pick.no{opacity:.35;text-decoration:line-through;cursor:default}
 #enig .cf{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;animation:enigFall 2.4s linear forwards}@keyframes enigFall{to{transform:translateY(520px) rotate(540deg);opacity:.2}}`; document.head.appendChild(st); }
     return new Promise((resolve) => {
       const el = document.createElement('div'); el.id = 'enig';
-      el.innerHTML = `<div class="card"><div class="k">🗝️</div><div class="t">Une énigme t'attend…</div><p class="q"></p><input type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Ta réponse…"><div class="row"><button class="ghost hint" type="button">💡 Indice</button><button class="go ok" type="button">Valider</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
-      const card = el.querySelector('.card'), inp = el.querySelector('input'), msg = el.querySelector('.msg');
+      el.innerHTML = `<div class="card"><div class="k">🗝️</div><div class="t">Une énigme t'attend…</div><p class="q"></p><div class="ch"></div><div class="row"><button class="ghost hint" type="button">💡 Indice</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
+      const card = el.querySelector('.card'), msg = el.querySelector('.msg'), chBox = el.querySelector('.ch');
+      /* plusieurs mots, elle en choisit un */
+      const ch = (E.choices || []).slice(); for (let i = ch.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ch[i], ch[j]] = [ch[j], ch[i]]; }
+      ch.forEach((w) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.textContent = w; b.onclick = () => submit(w, b); chBox.appendChild(b); });
       el.querySelector('.q').textContent = E.q;
       const taunts = ['Presque… mais non 😏', 'Hmm, pas tout à fait 🤭', 'Raté ! Essaie encore 😜', 'Le château rigole doucement… 😄', 'Non non non 🙃'];
       let hi = 0, busy = false;
@@ -5857,20 +5862,19 @@ Je t'aime.`;
       el.querySelector('.later').onclick = close;
       el.querySelector('.hint').onclick = () => { const hs = E.hints || []; if (!hs.length) return; msg.textContent = '💡 ' + hs[Math.min(hi, hs.length - 1)]; hi++; };
       const confetti = () => { const pal = ['#ffd36a', '#ff7fa8', '#9fd3ff', '#c7a2ff', '#ffffff', '#ffb066']; for (let i = 0; i < 60; i++) { const c = document.createElement('i'); c.className = 'cf'; c.style.left = Math.random() * 100 + '%'; c.style.background = pal[i % pal.length]; c.style.animationDelay = Math.random() * .6 + 's'; card.appendChild(c); setTimeout(() => c.remove(), 3200); } };
-      const submit = async () => {
-        if (busy || !inp.value.trim()) return; busy = true;
+      const submit = async (val, btn) => {
+        if (busy || !val) return; busy = true;
         try {
-          const rr = await fetch('/api/enigme', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answer: inp.value }) }); const d = await rr.json();
+          const rr = await fetch('/api/enigme', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answer: val }) }); const d = await rr.json();
           if (d.ok) {
             confetti();
             card.querySelector('.k').textContent = '🎉'; card.querySelector('.t').textContent = (d.reward && d.reward.titre) || 'Bravo !';
             card.querySelector('.q').textContent = (d.reward && d.reward.texte) || '';
-            inp.remove(); el.querySelector('.row').remove(); msg.textContent = ''; const l = el.querySelector('.later'); l.textContent = 'Continuer ›'; l.style.cssText = 'margin-top:16px;color:#f3d79a;font-size:15px';
-          } else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); inp.select(); }
+            chBox.remove(); el.querySelector('.row').remove(); msg.textContent = ''; const l = el.querySelector('.later'); l.textContent = 'Continuer ›'; l.style.cssText = 'margin-top:16px;color:#f3d79a;font-size:15px';
+          } else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); if (btn) { btn.disabled = true; btn.classList.add('no'); } }
         } catch (e) { msg.textContent = 'Le château n’a pas entendu… réessaie'; }
         busy = false;
       };
-      el.querySelector('.ok').onclick = submit; inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
       document.body.appendChild(el); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
     });
   }
