@@ -127,6 +127,14 @@ async function journalPasse(): Promise<any[]> {
   try { const b = Buffer.from(JOURNAL_PASSE_ENC, "base64"); const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
     return JSON.parse(Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString("utf8")); } catch { return []; }
 }
+/* l'énigme du château (chiffrée, comme la lettre) */
+const ENIGME_ENC = "BD4upHept6dexC+N6kP/H3JF4LUHbgQ80iguF5hFjF85mZYs8LNgw75Qzf0mOa6e7NN7SHMJS4upzp22ktIzZfRbqHTthKKI5KiKg4kvZ9qwVToWwQZvHS14FjIxEJ+CqgGAM9iCCf3xrfqaDSXFkONKNnqEUYXjNoCffeB727YsZn5OYb1vAmK9hQnLsM/Gn7jQHmsURKt9P+vGGIOL2HLbQqrkdk26MnZ+T718SR9CdqNaJUJA1oP+cFt7WmiUMdDeLozSDS1hNZ6YNUVPq4y1N6zgg2CCsrG2LgYWFUZx/kWxmKiX1IAF1Gi5k+qzhIAfA7X3rmiWRLj2P68tBPVLvDGqgNJ9p4P8VO4hmxfXPjcWOZNvWx50Rbb6TrJ7hQhh3k4iyK2yz9xWRIb+nCCf1uWrfdgGuHom7uWyR3zwNuzwZiNDOkC5oNN/kwZcWL8wG2nUvVlhezt9jVNBnVj8BVRuAFpgRrQVEu0TJEpqOR6UyzQ3v0PrMcEYc3J6QaaC707aMCS42Ld/jZHpiW6bSLouWBh+LjiDEtn+507t/ux29hnIRFhBwL723S2xYJdk4doUuuzpyBdMJ+b/15PQIdZY7OuGFbdbXaqqccD8nWTndbxP5KmKc2+N6U03Mhm76LWme/1fymfovLtKUuoWwBcjp3ihnX2lnEm3kfSCywtkOQXTSPu9ja9r4ncxwceqObVvkcGRJuLh6+ig73ZORK0rHBZ2sSFnKI+lR30Ms/++d0fCgJkufw0eYR8PIxM+RZjl1L4X12xOm7r0FRyfBVJ+7FTnaV0EMZ99tG68Z+kS0KN062CvDSXHgnd3AXSYyxZIVwAKHGloow==";
+async function enigme(): Promise<any | null> {
+  const k = Netlify.env.get("LETTRE_KEY") || ((await auth().get("meta/lettre_key")) as string | null); if (!k) return null;
+  try { const b = Buffer.from(ENIGME_ENC, "base64"); const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
+    return JSON.parse(Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString("utf8")); } catch { return null; }
+}
+const normAns = (x: string) => String(x || "").toLowerCase().replace(/œ/g, "oe").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 const MEDIA_FILES: Record<string, string> = { intro: "video/mp4", son1: "audio/mp4", son2: "audio/mp4", son3: "audio/mp4", son4: "audio/mp4" };
 const MEDIA_CACHE: Record<string, Buffer> = {};
 async function privateMedia(origin: string, name: string): Promise<Buffer | null> {
@@ -194,6 +202,43 @@ export default async (req: Request, context: Context) => {
 
     /* tout le reste demande une connexion */
     const me = await currentUser(req);
+    /* ───── l'énigme : visible pour elle seulement quand le gardien l'a allumée ───── */
+    if (route === "enigme" && m === "GET") {
+      if (!me) return err("auth", 401);
+      const E = await enigme(); if (!E) return json({ active: false });
+      const on = (await auth().get("meta/enigme_on")) === E.id, solved = !!(await auth().get(`enigme/solved/${E.id}/${me.id}`));
+      return json({ active: me.isOwner ? true : on && !solved, on, solved, id: E.id, q: E.q, hints: E.hints });
+    }
+    if (route === "enigme" && m === "POST") {
+      if (!me) return err("auth", 401);
+      const E = await enigme(); if (!E) return err("not_found", 404);
+      const b = (await req.json().catch(() => ({}))) as any, ans = normAns(b.answer);
+      const ok = !!ans && (E.answers as string[]).some((x) => normAns(x) === ans);
+      if (!me.isOwner) {
+        const ak = `enigme/tries/${E.id}/${me.id}`, tries = Number((await auth().get(ak)) || 0) + 1; await auth().set(ak, String(tries));
+        if (ok && !(await auth().get(`enigme/solved/${E.id}/${me.id}`))) {
+          await auth().set(`enigme/solved/${E.id}/${me.id}`, String(Date.now()));
+          const ua = req.headers.get("user-agent") || "", g = (context as any)?.geo || {}, t = Date.now();
+          await store("chateau-scans").setJSON(`scan/${t}-${Math.random().toString(36).slice(2, 7)}`, { t, appareil: /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? "téléphone Android" : "appareil", ville: String(g.city || "").slice(0, 60), pays: String((g.country && g.country.name) || "").slice(0, 60), moment: `🗝️ énigme résolue (« ${String(b.answer).slice(0, 40)} », ${tries} essai${tries > 1 ? "s" : ""})` }).catch(() => {});
+        }
+      }
+      return json(ok ? { ok: true, reward: E.reward } : { ok: false });
+    }
+    if (route === "enigme/etat" && m === "POST") {
+      if (!me || !me.isOwner) return err("forbidden", 403);
+      const E = await enigme(); if (!E) return err("not_found", 404);
+      const b = (await req.json().catch(() => ({}))) as any;
+      if (b.on) await auth().set("meta/enigme_on", E.id); else await auth().delete("meta/enigme_on");
+      return json({ ok: true, on: !!b.on });
+    }
+    if (route === "enigme/notifier" && m === "POST") {
+      if (!me || !me.isOwner) return err("forbidden", 403);
+      const E = await enigme(); if (!E) return err("not_found", 404);
+      await auth().set("meta/enigme_on", E.id);
+      const others = (await allUsers()).filter((u) => !u.isOwner).map((u) => u.id);
+      const sent = await pushTo(others, { title: "Notre château", body: "🗝️ Une énigme s’est cachée dans le château… Sauras-tu la résoudre ?", tag: "enigme", url: "/" });
+      return json({ ok: true, sent });
+    }
     /* elle entre dans le château (QR code, app installée ou site) : une ligne dans le journal */
     if (route === "entree" && m === "POST") {
       if (!me) return err("auth", 401);

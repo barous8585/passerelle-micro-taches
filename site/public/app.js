@@ -113,5 +113,19 @@
     const start = () => { send(); new MutationObserver(send).observe(document.body, { attributes: true, attributeFilter: ['class'] }); };
     if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
   })();
+  /* l'énigme, pilotée par le gardien : #enigme=envoyer (allume + notifie, après confirmation), #enigme=on, #enigme=off */
+  (function enigmeAdmin() {
+    const m = location.hash.match(/enigme=(envoyer|on|off)/); if (!m) return;
+    const act = m[1]; history.replaceState(null, '', location.pathname + location.search);
+    const box = (html) => { const b = document.createElement('div'); b.style.cssText = 'position:fixed;z-index:100002;left:50%;top:20px;transform:translateX(-50%);width:min(420px,92vw);background:#1b1424;color:#f6efe2;border:1px solid rgba(214,178,110,.5);border-radius:16px;padding:16px 18px;font:15px/1.5 Jost,system-ui;box-shadow:0 10px 30px rgba(0,0,0,.45)'; b.innerHTML = html; document.body.appendChild(b); return b; };
+    const go = (n) => {
+      if (!(window.__chateauNetlify && window.__chateauNetlify.me)) { if (n < 120) setTimeout(() => go(n + 1), 1000); return; }
+      if (act !== 'envoyer') { api('enigme/etat', { on: act === 'on' }).then(() => { const b = box(act === 'on' ? '🗝️ Énigme <b>allumée</b> : elle la verra à sa prochaine ouverture (sans notification).' : '🗝️ Énigme <b>éteinte</b>.'); setTimeout(() => b.remove(), 7000); }).catch((e) => box('Impossible : ' + (e.message || 'erreur'))); return; }
+      const b = box('<b>🗝️ Envoyer l’énigme ?</b><br>Elle recevra la notification « Une énigme s’est cachée dans le château… » et verra l’énigme à l’ouverture.<div style="display:flex;gap:8px;margin-top:12px"><button data-x="no" style="flex:1;padding:10px;border-radius:999px;border:0;background:rgba(255,255,255,.1);color:#f6efe2;font:inherit">Annuler</button><button data-x="yes" style="flex:1;padding:10px;border-radius:999px;border:0;background:linear-gradient(135deg,#f3c66b,#d6a24e);color:#2a1a10;font:inherit;font-weight:500">Envoyer</button></div>');
+      b.querySelector('[data-x=no]').onclick = () => b.remove();
+      b.querySelector('[data-x=yes]').onclick = async () => { b.innerHTML = 'Envoi…'; try { const d = await api('enigme/notifier', {}); b.innerHTML = d.sent > 0 ? '✨ Notification envoyée sur son téléphone (' + d.sent + ').<br>L’énigme est allumée.' : '🗝️ L’énigme est allumée, mais <b>aucun téléphone n’a reçu la notification</b> (app supprimée ou notifications coupées). Elle la verra quand même à sa prochaine ouverture.'; } catch (e) { b.innerHTML = 'Impossible : ' + (e.message || 'erreur'); } setTimeout(() => b.remove(), 12000); };
+    };
+    go(0);
+  })();
   window.__chateauApp = { blockedHelp, isIOS, standalone, canInstall: () => !!deferred, install, enableNotifs, disableNotifs, notifState };
 })();
