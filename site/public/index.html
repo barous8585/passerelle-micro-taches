@@ -1034,7 +1034,7 @@
      ════════════════════════════════════════════ */
   const W = { root: null, dyn: null, lanterns: null, anim: [], frames: [], spots: [], zones: [], fountainWater: null, heart: null, heartMat: null, flies: null, video: null, namePlate: null, envelopes: null };
   if (location.hostname === 'localhost') window.__W = W;
-  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__chapters = () => sortedChapters(); window.__runStory = runStory; window.__playArrival = playArrival; }, 0);
+  if (location.hostname === 'localhost') setTimeout(() => { window.__openAlbum = openAlbum; window.__openMemory = openMemory; window.__mems = () => S.memories; window.__chapters = () => sortedChapters(); window.__runStory = runStory; window.__playArrival = playArrival; }, 0);
 
   function buildSky(root) {
     W.skyCanvas = cnv(4, 512, () => {}); W.skyTex = srgb(new THREE.CanvasTexture(W.skyCanvas));
@@ -3359,6 +3359,7 @@ transformed = vec3(transformed.x * cos(ang), abs(transformed.x) * sin(ang), tran
   }
 
   function openMemory(mem) {
+    if (S.hunt && S.hunt(mem)) return;
     const by = h('div', { class: 'by' });
     nameOf(mem.author).then((n) => { if (n) by.textContent = 'Accroché par ' + n; });
     let img = mem.asset && !mem.video ? imgOf(mem.asset, { alt: mem.title || 'Souvenir' }) : null;
@@ -5799,9 +5800,10 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       /* pour elle, la balade se relance à chaque ouverture (la lettre, elle, ne s'affiche qu'une fois) */
       /* à chaque ouverture, pour tout le monde (QR code ou non) : la promenade se lance d'abord */
       const scen = /[?&]scenario=1/.test(location.search);
-      const firstTime = !!S.db && !scen;
-      /* une énigme allumée par le gardien : elle s'affiche en premier, comme un petit jeu */
-      if (window.__chateauNetlify && S.db && (!S.isOwner || /[?&]enigme=1/.test(location.search))) await enigmeFlow().catch(() => {});
+      /* une énigme allumée par le gardien : elle passe en premier ; pendant la chasse au cadre, pas de balade */
+      let egHunt = false;
+      if (window.__chateauNetlify && S.db && (!S.isOwner || /[?&]enigme=1/.test(location.search))) egHunt = (await enigmeFlow().catch(() => false)) === 'hunt';
+      const firstTime = !!S.db && !scen && !egHunt;
       if (firstTime) {
         setVisit(true, S.isOwner); markTourSeen();
         /* la lettre ouvre chaque visite, avant la promenade */
@@ -5834,9 +5836,9 @@ Ce château est aussi le tien. Ajoute tes photos, écris-moi des mots, cache-moi
 
 Promène-toi, prends ton temps.
 Je t'aime.`;
-  /* ───────── l'énigme du château : une carte, une réponse, un indice, une récompense ───────── */
+  /* ───────── les énigmes du château : une carte par énigme, des mots à choisir, et une chasse au cadre ───────── */
   async function enigmeFlow() {
-    const r = await fetch('/api/enigme', { credentials: 'same-origin' }); if (!r.ok) return; const E = await r.json(); if (!E.active) return;
+    const r = await fetch('/api/enigme', { credentials: 'same-origin' }); if (!r.ok) return false; const E = await r.json(); if (!E.active || !E.steps || !E.steps.length) return false;
     if (!document.getElementById('enigCss')) { const st = document.createElement('style'); st.id = 'enigCss'; st.textContent = `#enig{position:fixed;inset:0;z-index:62;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(8,6,16,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;transition:opacity .5s;font-family:Jost,system-ui,sans-serif}
 #enig.on{opacity:1}#enig .card{position:relative;overflow:hidden;width:min(420px,100%);background:linear-gradient(160deg,#241a33,#150f21);color:#f6efe2;border:1px solid rgba(214,178,110,.4);border-radius:22px;padding:26px 22px 20px;box-shadow:0 20px 60px rgba(0,0,0,.5);text-align:center}
 #enig .k{font-size:38px;line-height:1;margin-bottom:6px}#enig .t{font-family:"Cormorant Garamond",Georgia,serif;font-style:italic;font-size:28px;color:#f3d79a;margin:0 0 12px}
@@ -5847,36 +5849,80 @@ Je t'aime.`;
 #enig .shake{animation:enigShake .45s}@keyframes enigShake{20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
 #enig .ch{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 0 4px}#enig .pick{flex:none;display:block;width:100%;white-space:nowrap;text-align:center;padding:12px 8px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(214,178,110,.35);color:#f6efe2;font-size:15.5px;transition:transform .15s,background .2s}
 #enig .pick:active{transform:scale(.96)}#enig .pick.no{opacity:.35;text-decoration:line-through;cursor:default}
-#enig .cf{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;animation:enigFall 2.4s linear forwards}@keyframes enigFall{to{transform:translateY(520px) rotate(540deg);opacity:.2}}`; document.head.appendChild(st); }
+#enig .cf{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;animation:enigFall 2.4s linear forwards}@keyframes enigFall{to{transform:translateY(520px) rotate(540deg);opacity:.2}}
+#enig .n{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:rgba(243,215,154,.7);margin:0 0 4px}
+#huntBar{position:fixed;z-index:61;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(440px,calc(100% - 24px));display:flex;align-items:center;gap:8px;background:rgba(20,14,30,.92);color:#f6efe2;border:1px solid rgba(214,178,110,.45);border-radius:18px;padding:10px 10px 10px 14px;font:14px/1.4 Jost,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#huntBar .tx{flex:1}#huntBar button{border:0;border-radius:999px;padding:8px 11px;background:rgba(255,255,255,.1);color:#f6efe2;font:inherit;cursor:pointer}
+#huntToast{position:fixed;z-index:63;left:50%;top:calc(18px + env(safe-area-inset-top));transform:translateX(-50%);max-width:min(420px,90vw);background:rgba(20,14,30,.94);color:#f3d79a;border:1px solid rgba(214,178,110,.4);border-radius:14px;padding:10px 16px;font:14.5px/1.4 Jost,system-ui,sans-serif;text-align:center;transition:opacity .4s}`; document.head.appendChild(st); }
+    const total = E.total || E.steps.length;
+    const post = (body) => fetch('/api/enigme', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
+    const taunts = ['Presque… mais non 😏', 'Hmm, pas tout à fait 🤭', 'Raté ! Essaie encore 😜', 'Le château rigole doucement… 😄', 'Non non non 🙃'];
+    const pal = ['#ffd36a', '#ff7fa8', '#9fd3ff', '#c7a2ff', '#ffffff', '#ffb066'];
+    const confetti = (box) => { for (let i = 0; i < 60; i++) { const c = document.createElement('i'); c.className = 'cf'; c.style.left = Math.random() * 100 + '%'; c.style.background = pal[i % pal.length]; c.style.animationDelay = Math.random() * .6 + 's'; box.appendChild(c); setTimeout(() => c.remove(), 3200); } };
+    /* une carte réutilisable */
+    const el = document.createElement('div'); el.id = 'enig';
+    el.innerHTML = `<div class="card"><p class="n"></p><div class="k">🗝️</div><div class="t"></div><p class="q"></p><div class="ch"></div><div class="row"><button class="ghost hint" type="button">💡 Indice</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
+    const card = el.querySelector('.card'), msg = el.querySelector('.msg'), chBox = el.querySelector('.ch'), row = el.querySelector('.row'), later = el.querySelector('.later');
+    const show = () => { if (!el.parentNode) document.body.appendChild(el); void el.offsetWidth; setTimeout(() => el.classList.add('on'), 20); };
+    const hide = () => new Promise((res) => { el.classList.remove('on'); setTimeout(() => { el.remove(); res(); }, 450); });
+    const finalCard = (rw, resolve) => {
+      confetti(card); card.querySelector('.n').textContent = `${total} énigmes sur ${total}`; card.querySelector('.k').textContent = '🏆';
+      card.querySelector('.t').textContent = (rw && rw.titre) || 'Bravo !'; card.querySelector('.q').textContent = (rw && rw.texte) || '';
+      chBox.innerHTML = ''; row.style.display = 'none'; msg.textContent = ''; later.textContent = 'Continuer ›'; later.style.cssText = 'margin-top:16px;color:#f3d79a;font-size:15px';
+      later.onclick = () => hide().then(() => resolve && resolve(true)); show();
+    };
     return new Promise((resolve) => {
-      const el = document.createElement('div'); el.id = 'enig';
-      el.innerHTML = `<div class="card"><div class="k">🗝️</div><div class="t">Une énigme t'attend…</div><p class="q"></p><div class="ch"></div><div class="row"><button class="ghost hint" type="button">💡 Indice</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
-      const card = el.querySelector('.card'), msg = el.querySelector('.msg'), chBox = el.querySelector('.ch');
-      /* plusieurs mots, elle en choisit un */
-      const ch = (E.choices || []).slice(); for (let i = ch.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ch[i], ch[j]] = [ch[j], ch[i]]; }
-      ch.forEach((w) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.textContent = w; b.onclick = () => submit(w, b); chBox.appendChild(b); });
-      el.querySelector('.q').textContent = E.q;
-      const taunts = ['Presque… mais non 😏', 'Hmm, pas tout à fait 🤭', 'Raté ! Essaie encore 😜', 'Le château rigole doucement… 😄', 'Non non non 🙃'];
-      let hi = 0, busy = false;
-      const close = () => { el.classList.remove('on'); setTimeout(() => { el.remove(); resolve(); }, 450); };
-      el.querySelector('.later').onclick = close;
-      el.querySelector('.hint').onclick = () => { const hs = E.hints || []; if (!hs.length) return; msg.textContent = '💡 ' + hs[Math.min(hi, hs.length - 1)]; hi++; };
-      const confetti = () => { const pal = ['#ffd36a', '#ff7fa8', '#9fd3ff', '#c7a2ff', '#ffffff', '#ffb066']; for (let i = 0; i < 60; i++) { const c = document.createElement('i'); c.className = 'cf'; c.style.left = Math.random() * 100 + '%'; c.style.background = pal[i % pal.length]; c.style.animationDelay = Math.random() * .6 + 's'; card.appendChild(c); setTimeout(() => c.remove(), 3200); } };
-      const submit = async (val, btn) => {
-        if (busy || !val) return; busy = true;
-        try {
-          const rr = await fetch('/api/enigme', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ answer: val }) }); const d = await rr.json();
-          if (d.ok) {
-            confetti();
-            card.querySelector('.k').textContent = '🎉'; card.querySelector('.t').textContent = (d.reward && d.reward.titre) || 'Bravo !';
-            card.querySelector('.q').textContent = (d.reward && d.reward.texte) || '';
-            chBox.remove(); el.querySelector('.row').remove(); msg.textContent = ''; const l = el.querySelector('.later'); l.textContent = 'Continuer ›'; l.style.cssText = 'margin-top:16px;color:#f3d79a;font-size:15px';
-          } else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); if (btn) { btn.disabled = true; btn.classList.add('no'); } }
-        } catch (e) { msg.textContent = 'Le château n’a pas entendu… réessaie'; }
-        busy = false;
+      let k = 0;
+      later.onclick = () => hide().then(() => resolve(false));
+      const render = () => {
+        const st = E.steps[k]; let hi = 0, busy = false;
+        card.querySelector('.n').textContent = `Énigme ${st.i + 1} / ${total}`; card.querySelector('.k').textContent = st.type === 'frame' ? '🔎' : '🗝️';
+        card.querySelector('.t').textContent = st.i === 0 ? 'Une énigme t’attend…' : st.type === 'frame' ? 'La chasse au cadre' : 'Énigme suivante…';
+        card.querySelector('.q').textContent = st.q; chBox.innerHTML = ''; msg.textContent = ''; row.style.display = '';
+        later.textContent = 'Plus tard'; later.style.cssText = ''; later.onclick = () => hide().then(() => resolve(false));
+        el.querySelector('.hint').onclick = () => { const hs = st.hints || []; if (!hs.length) return; msg.textContent = '💡 ' + hs[Math.min(hi, hs.length - 1)]; hi++; };
+        if (st.type === 'frame') {
+          const go = document.createElement('button'); go.type = 'button'; go.className = 'pick'; go.style.gridColumn = '1 / -1'; go.style.background = 'linear-gradient(135deg,#f3c66b,#d6a24e)'; go.style.color = '#2a1a10'; go.textContent = '🔎 Je pars chercher !';
+          go.onclick = () => hide().then(() => { startHunt(st, (rw) => finalCard(rw, null)); resolve('hunt'); }); chBox.appendChild(go); return;
+        }
+        const ch = (st.choices || []).slice(); for (let i = ch.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ch[i], ch[j]] = [ch[j], ch[i]]; }
+        ch.forEach((w) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'pick'; b.textContent = w; b.onclick = async () => {
+          if (busy) return; busy = true;
+          try { const d = await post({ i: st.i, answer: w });
+            if (d.ok) {
+              if (d.last) { finalCard(d.reward, resolve); busy = false; return; }
+              confetti(card); card.querySelector('.k').textContent = '🎉'; card.querySelector('.t').textContent = 'Bien joué !'; card.querySelector('.q').textContent = `C’était bien « ${w.replace(/[\s\uFE0F\u200D\p{Extended_Pictographic}]+$/u, '')} » ✨ Énigme ${st.i + 1} sur ${total} résolue.`;
+              chBox.innerHTML = ''; row.style.display = 'none'; msg.textContent = ''; later.textContent = 'Énigme suivante ›'; later.style.cssText = 'margin-top:14px;color:#f3d79a;font-size:15px';
+              later.onclick = () => { k++; if (k < E.steps.length) render(); else hide().then(() => resolve(true)); };
+            } else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); b.disabled = true; b.classList.add('no'); }
+          } catch (e) { msg.textContent = 'Le château n’a pas entendu… réessaie'; }
+          busy = false; }; chBox.appendChild(b); });
       };
-      document.body.appendChild(el); requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on')));
+      render(); show();
     });
+    /* la chasse : elle circule librement et touche le cadre qu'elle croit être le bon */
+    function startHunt(st, onWin) {
+      const mems = (S.memories || []).filter((m) => (m.asset || m.video) && m.id);
+      const key = (m) => (m.date || '9999') + '|' + String(m.createdAt || 0).padStart(15, '0');
+      const target = mems.slice().sort((a, b) => key(a).localeCompare(key(b)))[0];
+      const bar = document.createElement('div'); bar.id = 'huntBar';
+      bar.innerHTML = `<span class="tx">🔎 Trouve le tout premier souvenir du château et touche son cadre</span><button type="button" class="h">💡</button><button type="button" class="x">✕</button>`;
+      document.body.appendChild(bar);
+      let toastT = 0; const toast = (t) => { let e = document.getElementById('huntToast'); if (!e) { e = document.createElement('div'); e.id = 'huntToast'; document.body.appendChild(e); } e.textContent = t; e.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => { e.style.opacity = '0'; }, 3200); };
+      let hi = 0; const hints = (st.hints || []).concat(target ? [`Sa date : ${dateText(target) || 'très, très loin'} 📅`] : []);
+      bar.querySelector('.h').onclick = () => { if (hints.length) toast('💡 ' + hints[Math.min(hi, hints.length - 1)]); hi++; };
+      const stop = () => { S.hunt = null; bar.remove(); const e = document.getElementById('huntToast'); if (e) e.remove(); };
+      bar.querySelector('.x').onclick = () => { stop(); toast('La chasse t’attendra à ta prochaine visite 😉'); };
+      let busy = false;
+      S.hunt = (mem) => {
+        if (busy) return true;
+        if (target && mem.id !== target.id) { toast(`Pas celui-là… 😏 ${dateText(mem) ? '(celui-ci : ' + dateText(mem) + ')' : ''}`.trim()); return true; }
+        busy = true;
+        post({ i: st.i, found: true, title: mem.title || '' }).then((d) => { stop(); if (d.ok) onWin(d.reward); }).catch(() => { busy = false; toast('Le château n’a pas entendu… réessaie'); });
+        return true;
+      };
+      if (!target) S.hunt({ id: '' });
+    }
   }
   const welcomeCss = `#welcome{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(ellipse at center,rgba(20,10,24,.55),rgba(8,5,12,.88));opacity:0;transition:opacity 1.2s ease;font-family:var(--display,Georgia,serif)}
 #welcome.on{opacity:1}

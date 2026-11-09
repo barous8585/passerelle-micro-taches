@@ -128,7 +128,7 @@ async function journalPasse(): Promise<any[]> {
     return JSON.parse(Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString("utf8")); } catch { return []; }
 }
 /* l'énigme du château (chiffrée, comme la lettre) */
-const ENIGME_ENC = "5FYIkNj1tWyTn1nNYn5Fx65z3nIQ6+REXbWfAatjhY6yoYW0zHN8g81fBBpyEp15/MK9yD/oTANiuQzr8OVCtpxdWH0TD9qLkkhfLDJ3qNL2ykJWp4L5JjHPZ9W/GKT5mmdl5XBkNxnmHj8b9XSDIPtaFL5RLOs1KqC0xSd+OgxrYIArSkYJc2dvVQk2TZs7Iz63Tz92uUY39+jRm5j4Z0Pt4M08jlZ4Ye1KfXjlWxV9VnDWhrpLS0xV1/vZWBrR0ZqK2CtwPfjpaFEFFYS5yNNNau9Ktomyyj0QuyNtOBkXXLrMk6HlRYirs/hkgdJXzOXsyo0OLJ7eLxBHIHuTekcg+TdlQYP3WMhyrleGq+Cqgay3PQD26pNC9LC70DP2GJtuz358MEgP2zck1dLbbdmvI/3lEVWTfkZNPJelBO2f3Vx0ttltCTTZWoQE6zAbItZmTcCrUG22SrMyewTvT+XB0c7JylpcDnahVxQFpZYiIrQVwYse8ebkDnHW250z0WvZeiph9LO99v2AaLjKSfhQ1BLbEfOwk9x0t3Gp8Oom7K/ZIlCu8YNZZ2YVoEJEZiJOpizKmhFZ20XiWoTJcrLD0/EHKL4maJHAU7+iT5yAB13IPtNvXrxi+BEyZ3yfKpobwRtuuBYHFHkMNWt/ptW7lVHuIYkxsHtA19uoBF/RqI9XVi0v1b1LTLbJXk5CLgXofNBfYiW/GO6y5TeHwfJAHHkEWv5pieF2eIBTp6gbxab1DlUvXKBd0OovuBO4lC9YAqcQEogkj92FAiPoBz04Ad2cI0rYfNdTlAlU/K9wZ5lTWidOkfhw0C/m/Fkr4dRuN/h1NsDgwRjqWxUlm0PD7tpOZIG42QGkSnZX4pgENTuDFX3fWMedV7Ollk6Fy59/y4W6PVLluo8ylVNAmz9josWWRYLU3vNL+Yq1Z6yzmN1ewIdU2bWLHkSXfjByPR9rSMfup0qdX0iJFEbtmEZpH6V4JgvRme8tATI6v4NsM9I=";
+const ENIGME_ENC = "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";
 async function enigme(): Promise<any | null> {
   const k = Netlify.env.get("LETTRE_KEY") || ((await auth().get("meta/lettre_key")) as string | null); if (!k) return null;
   try { const b = Buffer.from(ENIGME_ENC, "base64"); const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
@@ -206,23 +206,29 @@ export default async (req: Request, context: Context) => {
     if (route === "enigme" && m === "GET") {
       if (!me) return err("auth", 401);
       const E = await enigme(); if (!E) return json({ active: false });
-      const on = (await auth().get("meta/enigme_on")) === E.id, solved = !!(await auth().get(`enigme/solved/${E.id}/${me.id}`));
-      return json({ active: me.isOwner ? true : on && !solved, on, solved, id: E.id, q: E.q, hints: E.hints, choices: E.choices || [] });
+      const on = (await auth().get("meta/enigme_on")) === E.id, total = E.steps.length;
+      const from = me.isOwner ? 0 : Number((await auth().get(`enigme/progress/${E.id}/${me.id}`)) || 0);
+      const steps = (E.steps as any[]).map((st, i) => ({ i, type: st.type || "choice", target: st.target, q: st.q, hints: st.hints || [], choices: st.choices || [] })).slice(from);
+      return json({ active: me.isOwner ? true : on && from < total, on, total, from, steps });
     }
     if (route === "enigme" && m === "POST") {
       if (!me) return err("auth", 401);
       const E = await enigme(); if (!E) return err("not_found", 404);
-      const b = (await req.json().catch(() => ({}))) as any, ans = normAns(b.answer);
-      const ok = !!ans && (E.answers as string[]).some((x) => normAns(x) === ans);
+      const b = (await req.json().catch(() => ({}))) as any, i = Number(b.i), st = (E.steps as any[])[i]; if (!st) return err("bad_step", 400);
+      const total = E.steps.length, pk = `enigme/progress/${E.id}/${me.id}`;
+      if (!me.isOwner && Number((await auth().get(pk)) || 0) !== i) return err("bad_step", 409);
+      const ok = st.type === "frame" ? !!b.found : (st.answers as string[]).some((x) => normAns(x) === normAns(b.answer));
+      const last = i === total - 1;
       if (!me.isOwner) {
-        const ak = `enigme/tries/${E.id}/${me.id}`, tries = Number((await auth().get(ak)) || 0) + 1; await auth().set(ak, String(tries));
-        if (ok && !(await auth().get(`enigme/solved/${E.id}/${me.id}`))) {
-          await auth().set(`enigme/solved/${E.id}/${me.id}`, String(Date.now()));
+        const ak = `enigme/tries/${E.id}/${me.id}/${i}`, tries = Number((await auth().get(ak)) || 0) + 1; await auth().set(ak, String(tries));
+        if (ok) {
+          await auth().set(pk, String(i + 1));
           const ua = req.headers.get("user-agent") || "", g = (context as any)?.geo || {}, t = Date.now();
-          await store("chateau-scans").setJSON(`scan/${t}-${Math.random().toString(36).slice(2, 7)}`, { t, appareil: /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? "téléphone Android" : "appareil", ville: String(g.city || "").slice(0, 60), pays: String((g.country && g.country.name) || "").slice(0, 60), moment: `🗝️ énigme résolue (« ${String(b.answer).slice(0, 40)} », ${tries} essai${tries > 1 ? "s" : ""})` }).catch(() => {});
+          const what = st.type === "frame" ? `cadre trouvé : « ${String(b.title || "").slice(0, 40)} »` : `« ${String(b.answer).slice(0, 40)} »`;
+          await store("chateau-scans").setJSON(`scan/${t}-${Math.random().toString(36).slice(2, 7)}`, { t, appareil: /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? "téléphone Android" : "appareil", ville: String(g.city || "").slice(0, 60), pays: String((g.country && g.country.name) || "").slice(0, 60), moment: `${last ? "🏆" : "🗝️"} énigme ${i + 1}/${total} résolue (${what}, ${tries} essai${tries > 1 ? "s" : ""})${last ? " · toutes les énigmes résolues !" : ""}` }).catch(() => {});
         }
       }
-      return json(ok ? { ok: true, reward: E.reward } : { ok: false });
+      return json(ok ? { ok: true, last, reward: last ? E.reward : null } : { ok: false });
     }
     if (route === "enigme/etat" && m === "POST") {
       if (!me || !me.isOwner) return err("forbidden", 403);
@@ -236,7 +242,7 @@ export default async (req: Request, context: Context) => {
       const E = await enigme(); if (!E) return err("not_found", 404);
       await auth().set("meta/enigme_on", E.id);
       const others = (await allUsers()).filter((u) => !u.isOwner).map((u) => u.id);
-      const sent = await pushTo(others, { title: "Notre château", body: "🗝️ Une énigme s’est cachée dans le château… Sauras-tu la résoudre ?", tag: "enigme", url: "/" });
+      const sent = await pushTo(others, { title: "Notre château", body: "🗝️ 5 énigmes se sont cachées dans le château… Sauras-tu toutes les résoudre ?", tag: "enigme", url: "/" });
       return json({ ok: true, sent });
     }
     /* elle entre dans le château (QR code, app installée ou site) : une ligne dans le journal */
