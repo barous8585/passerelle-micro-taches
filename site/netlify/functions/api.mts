@@ -134,6 +134,9 @@ async function enigme(): Promise<any | null> {
   try { const b = Buffer.from(ENIGME_ENC, "base64"); const d = createDecipheriv("aes-256-gcm", Buffer.from(k, "base64"), b.subarray(0, 12)); d.setAuthTag(b.subarray(b.length - 16));
     return JSON.parse(Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString("utf8")); } catch { return null; }
 }
+/* le jeu ne dure que 24 h après son envoi (premier envoi : 9 nov. 2026, 16h56) */
+const ENIGME_SENT_0 = 1794239768620, ENIGME_DUREE = 24 * 3600 * 1000;
+const enigmeExpire = async () => (Number(await auth().get("meta/enigme_sent")) || ENIGME_SENT_0) + ENIGME_DUREE;
 const normAns = (x: string) => String(x || "").toLowerCase().replace(/œ/g, "oe").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 const MEDIA_FILES: Record<string, string> = { intro: "video/mp4", son1: "audio/mp4", son2: "audio/mp4", son3: "audio/mp4", son4: "audio/mp4" };
 const MEDIA_CACHE: Record<string, Buffer> = {};
@@ -209,7 +212,8 @@ export default async (req: Request, context: Context) => {
       const on = (await auth().get("meta/enigme_on")) === E.id, total = E.steps.length;
       const from = me.isOwner ? 0 : Number((await auth().get(`enigme/progress/${E.id}/${me.id}`)) || 0);
       const steps = (E.steps as any[]).map((st, i) => ({ i, type: st.type || "choice", target: st.target, q: st.q, hints: st.hints || [], choices: st.choices || [] })).slice(from);
-      return json({ active: me.isOwner ? true : on && from < total, on, total, from, steps });
+      const expiresAt = await enigmeExpire(), expired = Date.now() >= expiresAt;
+      return json({ active: me.isOwner ? true : on && !expired && from < total, on, total, from, steps, expiresAt });
     }
     if (route === "enigme" && m === "POST") {
       if (!me) return err("auth", 401);
@@ -217,6 +221,7 @@ export default async (req: Request, context: Context) => {
       const b = (await req.json().catch(() => ({}))) as any, i = Number(b.i), st = (E.steps as any[])[i]; if (!st) return err("bad_step", 400);
       const total = E.steps.length, pk = `enigme/progress/${E.id}/${me.id}`;
       if (!me.isOwner && Number((await auth().get(pk)) || 0) !== i) return err("bad_step", 409);
+      if (!me.isOwner && Date.now() >= (await enigmeExpire())) return json({ ok: false, expired: true });
       const ok = st.type === "frame" ? !!b.found : (st.answers as string[]).some((x) => normAns(x) === normAns(b.answer));
       const last = i === total - 1;
       if (!me.isOwner) {
@@ -230,17 +235,40 @@ export default async (req: Request, context: Context) => {
       }
       return json(ok ? { ok: true, last, reward: last ? E.reward : null } : { ok: false });
     }
+    /* rappel toutes les 3 h (appelé chaque heure par la tâche planifiée) : jamais la nuit, plus rien si elle a fini ou si c'est expiré */
+    if (route === "enigme/rappel" && m === "POST") {
+      const k = Netlify.env.get("LETTRE_KEY") || ((await auth().get("meta/lettre_key")) as string | null);
+      if (!k || req.headers.get("x-cron") !== createHash("sha256").update(k + "|cron").digest("hex")) return err("forbidden", 403);
+      const E = await enigme(); if (!E) return json({ ok: false });
+      if ((await auth().get("meta/enigme_on")) !== E.id) return json({ ok: true, off: true });
+      const sent = Number(await auth().get("meta/enigme_sent")) || ENIGME_SENT_0, exp = sent + ENIGME_DUREE, now = Date.now();
+      if (now >= exp) { await auth().delete("meta/enigme_on"); return json({ ok: true, expired: true }); }
+      const hour = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "numeric", hourCycle: "h23" }).format(now));
+      if (hour < 9 || hour >= 23) return json({ ok: true, quiet: true });
+      const total = E.steps.length; let n = 0;
+      for (const u of (await allUsers()).filter((x) => !x.isOwner)) {
+        const prog = Number((await auth().get(`enigme/progress/${E.id}/${u.id}`)) || 0); if (prog >= total) continue;
+        const lk = `enigme/rappel/${E.id}/${u.id}`, last = Math.max(Number(await auth().get(lk)) || 0, sent);
+        if (now - last < 3 * 3600 * 1000 - 10 * 60 * 1000) continue;
+        const left = exp - now, h = Math.floor(left / 3600000), mn = Math.floor((left % 3600000) / 60000);
+        const t = h >= 1 ? `${h} h${mn ? " " + String(mn).padStart(2, "0") : ""}` : `${mn} min`;
+        const body = prog > 0 ? `⏳ Plus que ${t} pour finir les énigmes du château (${prog}/${total} résolues)… Ton cadeau t’attend 🎁` : `⏳ Plus que ${t} pour résoudre les 5 énigmes du château… Ton cadeau t’attend 🎁`;
+        n += await pushTo([u.id], { title: "Notre château", body, tag: "enigme-rappel", url: "/" });
+        await auth().set(lk, String(now));
+      }
+      return json({ ok: true, sent: n });
+    }
     if (route === "enigme/etat" && m === "POST") {
       if (!me || !me.isOwner) return err("forbidden", 403);
       const E = await enigme(); if (!E) return err("not_found", 404);
       const b = (await req.json().catch(() => ({}))) as any;
-      if (b.on) await auth().set("meta/enigme_on", E.id); else await auth().delete("meta/enigme_on");
+      if (b.on) { await auth().set("meta/enigme_on", E.id); await auth().set("meta/enigme_sent", String(Date.now())); } else await auth().delete("meta/enigme_on");
       return json({ ok: true, on: !!b.on });
     }
     if (route === "enigme/notifier" && m === "POST") {
       if (!me || !me.isOwner) return err("forbidden", 403);
       const E = await enigme(); if (!E) return err("not_found", 404);
-      await auth().set("meta/enigme_on", E.id);
+      await auth().set("meta/enigme_on", E.id); await auth().set("meta/enigme_sent", String(Date.now()));
       const others = (await allUsers()).filter((u) => !u.isOwner).map((u) => u.id);
       const sent = await pushTo(others, { title: "Notre château", body: "🗝️ Psst… le château a caché 5 énigmes rien que pour toi. Prête à jouer ? Envoie la capture qui montre que tu as gagné, et ton cadeau t’est envoyé 🎁", tag: "enigme", url: "/" });
       return json({ ok: true, sent });

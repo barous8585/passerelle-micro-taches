@@ -5854,18 +5854,23 @@ Je t'aime.`;
 #enig .ch{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:0 0 4px}#enig .pick{flex:none;display:block;width:100%;white-space:nowrap;text-align:center;padding:12px 8px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(214,178,110,.35);color:#f6efe2;font-size:15.5px;transition:transform .15s,background .2s}
 #enig .pick:active{transform:scale(.96)}#enig .pick.no{opacity:.35;text-decoration:line-through;cursor:default}
 #enig .cf{position:absolute;top:-12px;width:8px;height:12px;border-radius:2px;animation:enigFall 2.4s linear forwards}@keyframes enigFall{to{transform:translateY(520px) rotate(540deg);opacity:.2}}
+#enig .cd{margin:-6px 0 12px;font-size:13px;color:#ffb38a;font-variant-numeric:tabular-nums}#enig .cd:empty{display:none}
 #enig .n{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:rgba(243,215,154,.7);margin:0 0 4px}
 #huntBar{position:fixed;z-index:61;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(440px,calc(100% - 24px));display:flex;align-items:center;gap:8px;background:rgba(20,14,30,.92);color:#f6efe2;border:1px solid rgba(214,178,110,.45);border-radius:18px;padding:10px 10px 10px 14px;font:14px/1.4 Jost,system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 #huntBar .tx{flex:1}#huntBar button{border:0;border-radius:999px;padding:8px 11px;background:rgba(255,255,255,.1);color:#f6efe2;font:inherit;cursor:pointer}
 #huntToast{position:fixed;z-index:63;left:50%;top:calc(18px + env(safe-area-inset-top));transform:translateX(-50%);max-width:min(420px,90vw);background:rgba(20,14,30,.94);color:#f3d79a;border:1px solid rgba(214,178,110,.4);border-radius:14px;padding:10px 16px;font:14.5px/1.4 Jost,system-ui,sans-serif;text-align:center;transition:opacity .4s}`; document.head.appendChild(st); }
     const total = E.total || E.steps.length;
+    /* le compte à rebours : le jeu ne dure que 24 h */
+    const leftTxt = () => { const ms = (E.expiresAt || 0) - Date.now(); if (!E.expiresAt || ms <= 0) return ''; const h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000); return h >= 1 ? `${h} h ${String(m).padStart(2, '0')} min` : `${m} min`; };
+    const cdTick = () => { const t = leftTxt(); const c = document.querySelector('#enig .cd'); if (c) c.textContent = t && !S.isOwner ? `⏳ Plus que ${t} pour tout résoudre` : ''; const hb = document.querySelector('#huntBar .cdh'); if (hb) hb.textContent = t && !S.isOwner ? ` · ⏳ ${t}` : ''; };
+    setInterval(cdTick, 30000);
     const post = (body) => fetch('/api/enigme', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).then((x) => x.json());
     const taunts = ['Presque… mais non 😏', 'Hmm, pas tout à fait 🤭', 'Raté ! Essaie encore 😜', 'Le château rigole doucement… 😄', 'Non non non 🙃'];
     const pal = ['#ffd36a', '#ff7fa8', '#9fd3ff', '#c7a2ff', '#ffffff', '#ffb066'];
     const confetti = (box) => { for (let i = 0; i < 60; i++) { const c = document.createElement('i'); c.className = 'cf'; c.style.left = Math.random() * 100 + '%'; c.style.background = pal[i % pal.length]; c.style.animationDelay = Math.random() * .6 + 's'; box.appendChild(c); setTimeout(() => c.remove(), 3200); } };
     /* une carte réutilisable */
     const el = document.createElement('div'); el.id = 'enig';
-    el.innerHTML = `<div class="card"><p class="n"></p><div class="k">🗝️</div><div class="t"></div><p class="q"></p><div class="ch"></div><div class="row"><button class="ghost hint" type="button">💡 Indice</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
+    el.innerHTML = `<div class="card"><p class="n"></p><div class="k">🗝️</div><div class="t"></div><p class="cd"></p><p class="q"></p><div class="ch"></div><div class="row"><button class="ghost hint" type="button">💡 Indice</button></div><div class="msg"></div><button class="later" type="button">Plus tard</button></div>`;
     const card = el.querySelector('.card'), msg = el.querySelector('.msg'), chBox = el.querySelector('.ch'), row = el.querySelector('.row'), later = el.querySelector('.later');
     const show = () => { if (!el.parentNode) document.body.appendChild(el); void el.offsetWidth; setTimeout(() => el.classList.add('on'), 20); };
     const hide = () => new Promise((res) => { el.classList.remove('on'); setTimeout(() => { el.remove(); res(); }, 450); });
@@ -5898,11 +5903,12 @@ Je t'aime.`;
               confetti(card); card.querySelector('.k').textContent = '🎉'; card.querySelector('.t').textContent = 'Bien joué !'; card.querySelector('.q').textContent = `C’était bien « ${w.replace(/[\s\uFE0F\u200D\p{Extended_Pictographic}]+$/u, '')} » ✨ Énigme ${st.i + 1} sur ${total} résolue.`;
               chBox.innerHTML = ''; row.style.display = 'none'; msg.textContent = ''; later.textContent = 'Énigme suivante ›'; later.style.cssText = 'margin-top:14px;color:#f3d79a;font-size:15px';
               later.onclick = () => { k++; if (k < E.steps.length) render(); else hide().then(() => resolve(true)); };
-            } else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); b.disabled = true; b.classList.add('no'); }
+            } else if (d.expired) { msg.textContent = '⏳ Le temps est écoulé… le jeu est terminé'; chBox.innerHTML = ''; row.style.display = 'none'; }
+            else { msg.textContent = taunts[Math.floor(Math.random() * taunts.length)]; card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); b.disabled = true; b.classList.add('no'); }
           } catch (e) { msg.textContent = 'Le château n’a pas entendu… réessaie'; }
           busy = false; }; chBox.appendChild(b); });
       };
-      render(); show();
+      render(); show(); cdTick();
     });
     /* la chasse : elle circule librement et touche le cadre qu'elle croit être le bon */
     function startHunt(st, onWin) {
@@ -5910,8 +5916,8 @@ Je t'aime.`;
       const key = (m) => (m.date || '9999') + '|' + String(m.createdAt || 0).padStart(15, '0');
       const target = mems.slice().sort((a, b) => key(a).localeCompare(key(b)))[0];
       const bar = document.createElement('div'); bar.id = 'huntBar';
-      bar.innerHTML = `<span class="tx">🔎 Trouve le tout premier souvenir du château et touche son cadre</span><button type="button" class="h">💡</button><button type="button" class="x">✕</button>`;
-      document.body.appendChild(bar);
+      bar.innerHTML = `<span class="tx">🔎 Trouve le tout premier souvenir du château et touche son cadre<span class="cdh"></span></span><button type="button" class="h">💡</button><button type="button" class="x">✕</button>`;
+      document.body.appendChild(bar); cdTick();
       let toastT = 0; const toast = (t) => { let e = document.getElementById('huntToast'); if (!e) { e = document.createElement('div'); e.id = 'huntToast'; document.body.appendChild(e); } e.textContent = t; e.style.opacity = '1'; clearTimeout(toastT); toastT = setTimeout(() => { e.style.opacity = '0'; }, 3200); };
       let hi = 0; const hints = (st.hints || []).concat(target ? [`Sa date : ${dateText(target) || 'très, très loin'} 📅`] : []);
       bar.querySelector('.h').onclick = () => { if (hints.length) toast('💡 ' + hints[Math.min(hi, hints.length - 1)]); hi++; };
