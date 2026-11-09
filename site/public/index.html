@@ -5802,14 +5802,18 @@ figure img{display:block;max-width:100%;max-height:80vh;margin:0 auto;border-rad
       const scen = /[?&]scenario=1/.test(location.search);
       /* une énigme allumée par le gardien : elle passe en premier ; pendant la chasse au cadre, pas de balade */
       let egHunt = false;
-      if (window.__chateauNetlify && S.db && (!S.isOwner || /[?&]enigme=1/.test(location.search))) egHunt = (await enigmeFlow().catch(() => false)) === 'hunt';
-      const firstTime = !!S.db && !scen && !egHunt;
-      if (firstTime) {
+      /* la visite habituelle : la lettre, puis la balade automatique */
+      const usualVisit = async () => {
         setVisit(true, S.isOwner); markTourSeen();
         /* la lettre ouvre chaque visite, avant la promenade */
         { if (await showWelcome()) saveUserState({ welcomeSeen: Date.now() }); }
         await sleep(600); markStorySeen(); await autoVisit(true);
-      }
+      };
+      /* après le trophée de la chasse au cadre : la lettre et la balade, comme d'habitude */
+      S.afterEnigme = () => { S.afterEnigme = null; usualVisit().catch(() => {}); };
+      if (window.__chateauNetlify && S.db && (!S.isOwner || /[?&]enigme=1/.test(location.search))) egHunt = (await enigmeFlow().catch(() => false)) === 'hunt';
+      const firstTime = !!S.db && !scen && !egHunt;
+      if (firstTime) { S.afterEnigme = null; await usualVisit(); }
       // aperçu du gardien : ?scenario=1 rejoue exactement son arrivée (lettre, puis conte), sans rien marquer comme vu
       if (scen) { await sleep(500); await playArrival(); }
 
@@ -5869,7 +5873,7 @@ Je t'aime.`;
       confetti(card); card.querySelector('.n').textContent = `${total} énigmes sur ${total}`; card.querySelector('.k').textContent = '🏆';
       card.querySelector('.t').textContent = (rw && rw.titre) || 'Bravo !'; card.querySelector('.q').textContent = (rw && rw.texte) || '';
       chBox.innerHTML = ''; row.style.display = 'none'; msg.textContent = ''; later.textContent = 'Continuer ›'; later.style.cssText = 'margin-top:16px;color:#f3d79a;font-size:15px';
-      later.onclick = () => hide().then(() => resolve && resolve(true)); show();
+      later.onclick = () => hide().then(() => { if (resolve) resolve(true); else if (S.afterEnigme) S.afterEnigme(); }); show();
     };
     return new Promise((resolve) => {
       let k = 0;
